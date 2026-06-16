@@ -138,3 +138,18 @@ The rest of Apature makes Gate more defensible. Gate makes the rest of Apature l
 - Treating UI DNA as optional forever; without team-specific context Gate becomes a generic VLM review bot.
 - Letting Gate write code or request `contents: write`.
 - Selling Gate as visual regression, source-code review, or browser automation.
+
+## 8. UI DNA Grounding And Version Lineage
+
+UI DNA is what makes a finding repo-specific instead of generic taste — *"this CTA uses #6c3ef0, not in your palette (closest token `primary-600`)"* is only possible because the judgment is grounded in this repo's versioned design genome.
+
+How it flows, and the boundary Gate holds:
+
+- **Gate does not extract or store UI DNA.** The engine resolves the repo's genome (from `source-of-truth` / `ui-dna`) when it grounds a critique. Gate only passes repo identity so the engine resolves the right genome.
+- **Gate version-stamps the result.** `GateReviewResult.metadata.uiDnaVersion` (alongside `engineVersion` / `model` / `promptVersion` / `captureVersion`, see TRD §6) records the genome version a review was judged against. `null` is valid before a repo has extracted UI DNA — the engine falls back to repo context plus the `.designreview.yml` brand block.
+- **Why the stamp matters.** It makes every published finding traceable to the exact genome it was judged against, and it keeps the feedback tuple's lineage clean (rendered UI, repo context, `uiDnaVersion`, finding, team verdict). That clean lineage is what lets the data moat train a judge and lets `entropy-engine` reason about drift over time.
+
+Grounding in, signal out:
+
+- **Grounding in (per review):** Gate -> engine (repo identity + preview + config) -> engine resolves UI DNA + repo context -> grounded critique -> versioned result.
+- **Signal out (after review):** collaborator verdicts, ignore/suppress, recheck pass/fail, and later-diff adoption flow from Gate to the engine's shared feedback store. Gate is the highest-volume, cleanest source of these labels because it sits at the PR boundary where real teams accept or reject changes.
