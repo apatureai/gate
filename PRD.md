@@ -140,7 +140,8 @@ Hosted paid tier:
 
 Enterprise:
 
-- BYO DashScope key or self-hosted model path through `judgment-engine`.
+- Fully managed by default: Apature runs model serving, so consumers never manage a model key.
+- Enterprise data residency via the self-hosted / in-VPC `judgment-engine` path, when a customer requires screenshots to stay in their cloud.
 - DPA, retention controls, SSO, and design-system reporting.
 
 MCP and Pointer usage may be metered later, but CI Gate is the first revenue surface.
@@ -230,3 +231,15 @@ This repo does not own:
 - MCP or live pointer product surfaces.
 
 Those belong to the other Apature repos referenced in `ARCHITECTURE.md`.
+
+## 14. Implementation Backlog
+
+The Gate backlog is tracked as GitHub milestones M0 through M4. The build is end to end only when Gate's own runtime and the `judgment-engine` seam are first-class, not assumed.
+
+- **M0 - Foundation and runtime.** Gate's own substrate: monorepo and shared contract types, CI, Fly deploy, Postgres, Redis, secrets and KMS, and observability with a stale-publish alert. Every orchestrator and delivery issue assumes this exists.
+- **M1 - Action path.** The zero-infra Action: preview resolution (explicit and local-serve), the `judgment-engine` client, engine failure and degradation handling, gate-side preview-source verification, sticky comment, Check Run, config schema, and the end-to-end acceptance harness.
+- **M2 - App path.** Hosted GitHub App: webhook auth, deployment-status discovery, queue, supersession and publish guard, multi-provider previews, minimal permissions, and the feedback event model forwarded to the shared store.
+- **M3 - Hosted tier.** Dashboard shell, run history, finding browser, config UI, feedback stats, and Stripe billing with free-tier limits, SSO, and the enterprise in-VPC residency option.
+- **M4 - Trust polish.** Baseline comparison, permanent annotated image routes, Marketplace listing, the YC demo golden-path repo as an automated smoke test, and public launch artifacts.
+
+The single most important seam is the `judgment-engine` client (`GateReviewRequest -> GateReviewResult`): Gate owns when to call and how to publish, the engine owns capture, context, model, and validation. Gate-side security covers preview-source provenance and gate-held secret custody; deep SSRF, DNS-rebind, egress, screenshot encryption, and prompt-injection controls remain owned by `judgment-engine`.
