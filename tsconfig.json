@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/types" },
+    { "path": "packages/db" },
     { "path": "packages/service" },
     { "path": "packages/action" }
   ]
