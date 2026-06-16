@@ -1,175 +1,232 @@
 # Apature Gate - Product Requirements Document
 
 Created: 2026-06-15
-Source: extracted from `apature-systems/core` PRD as of 2026-06-15.
+Status: MVP specification for YC-facing product wedge
+Canonical company context: `apatureai/core`
+Shared technical substrate: `apatureai/judgment-engine`
 
-## 1. Product Summary
+## 1. One-Line Pitch
 
-Apature Gate is the GitHub-native design review product. It screenshots a pull request's preview deploy, critiques the rendered UI against the repository's design system and UI DNA, then posts an annotated GitHub review plus a Check Run.
+Apature Gate is the GitHub-native design reviewer for AI-generated frontend PRs: it screenshots every preview deploy, judges the rendered UI against the repo's design system and UI DNA, and comments on the PR with annotated, agent-actionable findings.
 
-Positioning: Applitools checks pixels; Apature Gate checks judgment.
+Positioning: Applitools checks pixels. Apature checks judgment.
 
-The product is a neutral quality gate for AI-written frontend code. It judges and verifies. It does not edit code, commit fixes, or drive the customer's UI. Machine-actionable suggestions are returned so the customer's own coding agent can apply changes.
+## 2. Why Now
 
-## 2. Company Role
+AI agents can generate frontend code faster than human teams can review it. The bottleneck has moved from production to judgment: someone still has to decide whether the generated UI is good enough to ship.
 
-Gate is act 1 of Apature.
+Current tools miss the opening:
 
-It earns the trust, distribution, and data needed for the larger company:
+- AI code reviewers inspect source code, not the rendered artifact.
+- Visual regression tools detect pixel change, not design quality.
+- Design tools review Figma work, but AI-generated code often never goes through Figma.
+- Coding agents can generate UI, but the generator grading its own work is not a neutral gate.
 
-- Trust: deterministic capture and grounded critique prove that the product sees the real UI.
-- Distribution: every PR comment is a visible artifact inside the team's shipping workflow.
-- Data: each finding, acceptance, rejection, and fix-then-pass outcome becomes a labeled preference example.
-- Independence: the generator cannot be the judge, so Apature runs across mixed-tool teams.
+Gate starts where the pain is visible: pull requests with preview deploys. It gives teams a neutral reviewer that sees the actual UI and speaks in concrete tokens, elements, and screenshots.
 
-## 3. Users And Buyers
+## 3. Target Users And Buyer
 
 Primary users:
 
 - AI-assisted frontend developers using Cursor, Claude Code, Codex, v0, or similar tools.
-- Engineering leads who need AI-generated UI to stop degrading product quality.
-- Design-system maintainers who cannot manually review every AI-generated PR.
+- Engineering leads reviewing large volumes of generated UI PRs.
+- Design-system maintainers who cannot manually inspect every frontend change.
 
 Economic buyer:
 
-- Seed to growth engineering teams for the self-serve tier.
-- Platform engineering and design-ops leaders for the hosted paid tier.
+- Seed to growth engineering teams for self-serve usage.
+- Platform engineering and design-ops leaders for hosted paid usage.
 
-## 4. Scope
+Initial ICP:
 
-In scope for v1:
+- Web SaaS teams using GitHub, preview deploys, and AI coding agents.
+- Teams with enough design consistency to care about drift but not enough design-review capacity to manually catch it.
+
+## 4. Product Promise
+
+Gate must answer four questions on every relevant PR:
+
+1. What changed visually?
+2. Does it violate this repo's design system, UI DNA, or visual quality bar?
+3. Where exactly is the issue in the rendered UI?
+4. What should the developer or their agent change?
+
+The product judges and verifies. It never edits code, commits fixes, or drives the customer's application. Suggestions are machine-actionable so the customer's own coding agent can apply them.
+
+## 5. MVP Scope
+
+In scope for MVP:
 
 - GitHub Action for zero-infra adoption.
-- GitHub App for hosted paid usage.
+- GitHub App path for hosted paid usage.
 - Preview URL discovery from deployment webhooks, explicit action input, PR comment fallback, and local serve fallback.
-- Multi-viewport screenshot capture.
-- Route selection from diff, config, and framework conventions.
-- Repo context extraction: tokens, brand block, component library signals, diff context.
-- Qwen3-VL based triage and deep critique behind the shared `critique(images, context) -> Findings` interface.
-- PR comment with annotated screenshots.
-- GitHub Check Run.
-- Feedback capture from explicit collaborator actions and fix outcomes.
-- Advisory default, with blocking only when the repository opts in.
-
-Out of scope:
-
-- Functional and end-to-end testing.
-- Pixel-diff regression as the primary product.
-- Code edits, auto-commits, visual editing, or bundled code generation.
-- Arbitrary computer-use exploration of the UI. That belongs to the `interactive-review` product.
-- Agent in-loop MCP tools. That belongs to `mcp-review`, though both use the same backend interface.
-
-## 5. MVP
-
-The MVP must review one preview deploy per PR and return a useful, grounded design review in under two minutes for ordinary PRs.
-
-Required capabilities:
-
-- `action.yml` wrapping the capture and critique runner.
-- Sticky PR comment with hidden marker and update-in-place behavior.
+- Sticky PR comment with annotated screenshots.
 - GitHub Check Run named `design-review`.
-- Capture readiness protocol using fonts ready, layout stability, animation disabling, and perceptual hash stability.
-- Viewports: mobile and desktop by default, tablet configurable.
-- Finding schema with dimension, severity, confidence, route, viewport, element reference, evidence, suggestion, and `introduced_by_this_pr`.
-- Deterministic post-parse validation that rejects nonexistent routes or element refs.
-- Feedback links that do not mutate state on GET.
+- Advisory default, with blocking only when the repo opts in.
+- `.designreview.yml` configuration for preview source, route selection, viewport defaults, brand text, and gating rules.
+- Integration with `judgment-engine` through `critique(images, context) -> Findings`.
+- Feedback capture from collaborator responses and later fix outcomes.
 
-## 6. Architecture
+Out of scope for MVP:
 
-Gate owns the GitHub delivery path.
+- Functional testing and E2E assertions.
+- Pixel-diff regression as the primary product.
+- Code edits, auto-commits, autofix PRs, or bundled code generation.
+- Live browser overlay and pointer sessions. That belongs to `apatureai/pointer`.
+- Agent request/response MCP tools. That belongs to `apatureai/mcp-review`.
+- Autonomous interaction exploration. That belongs to `apatureai/interactive-review`.
 
-Major components:
+## 6. Core User Flow
 
-- Trigger layer: GitHub webhooks, Action inputs, debounce, supersession, publish-time stale-SHA guard.
-- Capture engine: Playwright in the user's runner for Action usage, isolated microVM capture for hosted usage.
-- Repo context extractor: tokens, config, brand, diff, framework route mapping.
-- Critique adapter: calls the shared Qwen3-VL critique interface.
-- Delivery layer: GitHub comment, Check Run, permanent annotated image route.
-- Feedback store: findings, votes, commands, fix outcomes, and model metadata.
+1. A developer opens or updates a PR.
+2. The deploy provider posts a successful preview deployment, or the Action receives an explicit preview URL.
+3. Gate records `current_sha[repo#pr]`, waits for preview readiness, and creates a review job.
+4. Gate asks `judgment-engine` to capture the relevant routes and run critique.
+5. Gate validates that the result still matches the newest PR head SHA.
+6. Gate posts or updates one sticky PR comment and one Check Run.
+7. The developer or their agent fixes the UI.
+8. A later push repeats the loop, generating resolved or unresolved feedback labels.
 
-Queue keying:
+Correctness rule:
 
 - Supersession key: `repo#pr`.
-- Completed review identity: `(pr, head_sha)`.
+- Completed-review identity: `(pr, head_sha)`.
+- Publish guard: never post a result whose SHA is no longer the PR head.
 
-These are intentionally different.
+## 7. Finding Experience
 
-## 7. Data And Learning
+A finding must be specific enough that a developer or agent can act without another round of interpretation.
 
-Gate is the cleanest source of team preference data because it sits in the shipping workflow.
+Each finding includes:
 
-Signals:
+- Severity: `blocker`, `should_fix`, or `nit`.
+- Dimension: hierarchy, spacing, typography, color, system conformance, responsive behavior, accessibility, or brand fit.
+- Route and viewport.
+- Stable element reference from the DOM geometry map.
+- Evidence that points at the visible UI.
+- Concrete suggestion: token, class, component, or layout change.
+- `introduced_by_this_pr` when the evidence supports it.
 
-- Explicit collaborator approvals, rejections, ignores, and commands.
-- Implicit positive signal when the suggested token or class appears in a later diff.
-- Merge outcome with unresolved findings.
-- Finding drop metrics from schema and geometry validation.
+The PR comment should show the trust budget:
 
-Consumption:
+- Blockers first.
+- Should-fix items collapsed after the top few.
+- Nits collapsed by default.
+- Permanent app routes for annotated screenshots, not expiring object URLs.
 
-- Per-repo memory digest appended to future reviews.
-- Monthly rubric and prompt evolution through the evaluation harness.
-- Long-term fine-tuning data for Apature's owned judge.
+## 8. Demo Path For YC
 
-## 8. Security And Privacy
+The canonical demo:
 
-Security rules:
+1. Start with a small SaaS app that has a clear design system.
+2. Use an AI coding agent to open a PR that subtly breaks the UI: off-scale spacing, a hard-coded purple, a misaligned CTA, or a mobile overflow.
+3. Show the preview deploy.
+4. Gate posts a PR review in under two minutes with annotated screenshots and concrete suggestions.
+5. The agent applies the fix.
+6. Gate re-runs and the Check Run passes.
 
-- No `contents: write` permission.
-- Minimum GitHub App permissions: checks write, pull requests write, contents read, deployments read.
-- Screenshots are sensitive and encrypted at rest.
-- Paid retention may extend to 30 days under DPA; free/public tier defaults to deleting screenshots after comment publication.
-- Capture only verified deployment URLs or trusted local runner URLs.
-- Deny internal, link-local, metadata, and rebinding SSRF targets.
-- Auth storage state is encrypted, scoped to preview origin, and disabled on fork PRs.
+The demo must feel obvious: the user should see the screenshot and immediately agree the finding is real.
 
-Neutrality rule:
+## 9. Pricing Hypothesis
 
-- Gate never writes customer code. The no-write boundary is part of the product promise.
+Self-serve:
 
-## 9. Success Metrics
+- Free tier for public repos or limited private usage.
+- Paid team tier around $20 per developer per month.
+
+Hosted paid tier:
+
+- GitHub App install, persistent feedback memory, dashboard, baseline comparison, and no CI-minute burden.
+
+Enterprise:
+
+- BYO DashScope key or self-hosted model path through `judgment-engine`.
+- DPA, retention controls, SSO, and design-system reporting.
+
+MCP and Pointer usage may be metered later, but CI Gate is the first revenue surface.
+
+## 10. Success Metrics
 
 Activation:
 
 - Repositories with at least one successful review.
-- Percentage of installs that configure a preview URL successfully.
+- Percentage of installs that configure a working preview source.
+- Time from install to first annotated PR comment.
 
 Trust:
 
 - False-positive rate by severity.
 - Stale-review publish rate, target zero.
 - Capture instability rate.
+- Percentage of findings with valid element references after post-parse validation.
 
 Business:
 
 - Weekly active repositories.
-- Paid conversion from Action to hosted App.
 - Reviews per active repo.
+- Action-to-App conversion.
+- Paid conversion from active private repos.
 
 Data moat:
 
 - Labeled finding tuples per active repo.
-- Accepted or resolved findings per week.
+- Findings accepted, ignored, or resolved.
+- Repeated design preferences captured in per-repo memory.
 
-## 10. Milestones
+## 11. Sequencing
 
-2026-06 launch sequence:
+Gate is the startup wedge.
 
-- Week 1: capture core and CLI artifact.
-- Week 2: critique core and frozen eval set.
-- Week 3: GitHub Action and Marketplace listing.
-- Week 4 to 6: GitHub App, hosted tier, dashboard, Stripe, and baseline comparison.
+Build order:
 
-Gate does not graduate to broad paid launch until capture quality and judgment quality clear the evaluation harness.
+1. GitHub Action and preview URL path.
+2. Sticky PR comment and Check Run.
+3. Hosted GitHub App path.
+4. Feedback memory and dashboard.
+5. Baseline comparison.
+6. MCP Review and Pointer expansion only after Gate proves trust.
 
-## 11. Open Risks
+Gate must not wait for every future Apature surface. It only needs to make one PR review feel indispensable.
 
-- Generic critique that sounds plausible but is not useful.
-- Flaky capture that critiques loading skeletons or incomplete pages.
-- Preview URL heterogeneity and auth-walled deploys.
-- Platform absorption by coding agents.
-- Warm-pool and capture infrastructure cost for the hosted tier.
+## 12. Risks
 
-## 12. Repository Boundary
+Judgment quality risk:
 
-This repo owns the GitHub product surface and PR workflow. Shared model, capture, and UI DNA code can live in common packages later, but this PRD should stay focused on the buyer-facing gate.
+- Generic findings kill trust. Mitigation: only ship findings grounded in visible screenshots, DOM element refs, repo context, and concrete suggestions.
+
+Capture risk:
+
+- A screenshot of a loading state or broken preview creates false critique. Mitigation: readiness protocol, stability flags, and explicit not-reviewed reasons owned by `judgment-engine`.
+
+Distribution risk:
+
+- Developers may ignore another PR bot. Mitigation: small finding budget, annotated screenshots, advisory default, and agent-actionable suggestions.
+
+Platform absorption risk:
+
+- Coding agents may add their own visual review. Mitigation: neutral judge, GitHub-native enforcement, repo-specific UI DNA, and preference data across mixed-tool teams.
+
+Scope risk:
+
+- Gate can sprawl into the whole platform. Mitigation: Gate owns GitHub product delivery; `judgment-engine` owns capture, model, eval, data, and shared security.
+
+## 13. Repository Boundary
+
+This repo owns:
+
+- GitHub Action and GitHub App product behavior.
+- PR sticky comment and Check Run UX.
+- Gate-specific configuration and onboarding.
+- Gate dashboard and billing surfaces.
+- Gate product docs, GTM docs, and demo path.
+
+This repo does not own:
+
+- Capture engine internals.
+- Repo context extraction internals.
+- Qwen3-VL model calls.
+- Evaluation harness.
+- Preference dataset implementation.
+- MCP or live pointer product surfaces.
+
+Those belong to the other Apature repos referenced in `ARCHITECTURE.md`.

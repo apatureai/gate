@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Apature Gate Architecture</title>
+<style>
+  :root{
+    --bg:#090d12;
+    --panel:#111820;
+    --panel2:#182232;
+    --ink:#10151b;
+    --text:#eef3f8;
+    --muted:#93a1b2;
+    --cream:#f1ecdf;
+    --green:#d9efdf;
+    --blue:#dcebf7;
+    --lav:#e7e3f6;
+    --tan:#efe3c9;
+    --red:#f3d8d8;
+    --cap:#3f9e6a;
+    --orch:#2e7bbf;
+    --judge:#7669c9;
+    --deliver:#2f8b88;
+    --data:#b98424;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg)}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .poster{width:3020px;padding:54px 58px 50px;background:linear-gradient(180deg,#0b1018 0%,#090d12 100%)}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:48px}
+  h1{margin:0;color:var(--text);font-size:64px;line-height:1;font-weight:850;letter-spacing:.2px}
+  h1 span{color:#9b8ce1}
+  .tagline{font-size:31px;line-height:1.25;color:#aeb9c8;text-align:right;max-width:760px;font-style:italic}
+  .lede{font-size:29px;line-height:1.42;color:var(--muted);margin:28px 0 34px;max-width:2560px}
+  .lede b{color:#d8e1ed}
+  .stage{display:grid;grid-template-columns:2.1fr .85fr;gap:30px}
+  .main{display:flex;flex-direction:column;gap:26px}
+  .side{display:flex;flex-direction:column;gap:24px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:26px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  .card{border-radius:20px;padding:28px 30px;position:relative;overflow:hidden}
+  .cream{background:var(--cream);color:var(--ink)}
+  .green{background:var(--green);color:#0f2419;border-top:7px solid var(--cap)}
+  .blue{background:var(--blue);color:#0c2032;border-top:7px solid var(--orch)}
+  .lav{background:var(--lav);color:#1c1834;border-top:7px solid var(--judge)}
+  .tan{background:var(--tan);color:#211906;border-top:7px solid var(--data)}
+  .red{background:var(--red);color:#301414;border-top:7px solid #bb4b4b}
+  .dark{background:var(--panel);border:1px solid #243143;color:#cad5e2}
+  .eyebrow{font-size:21px;font-weight:800;letter-spacing:2.2px;text-transform:uppercase;color:#68768a;margin-bottom:10px}
+  .green .eyebrow{color:var(--cap)}.blue .eyebrow{color:var(--orch)}.lav .eyebrow{color:var(--judge)}.tan .eyebrow{color:#a66f16}.red .eyebrow{color:#a33a3a}.dark .eyebrow{color:#9b8ce1}
+  h2{font-size:34px;line-height:1.12;margin:0 0 13px;font-weight:850;letter-spacing:.1px}
+  h3{font-size:28px;line-height:1.14;margin:0 0 10px;font-weight:850}
+  p,li{font-size:24px;line-height:1.42;margin:0}
+  ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+  li{position:relative;padding-left:24px}
+  li:before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;opacity:.43;position:absolute;left:2px;top:13px}
+  b{font-weight:800}
+  code{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:22px;background:rgba(16,24,32,.10);border-radius:7px;padding:1px 7px}
+  .dark code{background:rgba(255,255,255,.08)}
+  .tags{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .chip{display:inline-flex;align-items:center;gap:8px;font-size:21px;font-weight:700;color:#293341;background:rgba(16,24,32,.10);border:1px solid rgba(16,24,32,.16);border-radius:10px;padding:7px 13px;white-space:nowrap}
+  .dark .chip{color:#cdd7e5;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
+  .ic{width:22px;height:22px;object-fit:contain}
+  .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:18px;align-items:stretch}
+  .step{background:#141c28;border:1px solid #263447;border-radius:17px;padding:22px 22px;min-height:150px;position:relative}
+  .step .num{font-size:22px;color:#9b8ce1;font-weight:900;letter-spacing:1px;margin-bottom:8px}
+  .step h3{color:#f2f5fa}
+  .step p{font-size:22px;color:#aeb9c8}
+  .arrow{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#5e6c80;font-size:34px;font-weight:900}
+  .doctrine{border-top:1px solid #263447;margin-top:22px;padding-top:20px;color:#8d9aad;font-size:22px;line-height:1.42}
+  .metric{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .metric div{background:rgba(16,24,32,.08);border:1px solid rgba(16,24,32,.13);border-radius:12px;padding:13px 14px;font-size:21px;font-weight:750}
+  .dark .metric div{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.09);color:#d2dbea}
+  .foot{margin-top:28px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #263447;padding-top:22px;color:#8d9aad;font-size:22px}
+  .legend{display:flex;gap:22px;flex-wrap:wrap}
+  .lg{display:flex;gap:9px;align-items:center;font-weight:700}
+  .dot{width:15px;height:15px;border-radius:50%}
+</style>
+</head>
+<body>
+<div class="poster">
+  <div class="top">
+    <h1>APATURE <span>GATE</span> - YC MVP ARCHITECTURE</h1>
+    <div class="tagline">The neutral design reviewer for AI-generated frontend PRs.</div>
+  </div>
+
+  <div class="lede">
+    Gate is the startup wedge: GitHub-native review for rendered UI. It discovers a preview deploy, schedules exactly the current PR head, calls <b>judgment-engine</b>, then publishes annotated findings back to GitHub. Gate owns the shipping workflow; the shared engine owns capture, context, Qwen3-VL critique, validation, eval, and feedback primitives.
+  </div>
+
+  <div class="stage">
+    <div class="main">
+      <div class="grid3">
+        <div class="card cream">
+          <div class="eyebrow">Input surface</div>
+          <h2>GitHub Action</h2>
+          <ul>
+            <li>Zero-infra adoption path for OSS, demos, and early users.</li>
+            <li>Accepts explicit preview URL or runs local serve fallback in the user's runner.</li>
+          </ul>
+          <div class="tags">
+            <span class="chip"><img class="ic" src="icons/githubactions.svg">Actions</span>
+            <span class="chip"><img class="ic" src="icons/typescript.svg">TypeScript</span>
+          </div>
+        </div>
+        <div class="card cream">
+          <div class="eyebrow">Input surface</div>
+          <h2>GitHub App</h2>
+          <ul>
+            <li>Hosted paid path: webhooks, queue, dashboard, billing, feedback memory.</li>
+            <li>Minimum permissions only: checks, PRs, contents read, deployments read.</li>
+          </ul>
+          <div class="tags">
+            <span class="chip"><img class="ic" src="icons/github.svg">GitHub App</span>
+            <span class="chip"><img class="ic" src="icons/probot.svg">Octokit</span>
+          </div>
+        </div>
+        <div class="card cream">
+          <div class="eyebrow">Preview deploys</div>
+          <h2>Rendered UI or no review</h2>
+          <ul>
+            <li>deployment_status first; explicit URL, template, comment scrape, local serve as fallbacks.</li>
+            <li>Match deploy SHA to PR head and filter non-app preview environments.</li>
+          </ul>
+          <div class="tags">
+            <span class="chip"><img class="ic" src="icons/vercel.svg">Vercel</span>
+            <span class="chip"><img class="ic" src="icons/netlify.svg">Netlify</span>
+            <span class="chip"><img class="ic" src="icons/cloudflare.svg">CF Pages</span>
+            <span class="chip"><img class="ic" src="icons/render.svg">Render</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card blue">
+        <div class="eyebrow">Gate orchestration</div>
+        <h2>Newest push wins, stale reviews never publish</h2>
+        <ul>
+          <li>Queue supersession key is <code>repo#pr</code>; completed-review identity is <code>(pr, head_sha)</code>.</li>
+          <li>Set <code>current_sha[repo#pr]</code> on enqueue; cancel old active work when possible; re-check at every expensive boundary.</li>
+          <li>Mandatory publish guard before editing the sticky comment or Check Run.</li>
+        </ul>
+        <div class="tags">
+          <span class="chip"><img class="ic" src="icons/fastify.svg">Fastify</span>
+          <span class="chip"><img class="ic" src="icons/redis.svg">BullMQ + Redis</span>
+          <span class="chip"><img class="ic" src="icons/opentelemetry.svg">OTel</span>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="step">
+          <div class="num">01</div>
+          <h3>PR updates</h3>
+          <p>Push or deployment event arrives from GitHub.</p>
+          <div class="arrow">></div>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <h3>Resolve preview</h3>
+          <p>Find the app URL and normalize config.</p>
+          <div class="arrow">></div>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <h3>Call engine</h3>
+          <p><code>critique(images, context)</code> through the shared substrate.</p>
+          <div class="arrow">></div>
+        </div>
+        <div class="step">
+          <div class="num">04</div>
+          <h3>Guard SHA</h3>
+          <p>Discard if a newer PR head exists.</p>
+          <div class="arrow">></div>
+        </div>
+        <div class="step">
+          <div class="num">05</div>
+          <h3>Publish review</h3>
+          <p>One sticky comment plus one Check Run.</p>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="card lav">
+          <div class="eyebrow">Shared judgment boundary</div>
+          <h2>What Gate asks for</h2>
+          <ul>
+            <li>Review this current PR head against this repo's UI DNA and config.</li>
+            <li>Return only validated findings with route, viewport, element ref, evidence, suggestion, and severity.</li>
+            <li>Use Qwen3-VL through judgment-engine; Gate never hard-codes a model vendor.</li>
+          </ul>
+          <div class="tags">
+            <span class="chip"><img class="ic" src="icons/zod.svg">validated findings</span>
+            <span class="chip">Qwen3-VL via engine</span>
+            <span class="chip"><img class="ic" src="icons/tailwindcss.svg">UI DNA</span>
+          </div>
+        </div>
+        <div class="card green">
+          <div class="eyebrow">Shared judgment boundary</div>
+          <h2>What judgment-engine owns</h2>
+          <ul>
+            <li>Browser capture, readiness, tiling, DOM geometry, computed styles, and page-health facts.</li>
+            <li>Repo context extraction, model calls, post-parse validation, eval, and feedback primitives.</li>
+            <li>Screenshot encryption, SSRF controls, prompt-injection defenses, and retention.</li>
+          </ul>
+          <div class="tags">
+            <span class="chip"><img class="ic" src="icons/flydotio.svg">Fly Machines</span>
+            <span class="chip"><img class="ic" src="icons/postgresql.svg">Postgres</span>
+            <span class="chip">object storage</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid3">
+        <div class="card tan">
+          <div class="eyebrow">Delivery</div>
+          <h2>Sticky PR comment</h2>
+          <ul>
+            <li>Find-and-update by hidden marker, never spam repeated comments.</li>
+            <li>Blockers first, should-fix next, nits collapsed by default.</li>
+            <li>Annotated screenshots use permanent app routes.</li>
+          </ul>
+        </div>
+        <div class="card tan">
+          <div class="eyebrow">Delivery</div>
+          <h2>Check Run</h2>
+          <ul>
+            <li><code>ship</code> and <code>ship_with_nits</code> succeed.</li>
+            <li><code>needs_work</code> is neutral.</li>
+            <li><code>blocked</code> fails only with explicit repo opt-in.</li>
+          </ul>
+        </div>
+        <div class="card tan">
+          <div class="eyebrow">Feedback</div>
+          <h2>Data moat starts here</h2>
+          <ul>
+            <li>POST-only feedback, reactions, commands, and later fix outcomes.</li>
+            <li>Labels flow to shared preference data and per-repo memory.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card dark">
+        <div class="eyebrow">YC wedge</div>
+        <h2>Make one PR review feel indispensable</h2>
+        <p>Demo path: AI agent breaks spacing, color, or mobile layout; Gate catches it on the preview deploy; the agent fixes it; Gate verifies the newest SHA.</p>
+        <div class="metric">
+          <div>Time to first review</div>
+          <div>&lt; 2 min target</div>
+          <div>Default mode</div>
+          <div>Advisory</div>
+        </div>
+      </div>
+
+      <div class="card red">
+        <div class="eyebrow">Hard boundary</div>
+        <h2>No-write product doctrine</h2>
+        <ul>
+          <li>No <code>contents: write</code>.</li>
+          <li>No auto-commits.</li>
+          <li>No bundled codegen.</li>
+          <li>The customer's agent is the hands; Apature is the eyes.</li>
+        </ul>
+      </div>
+
+      <div class="card dark">
+        <div class="eyebrow">Config surface</div>
+        <h2><code>.designreview.yml</code></h2>
+        <ul>
+          <li>Preview source, environment, bypass secret, ready selector.</li>
+          <li>Routes, viewports, dark mode, brand rules, gating mode.</li>
+          <li>Missing config is valid; defaults must get a review posted.</li>
+        </ul>
+      </div>
+
+      <div class="card dark">
+        <div class="eyebrow">Issue ownership</div>
+        <h2>Gate owns delivery, not the engine</h2>
+        <ul>
+          <li><b>Gate:</b> GitHub UX, queue correctness, config, dashboard, billing, GTM.</li>
+          <li><b>Judgment Engine:</b> capture, context, Qwen3-VL, eval, feedback store.</li>
+          <li><b>Next surfaces:</b> MCP Review and Pointer after Gate proves trust.</li>
+        </ul>
+      </div>
+
+      <div class="card dark">
+        <div class="eyebrow">Success metrics</div>
+        <h2>What matters first</h2>
+        <ul>
+          <li>Working preview discovery rate.</li>
+          <li>False-positive rate by severity.</li>
+          <li>Stale publish rate: zero.</li>
+          <li>Weekly active repos and paid private repos.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <div class="legend">
+      <div class="lg"><span class="dot" style="background:var(--orch)"></span>Gate orchestration</div>
+      <div class="lg"><span class="dot" style="background:var(--judge)"></span>Shared judgment</div>
+      <div class="lg"><span class="dot" style="background:var(--data)"></span>Delivery + feedback</div>
+      <div class="lg"><span class="dot" style="background:#bb4b4b"></span>No-write boundary</div>
+    </div>
+    <div>apatureai/gate - generated 2026-06-15</div>
+  </div>
+</div>
+</body>
+</html>
