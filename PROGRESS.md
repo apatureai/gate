@@ -11,7 +11,7 @@ How the loop uses it:
 
 ## M0 · Foundation & runtime
 
-- [ ] #30 - Infra: service + Action monorepo scaffold + shared types package
+- [x] #30 - Infra: service + Action monorepo scaffold + shared types package -> done: pnpm workspace (types/service/action) + tsc -b project refs; @gate/types exports the engine boundary contracts (§6 + §15.2 amendments) and the shared golden fixture loader; service/action consume them; no contents:write; typecheck+test(12)+lint green
 - [ ] #31 - Infra: lint + typecheck + test CI pipeline
 - [ ] #33 - Infra: Postgres provisioning + migrations (installations, runs, feedback_events, billing)
 - [ ] #34 - Infra: Redis provisioning (BullMQ + current_sha + per-installation token-bucket)
