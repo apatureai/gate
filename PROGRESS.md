@@ -12,7 +12,7 @@ How the loop uses it:
 ## M0 · Foundation & runtime
 
 - [x] #30 - Infra: service + Action monorepo scaffold + shared types package -> done: pnpm workspace (types/service/action) + tsc -b project refs; @gate/types exports the engine boundary contracts (§6 + §15.2 amendments) and the shared golden fixture loader; service/action consume them; no contents:write; typecheck+test(12)+lint green
-- [ ] #31 - Infra: lint + typecheck + test CI pipeline
+- [x] #31 - Infra: lint + typecheck + test CI pipeline -> done: .github/workflows/ci.yml runs pnpm install --frozen-lockfile + lint + tsc -b + tests on every PR/push; lint is warnings-as-errors (eslint --max-warnings=0); typecheck covers all packages via project refs. NOTE: marking the check "required before merge" is a one-time branch-protection setting for a maintainer (needs admin; left for human).
 - [ ] #33 - Infra: Postgres provisioning + migrations (installations, runs, feedback_events, billing)
 - [ ] #34 - Infra: Redis provisioning (BullMQ + current_sha + per-installation token-bucket)
 - [ ] #35 - Infra: secrets + KMS envelope for gate-held secrets
