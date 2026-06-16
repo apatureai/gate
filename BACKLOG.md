@@ -122,5 +122,7 @@ M4 Trust polish:
 No new issue is required today, but these should stay visible:
 
 - Gate depends on `judgment-engine` fixtures and API behavior; cross-repo contract tests should be added when both repos have code.
+- Gate should consume `ui-dna` snapshots as soon as a useful draft exists, but `.designreview.yml` must be enough for the M1 demo.
 - `ui-graph` can later reduce prompt cost and improve element grounding, but it is not required for Gate M1.
 - Baseline comparison is powerful, but it should not delay the first rendered-UI judgment loop.
+- MCP Review, Pointer, Source Of Truth, Entropy Engine, and DNA Consultant are ecosystem expansion surfaces; they should not steal focus from the Gate vertical slice before Gate proves trust.

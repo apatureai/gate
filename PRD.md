@@ -270,3 +270,27 @@ The cutting-edge part is not "we call a vision model." The cutting-edge part is 
 This keeps the company out of the crowded generic-agent lane and inside the more defensible judgment-data lane.
 
 Primary sources and competitor notes are maintained in `RESEARCH.md`.
+
+## 16. Ecosystem Placement
+
+Added: 2026-06-16
+
+Gate is the first product surface in a broader Apature ecosystem.
+
+Its place:
+
+- Gate is the YC wedge, first demo, and first revenue surface.
+- `judgment-engine` is the substrate Gate calls; Gate should not absorb capture, model, eval, or shared feedback ownership.
+- `ui-dna` is the canonical design standard Gate judges against. Early Gate can use `.designreview.yml`, but the company gets more defensible as UI DNA becomes signed off and versioned.
+- `ui-graph` is a later perception/compression layer that can make Gate cheaper and more grounded; it is not a Gate M1 blocker.
+- `mcp-review` and `pointer` are in-loop/live siblings that reuse the same engine and DNA after Gate proves trust.
+- `interactive-review` is the v2 metered tier for UI states static screenshots miss.
+- `source-of-truth` pushes approved UI DNA upstream to agents before they generate UI.
+- `entropy-engine` handles whole-codebase design drift; Gate remains PR-level judgment.
+- `dna-consultant` packages the enterprise carry-forward workflow over UI DNA, Gate, Source Of Truth, and Entropy Engine.
+
+Rule:
+
+Gate makes the ecosystem legible, but Gate must not become the ecosystem. Its job is to make one PR review feel indispensable, then feed the data and trust loops that make the later products possible.
+
+The fuller map lives in `ECOSYSTEM.md`.

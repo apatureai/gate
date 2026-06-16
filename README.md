@@ -20,6 +20,7 @@ It does not own the shared capture/model/eval substrate. That belongs to `apatur
 ## Docs
 
 - [RESEARCH.md](RESEARCH.md) - market, technical, and architecture backing for the Gate wedge.
+- [ECOSYSTEM.md](ECOSYSTEM.md) - Gate's place in the full Apature product ecosystem.
 - [PRD.md](PRD.md) - YC-ready product requirements and wedge narrative.
 - [TRD.md](TRD.md) - build-ready technical requirements for the MVP.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - diagrams, data flow, repo boundaries, and failure modes.
