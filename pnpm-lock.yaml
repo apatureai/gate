@@ -52,6 +52,8 @@ importers:
         specifier: ^5.4.1
         version: 5.11.1
 
+  packages/secrets: {}
+
   packages/service:
     dependencies:
       '@gate/types':

@@ -4,6 +4,7 @@
     { "path": "packages/types" },
     { "path": "packages/db" },
     { "path": "packages/redis" },
+    { "path": "packages/secrets" },
     { "path": "packages/service" },
     { "path": "packages/action" }
   ]

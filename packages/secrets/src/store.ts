@@ -1,0 +1,48 @@
+/**
+ * App-level secrets Gate holds (TRD §8, §12; §15.6 adds the enterprise
+ * `engineEndpoint`). Resolved from a KMS-backed store in production; the env
+ * resolver here is the dev/local seam.
+ */
+export const APP_SECRET_KEYS = [
+  "githubAppPrivateKey",
+  "webhookSecret",
+  "engineApiKey",
+  "stripeSecretKey",
+  "stripeWebhookSecret",
+  "engineEndpoint",
+] as const;
+
+export type AppSecretKey = (typeof APP_SECRET_KEYS)[number];
+
+export interface SecretStore {
+  get(key: AppSecretKey): Promise<string>;
+}
+
+const ENV_VARS: Record<AppSecretKey, string> = {
+  githubAppPrivateKey: "GITHUB_APP_PRIVATE_KEY",
+  webhookSecret: "GITHUB_WEBHOOK_SECRET",
+  engineApiKey: "JUDGMENT_ENGINE_API_KEY",
+  stripeSecretKey: "STRIPE_SECRET_KEY",
+  stripeWebhookSecret: "STRIPE_WEBHOOK_SECRET",
+  engineEndpoint: "JUDGMENT_ENGINE_ENDPOINT",
+};
+
+/**
+ * Resolves app secrets from environment variables. The production store binds
+ * the same interface to a managed KMS/secret manager (AWS Secrets Manager).
+ */
+export class EnvSecretStore implements SecretStore {
+  private readonly env: NodeJS.ProcessEnv;
+
+  constructor(env: NodeJS.ProcessEnv = process.env) {
+    this.env = env;
+  }
+
+  async get(key: AppSecretKey): Promise<string> {
+    const value = this.env[ENV_VARS[key]];
+    if (value === undefined || value === "") {
+      throw new Error(`Missing secret: ${key} (${ENV_VARS[key]})`);
+    }
+    return value;
+  }
+}
