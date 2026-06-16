@@ -19,9 +19,11 @@ It does not own the shared capture/model/eval substrate. That belongs to `apatur
 
 ## Docs
 
+- [RESEARCH.md](RESEARCH.md) - market, technical, and architecture backing for the Gate wedge.
 - [PRD.md](PRD.md) - YC-ready product requirements and wedge narrative.
 - [TRD.md](TRD.md) - build-ready technical requirements for the MVP.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - diagrams, data flow, repo boundaries, and failure modes.
+- [BACKLOG.md](BACKLOG.md) - GitHub issue execution order and dependency map.
 - [gate_architecture.png](gate_architecture.png) - one-page architecture poster.
 - [poster_gate.html](poster_gate.html) - editable source for the poster.
 
@@ -35,6 +37,10 @@ The first product must make one workflow undeniable:
 4. Gate posts annotated findings in GitHub.
 5. The developer or their agent fixes the issue.
 6. Gate verifies the newest PR head.
+
+## Start Here
+
+The first build issue is [#30](https://github.com/apatureai/gate/issues/30): scaffold the service, Action entrypoint, and shared types package. Then follow [BACKLOG.md](BACKLOG.md). Do not start with dashboard, billing, baseline comparison, or marketplace work until the M1 Action-path vertical slice is running against a mock engine.
 
 ## Product Boundary
 

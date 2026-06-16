@@ -17,6 +17,12 @@ critique(images, context) -> Findings
 
 `judgment-engine` owns capture, context extraction, Qwen3-VL model calls, validation, eval, and shared feedback primitives. Gate owns when to call it and how to publish results.
 
+Concrete transport:
+
+- Gate submits review work through the async engine job API in §15.1.
+- `critique(images, context) -> Findings` remains the conceptual boundary.
+- Gate never holds a long request open waiting for a full review.
+
 ## 2. External Surfaces
 
 ### GitHub Action
@@ -137,7 +143,7 @@ Resolution order:
 1. GitHub deployment status with `state == success`.
 2. Explicit Action input.
 3. Configured `preview.url_template`.
-4. Known provider bot comment scrape.
+4. Known provider bot comment scrape, only when provider identity and domain rules are configured.
 5. Action local-serve fallback.
 
 Deployment status requirements:
@@ -205,6 +211,7 @@ type GateReviewRequest = {
   };
   config: NormalizedDesignReviewConfig;
   publishMode: "advisory" | "blocking";
+  depth: "triage" | "deep";
 };
 ```
 

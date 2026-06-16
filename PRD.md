@@ -243,3 +243,30 @@ The Gate backlog is tracked as GitHub milestones M0 through M4. The build is end
 - **M4 - Trust polish.** Baseline comparison, permanent annotated image routes, Marketplace listing, the YC demo golden-path repo as an automated smoke test, and public launch artifacts.
 
 The single most important seam is the `judgment-engine` client (`GateReviewRequest -> GateReviewResult`): Gate owns when to call and how to publish, the engine owns capture, context, model, and validation. Gate-side security covers preview-source provenance and gate-held secret custody; deep SSRF, DNS-rebind, egress, screenshot encryption, and prompt-injection controls remain owned by `judgment-engine`.
+
+## 15. Research-Backed Positioning
+
+Added: 2026-06-16
+
+Gate is differentiated by where it sits and what it judges:
+
+- It is not a visual-regression product. Applitools, Chromatic, and Percy already catch visual changes, visual bugs, and cross-browser diffs. Gate starts after the screenshot exists and asks whether the rendered UI is good product/design judgment for this repo.
+- It is not an AI source-code reviewer. GitHub Copilot code review and adjacent PR reviewers inspect code and suggest source-level fixes. Gate inspects the preview deploy and grounds feedback in visible elements, screenshots, DOM geometry, and UI DNA.
+- It is not a browser agent. OpenAI computer use, Playwright MCP, Stagehand, and related browser-agent tools are about operating or inspecting UIs. Gate is a neutral reviewer: it judges and verifies, then leaves action to the developer or their coding agent.
+- It is not a design-tool review product. The wedge exists because AI-generated UI often goes straight from prompt to PR without passing through Figma.
+
+The unique claim:
+
+Gate is the GitHub-native, rendered-UI judgment layer for AI-generated frontend PRs. It combines preview deploys, design-system context, UI DNA, a VLM judge, element grounding, and PR-native delivery into one workflow.
+
+The cutting-edge part is not "we call a vision model." The cutting-edge part is the loop:
+
+1. Rendered UI evidence.
+2. Repo-specific UI DNA.
+3. Neutral review at the PR boundary.
+4. Agent-actionable suggestions.
+5. Feedback and fix outcomes that improve the team's design memory.
+
+This keeps the company out of the crowded generic-agent lane and inside the more defensible judgment-data lane.
+
+Primary sources and competitor notes are maintained in `RESEARCH.md`.
