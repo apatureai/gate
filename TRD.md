@@ -232,6 +232,7 @@ type GateReviewResult = {
     model: string;
     promptVersion: string;
     captureVersion: string;
+    uiDnaVersion: string | null;
   };
 };
 ```
@@ -240,6 +241,11 @@ Current model assumption:
 
 - Qwen3-VL is the default judge through `judgment-engine`.
 - Gate docs, UI, and code must not hard-code Claude as the primary model.
+
+UI-DNA grounding (what makes the judgment repo-specific, not generic taste):
+
+- The engine grounds each critique in the repo's UI DNA — the versioned design genome owned by `ui-dna`, served by `source-of-truth`, and represented compactly by `ui-graph` (see ECOSYSTEM.md §8).
+- Gate does not extract or store UI DNA. It passes repo identity so the engine resolves the right genome, and it version-stamps the returned `uiDnaVersion` on the run so every published finding is traceable to the genome it was judged against. `null` is valid when the repo has no extracted UI DNA yet; the engine falls back to repo context plus the brand block.
 
 ## 7. Delivery Requirements
 
