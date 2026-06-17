@@ -1,5 +1,6 @@
 import { getTracer, type Span, SPAN_NAMES } from "@gate/observability";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import { createWebhookVerifier } from "./webhooks.js";
 
 /** Handlers the webhook receiver dispatches to (wired by #3 enqueue, etc.). */
 export interface WebhookHandlers {
@@ -12,11 +13,14 @@ export interface BuildServerOptions {
   logger?: boolean;
   /** Webhook event handlers; default no-ops. */
   webhook?: WebhookHandlers;
+  /** GitHub webhook secret; when set, requests are HMAC-verified (#2). */
+  webhookSecret?: string;
   /** Readiness probe; defaults to always-ready. */
   readiness?: () => boolean | Promise<boolean>;
 }
 
 const requestSpans = new WeakMap<FastifyRequest, Span>();
+const rawBodies = new WeakMap<FastifyRequest, string>();
 
 /**
  * Build the Gate App-path HTTP server (TRD §2): webhook receiver for
@@ -27,6 +31,20 @@ const requestSpans = new WeakMap<FastifyRequest, Span>();
 export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: options.logger ?? false });
   const handlers = options.webhook ?? {};
+  const verifier = options.webhookSecret ? createWebhookVerifier(options.webhookSecret) : undefined;
+
+  // Capture the raw JSON body so the HMAC can be verified over exact bytes.
+  if (verifier) {
+    app.addContentTypeParser("application/json", { parseAs: "string" }, (request, body, done) => {
+      const raw = typeof body === "string" ? body : body.toString("utf8");
+      rawBodies.set(request, raw);
+      try {
+        done(null, raw === "" ? {} : JSON.parse(raw));
+      } catch (err) {
+        done(err as Error);
+      }
+    });
+  }
 
   // One OTel span per request (TRD §13).
   app.addHook("onRequest", async (request) => {
@@ -57,6 +75,13 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   app.post("/webhook", async (request, reply) => {
     const event = request.headers["x-github-event"];
     const delivery = asHeader(request.headers["x-github-delivery"]);
+
+    // Reject forged/unsigned deliveries before any work (#2).
+    if (verifier) {
+      const signature = asHeader(request.headers["x-hub-signature-256"]);
+      const ok = await verifier.verify(rawBodies.get(request) ?? "", signature);
+      if (!ok) return reply.code(401).send({ error: "invalid_signature" });
+    }
 
     if (event === "pull_request") {
       await handlers.onPullRequest?.(request.body, delivery);

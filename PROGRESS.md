@@ -40,7 +40,7 @@ How the loop uses it:
 ## M2 · App path
 
 - [x] #1 - Orchestrator: Fastify server + webhook receiver -> done: buildServer adds POST /webhook accepting pull_request + deployment_status (dispatches to injected handlers, accept-and-ignores other events with 2xx so GitHub stops retrying), /healthz + /readyz (readiness probe), and a per-request OTel span hook (webhookReceive for /webhook, http <method> else) with status/route attributes. HMAC verify is #2. Tested incl. span emission via InMemorySpanExporter.
-- [ ] #2 - Orchestrator: GitHub App auth + HMAC webhook verify
+- [x] #2 - Orchestrator: GitHub App auth + HMAC webhook verify -> done: createGitHubAppAuth (@octokit/app) mints app JWTs + caches installation tokens; createWebhookVerifier (@octokit/webhooks) verifies x-hub-signature-256; buildServer captures the raw JSON body and rejects forged/unsigned /webhook deliveries with 401 before any work. Secrets from @gate/secrets (privateKey/webhookSecret). Tested: good/bad/wrong-secret/missing signature + offline JWT minting.
 - [ ] #55 - Orchestrator: deployment_status preview discovery (webhook -> SHA match -> dedupe)
 - [ ] #3 - Orchestrator: BullMQ queue (key repo#pr, completed-id pr+head_sha)
 - [ ] #48 - Orchestrator: ReviewJobWorker interface + BullMQ adapter (Inngest migration path)

@@ -1,5 +1,9 @@
 export { buildServer } from "./app.js";
-export type { BuildServerOptions } from "./app.js";
+export type { BuildServerOptions, WebhookHandlers } from "./app.js";
+export { createWebhookVerifier } from "./webhooks.js";
+export type { WebhookVerifier } from "./webhooks.js";
+export { createGitHubAppAuth } from "./app-auth.js";
+export type { GitHubAppAuth, GitHubAppAuthOptions } from "./app-auth.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
