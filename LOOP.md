@@ -155,3 +155,19 @@ as living memory: append concrete learnings, prune anything that proved wrong.
     (`repo#pr`, structural), AbortSignal threaded into the engine poll loop
     (`signal` in PollOptions → EngineAbortedError), and the publish-time SHA
     guard (the queue-agnostic backstop, holds even if the signal is bypassed).
+- 2026-06-17: M3 hosted tier complete (#15,#16,#17,#18,#19,#20,#29,#53,#54).
+  Learnings:
+  - **Next.js/React UI doesn't fit the tsc-b/vitest harness** — build the
+    dashboard *core* as a tested TS library (`@gate/dashboard`: OAuth/session/
+    access/stats/billing/config-ui/onboarding/enterprise) the React shell
+    consumes; keep rendering out of the unit harness. This delivered every
+    dashboard issue's acceptance without bloating the build with `next`/`react`.
+  - **Circular deps between issues happen** (#20 ↔ #53). Build the lower-layer
+    capability first (#53 engine routing) and note the inversion; don't stall.
+  - **GitHub deep-links replace writes:** the config UI "propose" path is a
+    prefilled `github.com/{o}/{r}/new/{branch}?filename=&value=` URL the user
+    commits — preserves the no-`contents:write` neutrality guarantee.
+  - **Stripe/SSO/webhook signatures** are all the same HMAC-verify shape with a
+    timestamp tolerance; reuse the pattern (engine #47, feedback #13, stripe #19).
+  - **Tracking/docs issues** (#51, #54): ship a markdown doc + a guard test that
+    asserts the doc covers the required sections, so the doc can't silently drift.
