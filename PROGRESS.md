@@ -60,7 +60,7 @@ How the loop uses it:
 
 ## M3 · Hosted tier
 
-- [ ] #15 - Dashboard: Next.js shell + auth
+- [x] #15 - Dashboard: Next.js shell + auth -> done: @gate/dashboard core (tested, fits the tsc-b/vitest harness) — GitHub OAuth flow (buildAuthorizeUrl/generateOAuthState/exchangeCodeForToken/fetchUserInstallations), signed sessions (mintSession/verifySession), installation-scoped access (canAccessInstallation/filterAccessibleInstallations/assertInstallationAccess, defense-in-depth over RLS #50), and the NAV_ITEMS nav-shell model. The Next.js rendering shell is a thin consumer of this core (UI rendering kept out of the unit harness; documented).
 - [ ] #16 - Dashboard: run history + finding browser
 - [ ] #17 - Dashboard: feedback stats
 - [ ] #18 - Dashboard: config UI (.designreview.yml editor + validate)
