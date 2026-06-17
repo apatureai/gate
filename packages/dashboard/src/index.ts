@@ -25,3 +25,5 @@ export {
   loadFeedbackEvents,
 } from "./stats.js";
 export type { Sentiment, FeedbackLike, RateCounts, TrendPoint } from "./stats.js";
+export { validateConfig, copyableConfig, buildProposeConfigUrl } from "./config-ui.js";
+export type { ConfigValidation, ProposeConfigOptions } from "./config-ui.js";
