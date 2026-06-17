@@ -38,6 +38,7 @@ describe("EnvSecretStore", () => {
       GITHUB_APP_PRIVATE_KEY: "pk",
       GITHUB_WEBHOOK_SECRET: "ws",
       JUDGMENT_ENGINE_API_KEY: "ek",
+      JUDGMENT_ENGINE_HMAC_SECRET: "hmac",
       STRIPE_SECRET_KEY: "sk",
       STRIPE_WEBHOOK_SECRET: "swh",
       JUDGMENT_ENGINE_ENDPOINT: "https://engine.acme.internal",

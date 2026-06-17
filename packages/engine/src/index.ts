@@ -19,6 +19,14 @@ export type {
 export { createHttpEngineTransport } from "./http.js";
 export type { HttpEngineTransportOptions } from "./http.js";
 export {
+  SIGNATURE_HEADER,
+  INSTALLATION_HEADER,
+  TIMESTAMP_HEADER,
+  signEngineRequest,
+  verifyEngineRequest,
+} from "./hmac.js";
+export type { SignatureHeaders, VerifyResult, VerifyFailureReason } from "./hmac.js";
+export {
   buildGateReviewRequest,
   extractReviewMetadata,
   createJudgmentEngineClient,

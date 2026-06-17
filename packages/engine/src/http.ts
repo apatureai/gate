@@ -1,3 +1,4 @@
+import { signEngineRequest } from "./hmac.js";
 import {
   EngineJobError,
   type EngineTransport,
@@ -8,8 +9,14 @@ import {
 
 export interface HttpEngineTransportOptions {
   baseUrl: string;
-  /** Bearer/API key for the engine. #47 replaces/augments this with HMAC signing. */
+  /** Bearer/API key for the engine. */
   apiKey?: string;
+  /**
+   * HMAC secret (from the KMS-backed store, `@gate/secrets` `engineHmacSecret`).
+   * When set, the submit body is HMAC-SHA256 signed with installationId bound in,
+   * so the engine can verify and scope storage to the verified tenant (#47).
+   */
+  hmacSecret?: string;
   /** Per-request timeout (ms). */
   requestTimeoutMs?: number;
   fetchImpl?: typeof fetch;
@@ -44,11 +51,23 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
 
   return {
     async submit(submission: JobSubmission): Promise<SubmitResponse> {
+      const body = JSON.stringify(submission);
+      const requestHeaders = headers();
+      if (options.hmacSecret) {
+        Object.assign(
+          requestHeaders,
+          signEngineRequest({
+            body,
+            installationId: submission.request.installationId,
+            secret: options.hmacSecret,
+          }),
+        );
+      }
       const res = await withTimeout((signal) =>
         fetchImpl(`${base}/jobs`, {
           method: "POST",
-          headers: headers(),
-          body: JSON.stringify(submission),
+          headers: requestHeaders,
+          body,
           signal,
         }),
       );
