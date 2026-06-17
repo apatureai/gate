@@ -10,6 +10,14 @@ export type {
   DeploymentPreviewOptions,
   DeploymentPreviewResult,
 } from "./deployment-preview.js";
+export {
+  REVIEW_QUEUE_NAME,
+  reviewQueueKey,
+  completedReviewId,
+  createReviewQueue,
+} from "./queue.js";
+export type { ReviewJobPayload, QueueLike, ReviewQueue } from "./queue.js";
+export { createBullReviewQueue } from "./queue-bull.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
