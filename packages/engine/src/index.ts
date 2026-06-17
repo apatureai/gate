@@ -18,3 +18,14 @@ export type {
 } from "./jobs.js";
 export { createHttpEngineTransport } from "./http.js";
 export type { HttpEngineTransportOptions } from "./http.js";
+export {
+  buildGateReviewRequest,
+  extractReviewMetadata,
+  createJudgmentEngineClient,
+} from "./client.js";
+export type {
+  ReviewRequestContext,
+  ReviewMetadata,
+  JudgmentEngineClient,
+  JudgmentEngineClientOptions,
+} from "./client.js";
