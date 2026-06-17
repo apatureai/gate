@@ -14,3 +14,5 @@ export {
 } from "./access.js";
 export { NAV_ITEMS } from "./nav.js";
 export type { NavItem } from "./nav.js";
+export { listRunHistory, prUrl, buildFindingBrowser } from "./runs.js";
+export type { SqlQuery, RunSummary, FindingView, FindingBrowser } from "./runs.js";

@@ -8,5 +8,12 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@gate/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.0",
+    "@gate/db": "workspace:*"
   }
 }

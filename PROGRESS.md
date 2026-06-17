@@ -61,7 +61,7 @@ How the loop uses it:
 ## M3 · Hosted tier
 
 - [x] #15 - Dashboard: Next.js shell + auth -> done: @gate/dashboard core (tested, fits the tsc-b/vitest harness) — GitHub OAuth flow (buildAuthorizeUrl/generateOAuthState/exchangeCodeForToken/fetchUserInstallations), signed sessions (mintSession/verifySession), installation-scoped access (canAccessInstallation/filterAccessibleInstallations/assertInstallationAccess, defense-in-depth over RLS #50), and the NAV_ITEMS nav-shell model. The Next.js rendering shell is a thin consumer of this core (UI rendering kept out of the unit harness; documented).
-- [ ] #16 - Dashboard: run history + finding browser
+- [x] #16 - Dashboard: run history + finding browser -> done: @gate/dashboard runs — listRunHistory queries per-repo runs newest-first (tenant-scoped/RLS, pglite-tested); buildFindingBrowser turns an engine result into a finding browser with each finding's stable /i/<id>.png screenshot URL (#12) and a prUrl linking the run back to its PR. Findings/screenshots stay engine-owned artifacts referenced by stable route; UI renders the view models.
 - [ ] #17 - Dashboard: feedback stats
 - [ ] #18 - Dashboard: config UI (.designreview.yml editor + validate)
 - [ ] #19 - Billing: Stripe subscriptions + free-tier limits
