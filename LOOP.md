@@ -171,3 +171,14 @@ as living memory: append concrete learnings, prune anything that proved wrong.
     timestamp tolerance; reuse the pattern (engine #47, feedback #13, stripe #19).
   - **Tracking/docs issues** (#51, #54): ship a markdown doc + a guard test that
     asserts the doc covers the required sections, so the doc can't silently drift.
+- 2026-06-17: M4 trust polish complete (#14,#24,#25,#26,#42) — **the entire
+  M0–M4 backlog is implemented** (290 tests). Learnings:
+  - **GTM/marketing issues** (#24 listing, #25 demo, #26 OSS content) are
+    doc-shaped: ship the in-repo artifact (listing draft, demo runbook, consent/
+    opt-out policy) + a guard test; flag the human steps (verification, recording,
+    posting) explicitly rather than pretending they're code.
+  - **demo-as-test** (#42): the live-pipeline scheduled smoke test is ops, but
+    the same flow runs in CI against the mock engine asserting the 90s budget +
+    a post-fix green Check Run — that's the in-repo deliverable.
+  - When PROGRESS has no unchecked `[ ]` whose deps are met, the backlog is done:
+    stop and report (don't invent work). The cron will re-check each fire.
