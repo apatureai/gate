@@ -116,6 +116,9 @@ importers:
 
   packages/service:
     dependencies:
+      '@gate/delivery':
+        specifier: workspace:*
+        version: link:../delivery
       '@gate/types':
         specifier: workspace:*
         version: link:../types
