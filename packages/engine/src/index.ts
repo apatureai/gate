@@ -28,6 +28,8 @@ export {
 export type { SignatureHeaders, VerifyResult, VerifyFailureReason } from "./hmac.js";
 export { VERIFIED_SOURCES, verifyPreviewHandoff } from "./preview-verification.js";
 export type { VerifiedSource, PreviewHandoffInput, PreviewHandoffResult } from "./preview-verification.js";
+export { SCHEMA_VERSION, GateReviewResultSchema, majorVersion, parseEngineResult } from "./contract.js";
+export type { ParseEngineResult } from "./contract.js";
 export {
   buildGateReviewRequest,
   extractReviewMetadata,

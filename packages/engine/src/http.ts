@@ -1,3 +1,4 @@
+import { parseEngineResult } from "./contract.js";
 import { signEngineRequest } from "./hmac.js";
 import {
   EngineJobError,
@@ -83,7 +84,16 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
         fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, { headers: headers(), signal }),
       );
       if (!res.ok) throw new EngineJobError(`engine poll failed: ${res.status}`);
-      return (await res.json()) as JobStatus;
+      const status = (await res.json()) as JobStatus;
+      if (status.state === "completed") {
+        // Validate the contract before the result can ever reach publish (#46).
+        const parsed = parseEngineResult(status.result, res.headers.get("x-schema-version"));
+        if (!parsed.ok) {
+          throw new EngineJobError(`engine result contract violation: ${parsed.reason}`);
+        }
+        return { ...status, result: parsed.result };
+      }
+      return status;
     },
 
     async cancel(jobId: string): Promise<void> {

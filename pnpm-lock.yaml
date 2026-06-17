@@ -70,6 +70,9 @@ importers:
       '@gate/types':
         specifier: workspace:*
         version: link:../types
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       '@gate/config':
         specifier: workspace:*
