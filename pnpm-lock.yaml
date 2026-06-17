@@ -29,13 +29,18 @@ importers:
 
   packages/action:
     dependencies:
-      '@gate/types':
-        specifier: workspace:*
-        version: link:../types
-    devDependencies:
       '@gate/config':
         specifier: workspace:*
         version: link:../config
+      '@gate/delivery':
+        specifier: workspace:*
+        version: link:../delivery
+      '@gate/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gate/types':
+        specifier: workspace:*
+        version: link:../types
 
   packages/config:
     dependencies:

@@ -1,0 +1,42 @@
+# Apature Gate — GitHub Action entrypoint (Action path, TRD §2).
+# Judgment-only: this action needs `checks: write` and `pull-requests: write`
+# only. It MUST NOT be granted `contents: write` (see packages/action
+# GATE_GITHUB_PERMISSIONS). Set permissions in the calling workflow:
+#   permissions:
+#     contents: read
+#     pull-requests: write
+#     checks: write
+name: "Apature Gate"
+description: "Judgment-only design review for your PR preview deployments."
+author: "Apature"
+branding:
+  icon: "eye"
+  color: "purple"
+inputs:
+  preview-url:
+    description: "Explicit preview URL to review. Overrides discovery."
+    required: false
+  preview-command:
+    description: "Command to build and serve the app locally as a fallback."
+    required: false
+  config-path:
+    description: "Path to .designreview.yml."
+    required: false
+    default: ".designreview.yml"
+  gate-mode:
+    description: "Override rules.gate: none | nits | blockers."
+    required: false
+    default: "none"
+  github-token:
+    description: "Token used to post the sticky comment and Check Run."
+    required: false
+    default: "${{ github.token }}"
+runs:
+  using: "docker"
+  image: "Dockerfile.action"
+  env:
+    INPUT_PREVIEW_URL: "${{ inputs.preview-url }}"
+    INPUT_PREVIEW_COMMAND: "${{ inputs.preview-command }}"
+    INPUT_CONFIG_PATH: "${{ inputs.config-path }}"
+    INPUT_GATE_MODE: "${{ inputs.gate-mode }}"
+    INPUT_GITHUB_TOKEN: "${{ inputs.github-token }}"

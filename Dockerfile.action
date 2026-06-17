@@ -1,0 +1,24 @@
+# Docker image for the Apature Gate GitHub Action (Action path).
+# Judgment-only: posts comments + check runs; never writes repo contents.
+FROM node:20-slim AS base
+ENV PNPM_HOME=/pnpm
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+WORKDIR /app
+
+FROM base AS build
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json tsconfig.base.json tsconfig.json ./
+COPY packages ./packages
+RUN pnpm install --frozen-lockfile
+RUN pnpm build
+
+FROM build AS prune
+RUN pnpm prune --prod
+
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY --from=prune /app/node_modules ./node_modules
+COPY --from=prune /app/packages ./packages
+COPY --from=prune /app/package.json ./package.json
+COPY --from=prune /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+ENTRYPOINT ["node", "packages/action/dist/main.js"]

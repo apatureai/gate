@@ -1,5 +1,15 @@
 import type { GateReviewRequest } from "@gate/types";
 
+export { runAction } from "./run.js";
+export type {
+  ActionRunContext,
+  ActionRunInputs,
+  ActionRunDeps,
+  ActionStatus,
+  ActionOutcome,
+} from "./run.js";
+export { createGitHubApi } from "./github.js";
+export type { GitHubTarget, GitHubApi } from "./github.js";
 export {
   resolvePreviewUrl,
 } from "./preview.js";
