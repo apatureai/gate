@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/config" },
+    { "path": "packages/db" },
+    { "path": "packages/redis" },
+    { "path": "packages/secrets" },
+    { "path": "packages/observability" },
+    { "path": "packages/service" },
+    { "path": "packages/action" }
+  ]
+}

@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.github
+coverage
+*.md
+icons
+*.html
+*.png
