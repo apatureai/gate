@@ -73,7 +73,7 @@ How the loop uses it:
 ## M4 · Trust polish
 
 - [x] #14 - CI: baseline comparison v1.5 (before/after pairs) -> done: @gate/delivery baseline — BaselineStore keeps the main-branch capture set per (route,viewport); buildComparisonPairs pairs each PR capture with its baseline (before null for new routes) so the deep pass gets before/after side by side; buildBeforeAfterArtifact emits the before/after pair with stable /i/<id>.png URLs. Screenshots stay engine-owned; Gate stores refs + pairs.
-- [ ] #24 - GTM: GitHub Marketplace listing + verification (start week 1)
+- [x] #24 - GTM: GitHub Marketplace listing + verification (start week 1) -> done: docs/marketplace-listing.md (listing copy, categories, events, $20/dev/mo pricing #19, minimal-permissions-never-contents:write lead #21, assets + verification checklist; not gated on the engine quality gate). Guard test asserts the listing matches GATE_APP_PERMISSIONS. Publisher verification + recording assets are human/marketing actions.
 - [ ] #25 - GTM: launch demo — agent-breaks-the-design-system caught in 90s
 - [ ] #26 - GTM: public-judgment-on-OSS content engine
 - [ ] #42 - Test/GTM: YC demo golden-path repo + automated <90s review check
