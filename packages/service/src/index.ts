@@ -1,5 +1,8 @@
 import type { GateReviewResult, PublishMode, ReviewGrade } from "@gate/types";
 
+export { buildServer } from "./app.js";
+export type { BuildServerOptions } from "./app.js";
+
 /**
  * GitHub Check Run conclusions Gate may publish. Full mapping logic is #11; this
  * scaffold establishes that the service consumes the shared contract rather than

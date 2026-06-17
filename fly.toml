@@ -1,0 +1,37 @@
+# Fly.io config for the Gate App/orchestrator service (TRD §2, §12; ARCHITECTURE §4).
+# The Action path runs in the customer runner and is NOT deployed here.
+app = "apature-gate"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+
+# Run database migrations before each release cuts over (idempotent; #33).
+[deploy]
+  release_command = "node packages/db/dist/cli/migrate.js"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# Secrets (GitHub App private key, webhook secret, judgment-engine API key,
+# Stripe keys, DATABASE_URL, REDIS_URL) are injected from the Fly secret store
+# via `fly secrets set ...` and are never baked into the image.

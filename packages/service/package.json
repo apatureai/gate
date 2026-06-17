@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@gate/types": "workspace:*"
+    "@gate/types": "workspace:*",
+    "fastify": "^5.1.0"
   }
 }
