@@ -1,0 +1,60 @@
+{
+  "title": "Apature Gate — Review Pipeline",
+  "uid": "apature-gate",
+  "schemaVersion": 39,
+  "tags": ["gate"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Time to first comment (p50 / p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(gate_review_time_to_first_comment_ms_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gate_review_time_to_first_comment_ms_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Review latency (p50 / p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(gate_review_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gate_review_latency_ms_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Queue depth",
+      "type": "timeseries",
+      "targets": [{ "expr": "gate_queue_depth", "legendFormat": "pending jobs" }]
+    },
+    {
+      "id": 4,
+      "title": "Engine error rate",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "sum(rate(gate_engine_errors_total[5m]))", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Stale publishes (must be 0)",
+      "type": "stat",
+      "targets": [
+        { "expr": "increase(gate_stale_publish_total[1h])", "legendFormat": "stale publishes" }
+      ]
+    }
+  ]
+}

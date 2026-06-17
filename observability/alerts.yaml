@@ -1,0 +1,45 @@
+# Prometheus alerting rules for Gate (TRD §13, §15.3).
+#
+# OTel instrument names map to Prometheus series as follows:
+#   gate.stale_publish (counter)                  -> gate_stale_publish_total
+#   gate.review.time_to_first_comment_ms (hist)   -> gate_review_time_to_first_comment_ms_bucket
+#   gate.engine.errors (counter)                  -> gate_engine_errors_total
+#   gate.engine.call ...                          (see dashboard)
+#   gate.queue.depth (gauge)                      -> gate_queue_depth
+groups:
+  - name: gate-hard-invariants
+    rules:
+      # The one metric that must stay at zero. Any stale publish pages.
+      - alert: GateStalePublish
+        expr: increase(gate_stale_publish_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: page
+          invariant: "true"
+        annotations:
+          summary: "Gate published a stale review (hard invariant violated)"
+          runbook: >-
+            Investigate AbortSignal propagation into the engine client, sha:
+            key eviction, and the publish-time guard race (TRD §15.3).
+
+  - name: gate-slo
+    rules:
+      - alert: GateTimeToFirstCommentP95High
+        expr: >-
+          histogram_quantile(0.95,
+            sum(rate(gate_review_time_to_first_comment_ms_bucket[5m])) by (le)
+          ) > 180000
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Time-to-first-comment p95 over the 3 min SLO"
+
+      - alert: GateEngineErrorRateHigh
+        expr: >-
+          sum(rate(gate_engine_errors_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "judgment-engine error rate elevated"
