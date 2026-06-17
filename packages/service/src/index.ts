@@ -4,6 +4,13 @@ export { createWebhookVerifier } from "./webhooks.js";
 export type { WebhookVerifier } from "./webhooks.js";
 export { createGitHubAppAuth } from "./app-auth.js";
 export type { GitHubAppAuth, GitHubAppAuthOptions } from "./app-auth.js";
+export {
+  GATE_APP_PERMISSIONS,
+  GATE_APP_EVENTS,
+  assertNoContentsWrite,
+  buildAppManifest,
+} from "./app-permissions.js";
+export type { GateAppPermissions, AppManifestOptions } from "./app-permissions.js";
 export { resolveDeploymentPreview, filterAppDeployments, vercelBypassHeaders } from "./deployment-preview.js";
 export type {
   DeploymentStatusEvent,
