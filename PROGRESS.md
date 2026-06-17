@@ -72,7 +72,7 @@ How the loop uses it:
 
 ## M4 · Trust polish
 
-- [ ] #14 - CI: baseline comparison v1.5 (before/after pairs)
+- [x] #14 - CI: baseline comparison v1.5 (before/after pairs) -> done: @gate/delivery baseline — BaselineStore keeps the main-branch capture set per (route,viewport); buildComparisonPairs pairs each PR capture with its baseline (before null for new routes) so the deep pass gets before/after side by side; buildBeforeAfterArtifact emits the before/after pair with stable /i/<id>.png URLs. Screenshots stay engine-owned; Gate stores refs + pairs.
 - [ ] #24 - GTM: GitHub Marketplace listing + verification (start week 1)
 - [ ] #25 - GTM: launch demo — agent-breaks-the-design-system caught in 90s
 - [ ] #26 - GTM: public-judgment-on-OSS content engine

@@ -15,3 +15,9 @@ export { validateFindings, decideDelivery, decideDeliveryForError } from "./degr
 export type { DegradationReason, DeliveryDecision, DegradationContext, FindingValidation } from "./degradation.js";
 export { buildAnnotationSvg, annotateScreenshot } from "./annotate.js";
 export type { Rect, Annotation } from "./annotate.js";
+export {
+  createInMemoryBaselineStore,
+  buildComparisonPairs,
+  buildBeforeAfterArtifact,
+} from "./baseline.js";
+export type { CaptureRef, BaselineStore, ComparisonPair, BeforeAfterArtifact } from "./baseline.js";
