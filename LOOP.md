@@ -78,3 +78,23 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   Tests no longer need a prior build; remember to extend the alias map for each
   new package. Also: another committer may push to `agent/build` between runs —
   always `git fetch` + rebase before pushing.
+- 2026-06-16: M1 engine+delivery vertical (#45,#37,#47,#39,#46,#10,#11,#38).
+  Learnings:
+  - **Verify dependency direction, not just PROGRESS order.** #45's stated
+    "depends on #37" was inverted — the async job *contract* precedes the
+    *client*. When a dep looks circular/backwards, build the lower layer first
+    and note the inversion in PROGRESS + the issue comment.
+  - **Cross-repo `[judgment-engine #N]` deps never block** — mock them; only
+    in-repo `[ ]` deps gate an issue.
+  - **Consolidate scaffold helpers.** When a real issue (#11) supersedes a
+    placeholder from the #30 scaffold (`@gate/service` check-run helper), move
+    the canonical impl to the owning package (`@gate/delivery`) and have the old
+    location re-export it — don't leave two implementations.
+  - **Package layering:** `engine` is lower-level than `delivery`; `delivery`
+    depends on `engine` (for `PollOutcome`), never the reverse. Keep deps
+    pointing toward `types`.
+  - **ESLint:** `_`-prefixed and rest-sibling unused vars are ignored (config
+    updated) — use `const { dropped: _drop, ...rest }` to omit keys in tests.
+  - Layer security/contract concerns as transport seams: HMAC (#47), Zod parse
+    + `x-schema-version` (#46), and Retry-After (#38) all wrap the same
+    `EngineTransport`/client without rewriting the job protocol (#45).
