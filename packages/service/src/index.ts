@@ -51,6 +51,8 @@ export {
   createSqlFullReviewWindow,
 } from "./review-window.js";
 export type { FullReviewWindowStore, SqlQuery } from "./review-window.js";
+export { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
+export type { DepthReason, DepthDecision } from "./depth-policy.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
