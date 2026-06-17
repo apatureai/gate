@@ -39,7 +39,7 @@ How the loop uses it:
 
 ## M2 · App path
 
-- [ ] #1 - Orchestrator: Fastify server + webhook receiver
+- [x] #1 - Orchestrator: Fastify server + webhook receiver -> done: buildServer adds POST /webhook accepting pull_request + deployment_status (dispatches to injected handlers, accept-and-ignores other events with 2xx so GitHub stops retrying), /healthz + /readyz (readiness probe), and a per-request OTel span hook (webhookReceive for /webhook, http <method> else) with status/route attributes. HMAC verify is #2. Tested incl. span emission via InMemorySpanExporter.
 - [ ] #2 - Orchestrator: GitHub App auth + HMAC webhook verify
 - [ ] #55 - Orchestrator: deployment_status preview discovery (webhook -> SHA match -> dedupe)
 - [ ] #3 - Orchestrator: BullMQ queue (key repo#pr, completed-id pr+head_sha)

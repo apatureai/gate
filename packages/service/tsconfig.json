@@ -5,5 +5,9 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../types" }, { "path": "../delivery" }]
+  "references": [
+    { "path": "../types" },
+    { "path": "../delivery" },
+    { "path": "../observability" }
+  ]
 }
