@@ -67,7 +67,7 @@ How the loop uses it:
 - [x] #19 - Billing: Stripe subscriptions + free-tier limits -> done: @gate/dashboard billing — PRICE_PER_SEAT_CENTS=$20/dev/mo + computeMonthlyTotalCents; verifyStripeSignature (t/v1 HMAC + tolerance), mapStripeEvent -> billing state, createSqlBillingStore upserts billing_customers (pglite-tested); free-tier gating: canReviewRepo (public-repos only) + freeTierDepth (triage + one deep per PR); usage = runs (countDeepReviewsForPr/countReviewsForRepo). Composes with depth policy #43.
 - [ ] #20 - Billing: enterprise SSO + in-VPC residency option
 - [ ] #29 - Config: onboarding flow (brand block, protection_bypass, preview source)
-- [ ] #53 - Enterprise: in-VPC judgment-engine endpoint (per-account engineEndpoint, no-fallback)
+- [x] #53 - Enterprise: in-VPC judgment-engine endpoint (per-account engineEndpoint, no-fallback) -> done: @gate/engine endpoint-routing — resolveEngineRoute defaults to hosted, routes to a per-account in-VPC engineEndpoint (Gate-internal routing, KMS-decrypted by caller, not a GateReviewRequest field); createAccountEngineTransport targets exactly one base URL with NO fallback path to hosted, so an in-VPC outage errors (-> not_reviewed via #38) and never leaks screenshots to hosted; docs/in-vpc-engine.md describes the mode + residency guarantee. (Built before #20 to break the circular dep.)
 - [ ] #54 - Hardening (deferred, M3): webhook callback / Pact / JWT / Inngest / outbox
 
 ## M4 · Trust polish

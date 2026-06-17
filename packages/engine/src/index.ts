@@ -33,6 +33,12 @@ export { VERIFIED_SOURCES, verifyPreviewHandoff } from "./preview-verification.j
 export type { VerifiedSource, PreviewHandoffInput, PreviewHandoffResult } from "./preview-verification.js";
 export { SCHEMA_VERSION, GateReviewResultSchema, majorVersion, parseEngineResult } from "./contract.js";
 export type { ParseEngineResult } from "./contract.js";
+export { resolveEngineRoute, createAccountEngineTransport } from "./endpoint-routing.js";
+export type {
+  EngineAccountRouting,
+  ResolvedEngineRoute,
+  AccountEngineTransportOptions,
+} from "./endpoint-routing.js";
 export {
   buildGateReviewRequest,
   extractReviewMetadata,
