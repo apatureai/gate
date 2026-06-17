@@ -68,6 +68,9 @@ importers:
       '@gate/types':
         specifier: workspace:*
         version: link:../types
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.2.0

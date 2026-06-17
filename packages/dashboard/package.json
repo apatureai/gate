@@ -12,7 +12,8 @@
   "dependencies": {
     "@gate/config": "workspace:*",
     "@gate/secrets": "workspace:*",
-    "@gate/types": "workspace:*"
+    "@gate/types": "workspace:*",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.0",

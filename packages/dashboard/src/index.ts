@@ -49,3 +49,5 @@ export {
   resolveEngineEndpoint,
 } from "./enterprise.js";
 export type { AccountTier, SsoProvider, SsoConfig, OidcAuthorizeOptions } from "./enterprise.js";
+export { ONBOARDING_STEPS, PROVIDER_GUIDES, buildOnboardingConfig, sealProtectionBypass } from "./onboarding.js";
+export type { OnboardingStep, ProviderGuide, OnboardingInput } from "./onboarding.js";
