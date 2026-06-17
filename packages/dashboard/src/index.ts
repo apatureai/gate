@@ -27,3 +27,15 @@ export {
 export type { Sentiment, FeedbackLike, RateCounts, TrendPoint } from "./stats.js";
 export { validateConfig, copyableConfig, buildProposeConfigUrl } from "./config-ui.js";
 export type { ConfigValidation, ProposeConfigOptions } from "./config-ui.js";
+export {
+  PRICE_PER_SEAT_CENTS,
+  computeMonthlyTotalCents,
+  verifyStripeSignature,
+  mapStripeEvent,
+  canReviewRepo,
+  freeTierDepth,
+  createSqlBillingStore,
+  countDeepReviewsForPr,
+  countReviewsForRepo,
+} from "./billing.js";
+export type { BillingPlan, BillingStatus, BillingUpdate, BillingStore } from "./billing.js";
