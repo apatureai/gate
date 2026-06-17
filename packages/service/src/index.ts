@@ -18,6 +18,12 @@ export {
 } from "./queue.js";
 export type { ReviewJobPayload, QueueLike, ReviewQueue } from "./queue.js";
 export { createBullReviewQueue } from "./queue-bull.js";
+export {
+  CancellationRegistry,
+  createInMemoryReviewWorker,
+  createBullReviewWorker,
+} from "./worker.js";
+export type { JobContext, ReviewJobHandler, ReviewJobWorker } from "./worker.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
