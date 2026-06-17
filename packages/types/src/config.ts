@@ -60,6 +60,18 @@ export type NormalizedRulesConfig = {
   suppress: string[];
 };
 
+/**
+ * Design tokens declared by the repo. Gate does NOT extract tokens itself; it
+ * passes any declared values and an optional source pointer to the engine, which
+ * grounds critique in them alongside the repo's UI DNA.
+ */
+export type NormalizedTokensConfig = {
+  /** Optional pointer to a tokens source (path/URL), or null. */
+  source: string | null;
+  /** Declared token name -> value (e.g. `color.accent` -> `#5B5BD6`). */
+  values: Record<string, string>;
+};
+
 export type NormalizedDesignReviewConfig = {
   preview: NormalizedPreviewConfig;
   routes: NormalizedRoutesConfig;
@@ -68,4 +80,5 @@ export type NormalizedDesignReviewConfig = {
   /** Brand block: product description, audience, tone, design rules. */
   brand: string | null;
   rules: NormalizedRulesConfig;
+  tokens: NormalizedTokensConfig;
 };

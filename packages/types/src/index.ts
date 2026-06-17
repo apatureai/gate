@@ -7,6 +7,7 @@ export type {
   NormalizedPreviewConfig,
   NormalizedRoutesConfig,
   NormalizedRulesConfig,
+  NormalizedTokensConfig,
   NormalizedDesignReviewConfig,
 } from "./config.js";
 export type {

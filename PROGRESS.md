@@ -22,7 +22,7 @@ How the loop uses it:
 
 ## M1 · Action path
 
-- [ ] #27 - Config: .designreview.yml schema + validation + defaults
+- [x] #27 - Config: .designreview.yml schema + validation + defaults -> done: packages/config with a Zod schema covering preview/routes/viewports/dark_mode/brand/rules/tokens (.strict() catches typos); every field has a working default so the file is optional; loadDesignReviewConfig parses YAML + normalizes snake_case -> NormalizedDesignReviewConfig (added tokens to @gate/types); ConfigValidationError surfaces readable issues (incl. YAML syntax). Shared schema export for extractor + dashboard.
 - [ ] #8 - Orchestrator: preview-URL discovery - Action path (explicit + url_template + provider-bot + local-serve)
 - [ ] #45 - Engine: async job API contract (POST/GET/DELETE /jobs, idempotency, poll/cancel)
 - [ ] #37 - Engine: judgment-engine client (GateReviewRequest -> GateReviewResult)

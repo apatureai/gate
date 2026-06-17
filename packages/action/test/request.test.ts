@@ -17,6 +17,7 @@ const config: NormalizedDesignReviewConfig = {
   darkMode: false,
   brand: null,
   rules: { gate: "none", minSeverityToComment: "nit", suppress: [] },
+  tokens: { source: null, values: {} },
 };
 
 describe("GATE_GITHUB_PERMISSIONS", () => {
