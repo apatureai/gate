@@ -26,6 +26,8 @@ export {
   verifyEngineRequest,
 } from "./hmac.js";
 export type { SignatureHeaders, VerifyResult, VerifyFailureReason } from "./hmac.js";
+export { VERIFIED_SOURCES, verifyPreviewHandoff } from "./preview-verification.js";
+export type { VerifiedSource, PreviewHandoffInput, PreviewHandoffResult } from "./preview-verification.js";
 export {
   buildGateReviewRequest,
   extractReviewMetadata,
