@@ -79,6 +79,24 @@ importers:
         specifier: ^0.33.5
         version: 0.33.5
 
+  packages/e2e:
+    dependencies:
+      '@gate/action':
+        specifier: workspace:*
+        version: link:../action
+      '@gate/config':
+        specifier: workspace:*
+        version: link:../config
+      '@gate/delivery':
+        specifier: workspace:*
+        version: link:../delivery
+      '@gate/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@gate/types':
+        specifier: workspace:*
+        version: link:../types
+
   packages/engine:
     dependencies:
       '@gate/secrets':

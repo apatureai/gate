@@ -1,0 +1,17 @@
+{
+  "name": "@gate/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end acceptance harness asserting the TRD §11 Action-path criteria against a mock engine.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gate/action": "workspace:*",
+    "@gate/config": "workspace:*",
+    "@gate/delivery": "workspace:*",
+    "@gate/engine": "workspace:*",
+    "@gate/types": "workspace:*"
+  }
+}
