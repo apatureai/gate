@@ -11,9 +11,13 @@ as living memory: append concrete learnings, prune anything that proved wrong.
    `origin/main` (stop only if conflicts are non-trivial).
 2. Read this file, then `PROGRESS.md` and the plan docs.
 3. Work issues top-down (first `[ ]` whose deps are `[x]`), one coherent slice
-   per commit. **Keep going until the usage limit** — do not stop after one
-   issue. Only stop early if wrapping up loose ends and a new issue wouldn't fit
-   in the remaining budget; never leave the tree red or a commit half-done.
+   per commit. **Keep going until the usage limit — be session-usage-aware.**
+   Do not stop after one issue, and do not stop at low usage (e.g. <80%). A large
+   conversation/context is NOT a reason to stop — only actual session-usage
+   exhaustion is. Keep implementing the next unblocked issue to maximize utility.
+   Only stop early when usage is genuinely near the limit AND starting a new
+   issue wouldn't fit — then wrap up loose ends (LOOP.md log, PR description).
+   Never leave the tree red or a commit half-done.
 4. Verify every slice: `pnpm install` (if deps changed), `pnpm typecheck`,
    `pnpm test`, `pnpm lint` — all green before committing.
 5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push,
