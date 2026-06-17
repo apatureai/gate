@@ -39,3 +39,13 @@ export {
   countReviewsForRepo,
 } from "./billing.js";
 export type { BillingPlan, BillingStatus, BillingUpdate, BillingStore } from "./billing.js";
+export {
+  buildOidcAuthorizeUrl,
+  requiresSso,
+  assertEnterpriseSso,
+  canUseInVpcEngine,
+  assertInVpcAllowed,
+  sealEngineEndpoint,
+  resolveEngineEndpoint,
+} from "./enterprise.js";
+export type { AccountTier, SsoProvider, SsoConfig, OidcAuthorizeOptions } from "./enterprise.js";

@@ -5,5 +5,5 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../types" }, { "path": "../config" }]
+  "references": [{ "path": "../types" }, { "path": "../config" }, { "path": "../secrets" }]
 }
