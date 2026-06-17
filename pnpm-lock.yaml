@@ -64,6 +64,9 @@ importers:
 
   packages/delivery:
     dependencies:
+      '@gate/engine':
+        specifier: workspace:*
+        version: link:../engine
       '@gate/types':
         specifier: workspace:*
         version: link:../types

@@ -55,6 +55,26 @@ export class EngineJobError extends Error {
   }
 }
 
+/** A transient engine error (429/503) carrying an optional Retry-After delay. */
+export class RetryableEngineError extends EngineJobError {
+  readonly retryAfterMs: number | null;
+  constructor(message: string, retryAfterMs: number | null) {
+    super(message);
+    this.name = "RetryableEngineError";
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/** Parse an HTTP `Retry-After` header (delta-seconds or HTTP-date) to ms. */
+export function parseRetryAfterMs(header: string | null, now: number = Date.now()): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+  const date = Date.parse(header);
+  if (!Number.isNaN(date)) return Math.max(0, date - now);
+  return null;
+}
+
 /** Build the idempotency key for a PR review. */
 export function idempotencyKey(prNumber: number, headSha: string): string {
   return `${prNumber}:${headSha}`;

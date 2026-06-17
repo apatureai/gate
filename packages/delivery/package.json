@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@gate/engine": "workspace:*",
     "@gate/types": "workspace:*"
   }
 }

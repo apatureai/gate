@@ -1,6 +1,8 @@
 export {
   REVIEW_DEADLINE_MS,
   EngineJobError,
+  RetryableEngineError,
+  parseRetryAfterMs,
   idempotencyKey,
   nextPollDelayMs,
   pollUntilDone,

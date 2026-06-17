@@ -5,6 +5,8 @@ import {
   type EngineTransport,
   type JobStatus,
   type JobSubmission,
+  parseRetryAfterMs,
+  RetryableEngineError,
   type SubmitResponse,
 } from "./jobs.js";
 
@@ -75,6 +77,12 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
       if (res.status === 202 || res.status === 409) {
         const body = (await res.json()) as { jobId: string };
         return { status: res.status, jobId: body.jobId };
+      }
+      if (res.status === 429 || res.status === 503) {
+        throw new RetryableEngineError(
+          `engine submit transient ${res.status}`,
+          parseRetryAfterMs(res.headers.get("retry-after")),
+        );
       }
       throw new EngineJobError(`engine submit failed: ${res.status}`);
     },

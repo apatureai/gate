@@ -7,6 +7,7 @@ import {
   type JobStatus,
   type JobSubmission,
   nextPollDelayMs,
+  parseRetryAfterMs,
   REVIEW_DEADLINE_MS,
   runEngineJob,
   type SubmitResponse,
@@ -50,6 +51,16 @@ describe("idempotencyKey + backoff", () => {
     expect(nextPollDelayMs("triage", 1)).toBe(20_000);
     expect(nextPollDelayMs("deep", 0)).toBe(30_000);
     expect(nextPollDelayMs("deep", 2)).toBe(50_000);
+  });
+
+  it("parses Retry-After (seconds and HTTP-date)", () => {
+    expect(parseRetryAfterMs("5")).toBe(5000);
+    expect(parseRetryAfterMs(null)).toBeNull();
+    expect(parseRetryAfterMs("garbage")).toBeNull();
+    const future = new Date(Date.now() + 10_000).toUTCString();
+    const ms = parseRetryAfterMs(future);
+    expect(ms).not.toBeNull();
+    expect(ms!).toBeGreaterThan(5000);
   });
 });
 

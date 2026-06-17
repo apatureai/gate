@@ -6,6 +6,7 @@ import {
   type PollOptions,
   type PollOutcome,
   pollUntilDone,
+  RetryableEngineError,
   type SubmitResponse,
 } from "./jobs.js";
 
@@ -90,7 +91,11 @@ export function createJudgmentEngineClient(
         return await transport.submit(submission);
       } catch (err) {
         lastError = err;
-        if (attempt < retries) await sleep(backoffMs * (attempt + 1));
+        if (attempt < retries) {
+          // Honor Retry-After on 429/503; otherwise linear backoff.
+          const retryAfter = err instanceof RetryableEngineError ? err.retryAfterMs : null;
+          await sleep(retryAfter ?? backoffMs * (attempt + 1));
+        }
       }
     }
     throw lastError;
