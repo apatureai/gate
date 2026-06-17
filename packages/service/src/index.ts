@@ -94,6 +94,13 @@ export type {
   HostedReviewResult,
   DeploymentHandlerDeps,
 } from "./hosted-review.js";
+export { createSqlTenantDeleter, offboardTenant } from "./offboarding.js";
+export type {
+  DeletedRowCounts,
+  TenantDeleter,
+  OffboardingAuditEntry,
+  OffboardingDeps,
+} from "./offboarding.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
