@@ -4,6 +4,12 @@ export { createWebhookVerifier } from "./webhooks.js";
 export type { WebhookVerifier } from "./webhooks.js";
 export { createGitHubAppAuth } from "./app-auth.js";
 export type { GitHubAppAuth, GitHubAppAuthOptions } from "./app-auth.js";
+export { resolveDeploymentPreview } from "./deployment-preview.js";
+export type {
+  DeploymentStatusEvent,
+  DeploymentPreviewOptions,
+  DeploymentPreviewResult,
+} from "./deployment-preview.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
