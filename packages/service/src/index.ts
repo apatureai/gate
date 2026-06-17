@@ -35,6 +35,14 @@ export {
 export type { SupersessionStore, RedisLike, RepoPr } from "./supersession.js";
 export { READINESS_CEILING_MS, waitForReadiness } from "./readiness.js";
 export type { ReadinessResult, ReadinessOptions } from "./readiness.js";
+export {
+  TIER_CONCURRENCY,
+  tierConcurrency,
+  selectNextJobs,
+  createInMemoryCounterStore,
+  InstallationConcurrency,
+} from "./scheduling.js";
+export type { Tier, PendingJob, SelectOptions, CounterStore } from "./scheduling.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
