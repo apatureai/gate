@@ -86,6 +86,14 @@ export type {
   FeedbackStore,
   SharedFeedbackForwarder,
 } from "./feedback-store.js";
+export { runHostedReview, createDeploymentStatusHandler } from "./hosted-review.js";
+export type {
+  HostedReviewContext,
+  HostedReviewDeps,
+  HostedReviewStatus,
+  HostedReviewResult,
+  DeploymentHandlerDeps,
+} from "./hosted-review.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
