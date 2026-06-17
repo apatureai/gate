@@ -133,3 +133,25 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   - **Action `runAction` pattern:** keep the orchestrator pure with injected
     deps (engine client, GitHub api, publishCheckRun) and a thin impure
     `main.ts` entry — the orchestration is fully unit-testable, the entry isn't.
+- 2026-06-17: M2 App path complete (#1,#2,#55,#3,#48,#4,#5,#6,#7,#43,#49,#9,
+  #21,#13,#41,#23,#28,#52) in one usage-aware run. Learnings:
+  - **The store/sink/policy pattern scales the orchestrator.** Each concern is a
+    small interface with an in-memory impl (tested) + a SQL/HTTP adapter:
+    SupersessionStore, FullReviewWindowStore, FeedbackStore/Sink/Forwarder,
+    WebhookDedupeStore, ConsumedTokenStore, TenantDeleter. `runHostedReview`
+    (#23) and `runAction` (#22) compose them with injected deps — fully testable.
+  - **pglite tests for SQL adapters** validate INSERT/DELETE against the real
+    migrated schema; as superuser they bypass RLS (fine for schema checks). Only
+    the RLS suite needs the non-superuser role.
+  - **Fastify raw body for HMAC:** `addContentTypeParser("application/json",
+    {parseAs:"string"})` to verify the webhook signature; a separate
+    urlencoded parser for the POST feedback form.
+  - **One-time tokens:** HMAC body+sig (base64url) + a `jti` + a consumed-store;
+    GET stays inert (confirm page renders a POST form, never mutates).
+  - **Crypto-shredding** needs a per-tenant key that can actually be destroyed
+    (`InMemoryTenantKms` deletes the key → unwrap throws). LocalKms (HKDF from a
+    root) can't shred a derived key, so it's not the shredding impl.
+  - **Supersession is three independent layers** that compose: queue jobId
+    (`repo#pr`, structural), AbortSignal threaded into the engine poll loop
+    (`signal` in PollOptions → EngineAbortedError), and the publish-time SHA
+    guard (the queue-agnostic backstop, holds even if the signal is bypassed).
