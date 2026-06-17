@@ -72,6 +72,20 @@ export {
 export type { FeedbackVotePayload, VerifyTokenResult, ConsumedTokenStore } from "./feedback-token.js";
 export { registerFeedbackRoutes, parseDesignReviewCommand } from "./feedback-routes.js";
 export type { FeedbackSink, FeedbackRouteOptions, SlashCommand } from "./feedback-routes.js";
+export {
+  buildFeedbackEvent,
+  extractSuggestionTokens,
+  detectSuggestionAdoption,
+  createInMemoryFeedbackStore,
+  createSqlFeedbackStore,
+  createHttpFeedbackForwarder,
+  createFeedbackSink,
+} from "./feedback-store.js";
+export type {
+  FeedbackEventContext,
+  FeedbackStore,
+  SharedFeedbackForwarder,
+} from "./feedback-store.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
