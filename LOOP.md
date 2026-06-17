@@ -98,3 +98,34 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   - Layer security/contract concerns as transport seams: HMAC (#47), Zod parse
     + `x-schema-version` (#46), and Retry-After (#38) all wrap the same
     `EngineTransport`/client without rewriting the job protocol (#45).
+- 2026-06-17: M1 tail (#12,#22,#40,#51) + M2 orchestrator core
+  (#1,#2,#55,#3,#48,#4). Learnings:
+  - **`sharp`** installs a prebuilt native binary via corepack/pnpm fine on
+    darwin; test pure SVG generation separately from the one sharp round-trip.
+  - **Infra that needs a live server** (BullMQ Queue/Worker, Redis store): ship
+    the interface + a tested in-memory reference impl + a thin untested adapter
+    (`createBull*` / `createRedis*`). The reference impl proves the semantics
+    (supersession, cooperative cancel) the adapter must honor.
+  - **BullMQ generics** don't structurally match a hand-written `QueueLike` —
+    cast `queue as unknown as QueueLike`, and DON'T over-annotate the factory
+    return type as `Queue<T>` (let it infer; the 6-param generic won't match).
+  - **Dedupe transitive deps with a pnpm override.** bullmq pulled ioredis 5.11
+    while `@gate/redis` had 5.10 → two copies, incompatible nominal types. Add
+    `pnpm.overrides` in root package.json; the lockfile must update so CI's
+    `--frozen-lockfile` stays consistent (verify with a frozen install).
+  - **Octokit:** `@octokit/app` `mintAppJwt` (type:"app") is offline-testable
+    (generate an RSA key with `node:crypto`); `getInstallationToken` needs
+    network. `@octokit/webhooks` `verify` is testable with a computed HMAC.
+    Capture the raw body for HMAC via `app.addContentTypeParser("application/
+    json", { parseAs: "string" }, ...)`.
+  - **Threading an AbortSignal** into the engine: add `signal?` to `PollOptions`
+    and check it at stage boundaries (throw a typed `EngineAbortedError`) —
+    smaller blast radius than adding a `PollOutcome` variant (which would force
+    every `decideDelivery` branch to change).
+  - **vitest aliases** mean a test can import any `@gate/*` without a tsconfig
+    project reference; still add the workspace dep to package.json for pnpm
+    linking + intent. tsconfig `references` are only needed when `src/` imports
+    the package.
+  - **Action `runAction` pattern:** keep the orchestrator pure with injected
+    deps (engine client, GitHub api, publishCheckRun) and a thin impure
+    `main.ts` entry — the orchestration is fully unit-testable, the entry isn't.
