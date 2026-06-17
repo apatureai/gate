@@ -4,7 +4,7 @@ export { createWebhookVerifier } from "./webhooks.js";
 export type { WebhookVerifier } from "./webhooks.js";
 export { createGitHubAppAuth } from "./app-auth.js";
 export type { GitHubAppAuth, GitHubAppAuthOptions } from "./app-auth.js";
-export { resolveDeploymentPreview } from "./deployment-preview.js";
+export { resolveDeploymentPreview, filterAppDeployments, vercelBypassHeaders } from "./deployment-preview.js";
 export type {
   DeploymentStatusEvent,
   DeploymentPreviewOptions,

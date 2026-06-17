@@ -22,6 +22,8 @@ export interface ReadinessOptions {
   pollIntervalMs?: number;
   /** Supersession signal; abort-and-restart on a newer push. */
   signal?: AbortSignal;
+  /** Extra request headers (e.g. Vercel protection-bypass) for the probe. */
+  headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -29,9 +31,14 @@ export interface ReadinessOptions {
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function probe(url: string, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<boolean> {
+async function probe(
+  url: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+  headers?: Record<string, string>,
+): Promise<boolean> {
   try {
-    const res = await fetchImpl(url, { method: "GET", signal });
+    const res = await fetchImpl(url, { method: "GET", signal, headers });
     return res.status === 200;
   } catch {
     return false; // not reachable yet
@@ -58,7 +65,7 @@ export async function waitForReadiness(options: ReadinessOptions): Promise<Readi
 
   for (;;) {
     if (aborted()) return { ready: false, reason: "aborted" };
-    if (await probe(options.url, fetchImpl, options.signal)) {
+    if (await probe(options.url, fetchImpl, options.signal, options.headers)) {
       return { ready: true, elapsedMs: now() - start };
     }
     if (now() - start >= ceiling) return { ready: false, reason: "ceiling_exceeded" };

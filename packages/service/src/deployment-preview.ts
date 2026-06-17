@@ -22,12 +22,27 @@ export interface DeploymentStatusEvent {
 export interface DeploymentPreviewOptions {
   /** Required environment name (default "Preview"). */
   environment?: string;
+  /** Allowlist of acceptable environment names; overrides `environment` when set. */
+  allowedEnvironments?: string[];
   /** Environment-name substrings to ignore (default ["storybook"]). */
   ignoreEnvironments?: string[];
   /** When set, the deployment SHA must equal this PR head SHA. */
   expectedHeadSha?: string;
   /** Returns true if `(sha, deployment_id)` was already processed. */
   isDuplicate?: (dedupeKey: string) => boolean | Promise<boolean>;
+}
+
+/**
+ * Vercel protection-bypass headers from the stored secret
+ * (`VERCEL_AUTOMATION_BYPASS_SECRET`). Sent on the readiness probe and passed to
+ * the engine so a protected preview returns 200 instead of the auth wall. The
+ * secret is never logged (TRD §8).
+ */
+export function vercelBypassHeaders(bypassSecret: string): Record<string, string> {
+  return {
+    "x-vercel-protection-bypass": bypassSecret,
+    "x-vercel-set-bypass-cookie": "true",
+  };
 }
 
 export type DeploymentPreviewResult =
@@ -62,14 +77,16 @@ export async function resolveDeploymentPreview(
 
   if (status.state !== "success") return fail(`deployment state is "${status.state}", not success`);
 
-  const wanted = (options.environment ?? "Preview").toLowerCase();
   const environment = (deployment.environment ?? status.environment ?? "").toLowerCase();
   const ignore = (options.ignoreEnvironments ?? ["storybook"]).map((s) => s.toLowerCase());
   if (ignore.some((term) => environment.includes(term))) {
     return fail(`ignored environment "${environment}"`);
   }
-  if (environment !== wanted) {
-    return fail(`environment "${environment}" does not match "${wanted}"`);
+  const allowed = (options.allowedEnvironments ?? [options.environment ?? "Preview"]).map((s) =>
+    s.toLowerCase(),
+  );
+  if (!allowed.includes(environment)) {
+    return fail(`environment "${environment}" not in allowlist [${allowed.join(", ")}]`);
   }
 
   const url = status.environment_url ?? status.target_url ?? "";
@@ -90,4 +107,29 @@ export async function resolveDeploymentPreview(
   }
 
   return { ok: true, url, sha, deploymentId, dedupeKey, source: "deployment_status" };
+}
+
+/**
+ * Filter a PR's multiple deployments down to the app preview(s): keep
+ * allowlisted, non-Storybook deployments and dedupe redeploys on
+ * `(sha, deployment_id)` across the batch (and any external `isDuplicate`).
+ */
+export async function filterAppDeployments(
+  events: DeploymentStatusEvent[],
+  options: DeploymentPreviewOptions = {},
+): Promise<Array<Extract<DeploymentPreviewResult, { ok: true }>>> {
+  const seen = new Set<string>();
+  const external = options.isDuplicate;
+  const kept: Array<Extract<DeploymentPreviewResult, { ok: true }>> = [];
+  for (const event of events) {
+    const result = await resolveDeploymentPreview(event, {
+      ...options,
+      isDuplicate: async (key) => seen.has(key) || (external ? await external(key) : false),
+    });
+    if (result.ok) {
+      seen.add(result.dedupeKey);
+      kept.push(result);
+    }
+  }
+  return kept;
 }
