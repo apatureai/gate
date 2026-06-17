@@ -11,5 +11,8 @@
   },
   "dependencies": {
     "@gate/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@gate/config": "workspace:*"
   }
 }

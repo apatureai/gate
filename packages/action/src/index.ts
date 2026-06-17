@@ -1,5 +1,16 @@
 import type { GateReviewRequest } from "@gate/types";
 
+export {
+  resolvePreviewUrl,
+} from "./preview.js";
+export type {
+  DiscoverySource,
+  PreviewResolution,
+  PreviewDiscoveryOutcome,
+  PreviewDiscoveryInput,
+  ProviderComment,
+} from "./preview.js";
+
 /**
  * Minimal GitHub token permissions the Action path requires.
  *
