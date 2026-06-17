@@ -43,6 +43,14 @@ export {
   InstallationConcurrency,
 } from "./scheduling.js";
 export type { Tier, PendingJob, SelectOptions, CounterStore } from "./scheduling.js";
+export {
+  FULL_REVIEW_WINDOW_MS,
+  chooseReviewDepth,
+  decideDepthForPush,
+  createInMemoryFullReviewWindow,
+  createSqlFullReviewWindow,
+} from "./review-window.js";
+export type { FullReviewWindowStore, SqlQuery } from "./review-window.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
