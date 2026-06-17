@@ -55,6 +55,16 @@ export class EngineJobError extends Error {
   }
 }
 
+/** Thrown when a review is superseded (AbortSignal fired) during polling (#4). */
+export class EngineAbortedError extends EngineJobError {
+  readonly jobId: string;
+  constructor(jobId: string) {
+    super(`engine job ${jobId} aborted (superseded)`);
+    this.name = "EngineAbortedError";
+    this.jobId = jobId;
+  }
+}
+
 /** A transient engine error (429/503) carrying an optional Retry-After delay. */
 export class RetryableEngineError extends EngineJobError {
   readonly retryAfterMs: number | null;
@@ -99,6 +109,8 @@ export interface PollOptions {
   depth: ReviewDepth;
   /** Overall deadline from submit (default = §5 10-minute cap). */
   deadlineMs?: number;
+  /** Supersession signal; when aborted, polling stops with EngineAbortedError (#4). */
+  signal?: AbortSignal;
   /** Injectable clock + sleep for deterministic tests. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -121,6 +133,8 @@ export async function pollUntilDone(
   const start = now();
 
   for (let attempt = 0; ; attempt++) {
+    // Stage-boundary supersession check (#4): stop before doing more work.
+    if (options.signal?.aborted) throw new EngineAbortedError(jobId);
     const status = await transport.poll(jobId);
     if (status.state === "completed") {
       if (!status.result) throw new EngineJobError(`job ${jobId} completed without a result`);
@@ -137,6 +151,7 @@ export async function pollUntilDone(
     }
     const delay = Math.min(nextPollDelayMs(options.depth, attempt), remaining);
     await sleep(delay);
+    if (options.signal?.aborted) throw new EngineAbortedError(jobId);
     if (now() - start >= deadlineMs) {
       return { status: "timed_out", reason: "review_timed_out", jobId };
     }

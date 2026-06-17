@@ -24,6 +24,15 @@ export {
   createBullReviewWorker,
 } from "./worker.js";
 export type { JobContext, ReviewJobHandler, ReviewJobWorker } from "./worker.js";
+export {
+  currentShaKey,
+  createInMemorySupersessionStore,
+  createRedisSupersessionStore,
+  recordEnqueue,
+  isCurrentSha,
+  guardPublish,
+} from "./supersession.js";
+export type { SupersessionStore, RedisLike, RepoPr } from "./supersession.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.

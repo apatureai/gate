@@ -151,6 +151,9 @@ importers:
       '@gate/delivery':
         specifier: workspace:*
         version: link:../delivery
+      '@gate/engine':
+        specifier: workspace:*
+        version: link:../engine
       '@gate/observability':
         specifier: workspace:*
         version: link:../observability

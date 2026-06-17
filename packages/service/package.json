@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@gate/delivery": "workspace:*",
+    "@gate/engine": "workspace:*",
     "@gate/observability": "workspace:*",
     "@gate/redis": "workspace:*",
     "@gate/types": "workspace:*",

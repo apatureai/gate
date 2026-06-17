@@ -1,6 +1,7 @@
 export {
   REVIEW_DEADLINE_MS,
   EngineJobError,
+  EngineAbortedError,
   RetryableEngineError,
   parseRetryAfterMs,
   idempotencyKey,
