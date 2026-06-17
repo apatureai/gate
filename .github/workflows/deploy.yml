@@ -26,11 +26,11 @@ jobs:
 
       - name: Checkout
         if: ${{ env.FLY_API_TOKEN != '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup flyctl
         if: ${{ env.FLY_API_TOKEN != '' }}
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@v1.4
 
       - name: Deploy
         if: ${{ env.FLY_API_TOKEN != '' }}
