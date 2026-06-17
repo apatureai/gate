@@ -1,0 +1,15 @@
+{
+  "name": "@gate/delivery",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Gate delivery layer: sticky PR comment, Check Run mapping, annotated screenshots.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gate/types": "workspace:*"
+  }
+}

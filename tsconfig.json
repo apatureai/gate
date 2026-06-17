@@ -4,6 +4,7 @@
     { "path": "packages/types" },
     { "path": "packages/config" },
     { "path": "packages/engine" },
+    { "path": "packages/delivery" },
     { "path": "packages/db" },
     { "path": "packages/redis" },
     { "path": "packages/secrets" },
