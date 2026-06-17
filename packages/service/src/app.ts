@@ -1,5 +1,6 @@
 import { getTracer, type Span, SPAN_NAMES } from "@gate/observability";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import type { WebhookDedupeStore } from "./webhook-dedup.js";
 import { createWebhookVerifier } from "./webhooks.js";
 
 /** Handlers the webhook receiver dispatches to (wired by #3 enqueue, etc.). */
@@ -15,6 +16,8 @@ export interface BuildServerOptions {
   webhook?: WebhookHandlers;
   /** GitHub webhook secret; when set, requests are HMAC-verified (#2). */
   webhookSecret?: string;
+  /** Delivery dedup store; when set, duplicate X-GitHub-Delivery ids skip (#49). */
+  webhookDedupe?: WebhookDedupeStore;
   /** Readiness probe; defaults to always-ready. */
   readiness?: () => boolean | Promise<boolean>;
 }
@@ -81,6 +84,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       const signature = asHeader(request.headers["x-hub-signature-256"]);
       const ok = await verifier.verify(rawBodies.get(request) ?? "", signature);
       if (!ok) return reply.code(401).send({ error: "invalid_signature" });
+    }
+
+    // At-least-once delivery dedup (#49): skip a re-delivered id with a 200.
+    if (options.webhookDedupe && delivery && (await options.webhookDedupe.seenDelivery(delivery))) {
+      return reply.code(200).send({ duplicate: true });
     }
 
     if (event === "pull_request") {

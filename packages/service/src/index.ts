@@ -53,6 +53,10 @@ export {
 export type { FullReviewWindowStore, SqlQuery } from "./review-window.js";
 export { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 export type { DepthReason, DepthDecision } from "./depth-policy.js";
+export { createInMemoryWebhookDedupe, createSqlWebhookDedupe } from "./webhook-dedup.js";
+export type { WebhookDedupeStore } from "./webhook-dedup.js";
+export { isRateLimited, rateLimitDelayMs, withRateLimitRetry } from "./rate-limit.js";
+export type { RateLimitRetryOptions } from "./rate-limit.js";
 
 // Check Run mapping is owned by @gate/delivery (#11); re-exported here for the
 // App-path service that publishes it.
