@@ -5,6 +5,7 @@ import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
 import { createInMemoryFeedbackStore, createFeedbackSink } from "../src/feedback-store.js";
 import {
+  createAppWebhookHandlers,
   createDeploymentStatusHandler,
   type HostedReviewContext,
   runHostedReview,
@@ -104,16 +105,14 @@ describe("createDeploymentStatusHandler", () => {
     const enqueued: string[] = [];
     worker.onJob(async (job) => void enqueued.push(`${job.owner}/${job.name}#${job.prNumber}@${job.headSha}`));
 
-    const handler = createDeploymentStatusHandler(
-      { owner: "acme", name: "web" },
-      {
-        supersession,
-        worker,
-        resolvePullRequest: async (sha) => ({ number: 42, headSha: sha, baseSha: "def" }),
-      },
-    );
+    const handler = createDeploymentStatusHandler({
+      supersession,
+      worker,
+      resolvePullRequest: async (_o, _n, sha) => ({ number: 42, headSha: sha, baseSha: "def" }),
+    });
     await handler({
       installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
       deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
       deployment: { id: 7, sha: "abc", environment: "Preview" },
     });
@@ -125,15 +124,53 @@ describe("createDeploymentStatusHandler", () => {
 
   it("ignores non-success / non-matching deployments", async () => {
     const enqueue = vi.fn(async () => "k");
-    const handler = createDeploymentStatusHandler(
-      { owner: "acme", name: "web" },
-      {
-        supersession: createInMemorySupersessionStore(),
-        worker: { enqueue, cancel: async () => {}, onJob: () => {} },
-        resolvePullRequest: async () => null,
-      },
-    );
-    await handler({ deployment_status: { state: "failure" }, deployment: { id: 1, sha: "x", environment: "Preview" } });
+    const handler = createDeploymentStatusHandler({
+      supersession: createInMemorySupersessionStore(),
+      worker: { enqueue, cancel: async () => {}, onJob: () => {} },
+      resolvePullRequest: async () => null,
+    });
+    await handler({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "failure" },
+      deployment: { id: 1, sha: "x", environment: "Preview" },
+    });
     expect(enqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("createAppWebhookHandlers", () => {
+  it("a pull_request push bumps current_sha and cancels the in-flight review", async () => {
+    const supersession = createInMemorySupersessionStore();
+    const cancelled: string[] = [];
+    const worker = {
+      enqueue: vi.fn(async () => "k"),
+      cancel: vi.fn(async (key: string) => void cancelled.push(key)),
+      onJob: () => {},
+    };
+    const handlers = createAppWebhookHandlers({
+      supersession,
+      worker,
+      resolvePullRequest: async (_o, _n, sha) => ({ number: 42, headSha: sha, baseSha: "b" }),
+    });
+
+    await handlers.onPullRequest({
+      repository: { name: "web", owner: { login: "acme" } },
+      pull_request: { number: 42, head: { sha: "newsha" } },
+    });
+
+    expect(await supersession.getCurrentSha("sha:acme/web#42")).toBe("newsha");
+    expect(cancelled).toEqual(["acme/web#42"]); // newest push cancels the older in-flight review
+  });
+
+  it("ignores a malformed pull_request payload", async () => {
+    const worker = { enqueue: vi.fn(async () => "k"), cancel: vi.fn(async () => {}), onJob: () => {} };
+    const handlers = createAppWebhookHandlers({
+      supersession: createInMemorySupersessionStore(),
+      worker,
+      resolvePullRequest: async () => null,
+    });
+    await handlers.onPullRequest({ repository: { name: "web" } }); // missing owner/pr/sha
+    expect(worker.cancel).not.toHaveBeenCalled();
   });
 });

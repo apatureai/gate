@@ -88,17 +88,15 @@ describe("App path end-to-end (deployment_status -> worker -> runHostedReview)",
       });
     });
 
-    const handler = createDeploymentStatusHandler(
-      { owner: "acme", name: "web" },
-      {
-        supersession,
-        worker,
-        resolvePullRequest: async (sha) => ({ number: 42, headSha: sha, baseSha: "base0" }),
-      },
-    );
+    const handler = createDeploymentStatusHandler({
+      supersession,
+      worker,
+      resolvePullRequest: async (_o, _n, sha) => ({ number: 42, headSha: sha, baseSha: "base0" }),
+    });
 
     await handler({
       installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
       deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
       deployment: { id: 7, sha: "abc", environment: "Preview" },
     });
@@ -116,15 +114,13 @@ describe("App path end-to-end (deployment_status -> worker -> runHostedReview)",
     const worker = createInMemoryReviewWorker();
     let ran = false;
     worker.onJob(async () => void (ran = true));
-    const handler = createDeploymentStatusHandler(
-      { owner: "acme", name: "web" },
-      {
-        supersession: createInMemorySupersessionStore(),
-        worker,
-        resolvePullRequest: async (sha) => ({ number: 42, headSha: sha, baseSha: "b" }),
-      },
-    );
+    const handler = createDeploymentStatusHandler({
+      supersession: createInMemorySupersessionStore(),
+      worker,
+      resolvePullRequest: async (_o, _n, sha) => ({ number: 42, headSha: sha, baseSha: "b" }),
+    });
     await handler({
+      repository: { name: "web", owner: { login: "acme" } },
       deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
       deployment: { id: 7, sha: "abc", environment: "Preview" },
     });

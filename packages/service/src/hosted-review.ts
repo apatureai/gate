@@ -11,7 +11,7 @@ import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from ".
 import { buildFeedbackEvent } from "./feedback-store.js";
 import type { FeedbackSink } from "./feedback-routes.js";
 import { resolveDeploymentPreview, type DeploymentStatusEvent } from "./deployment-preview.js";
-import { type ReviewJobPayload } from "./queue.js";
+import { type ReviewJobPayload, reviewQueueKey } from "./queue.js";
 import type { ReviewJobWorker } from "./worker.js";
 import type { FullReviewWindowStore } from "./review-window.js";
 import { currentShaKey, guardPublish, recordEnqueue, type SupersessionStore } from "./supersession.js";
@@ -147,17 +147,28 @@ export async function runHostedReview(
 export interface DeploymentHandlerDeps {
   supersession: SupersessionStore;
   worker: ReviewJobWorker;
-  /** Resolve the PR for a deployment SHA (GitHub lookup; injected for testability). */
-  resolvePullRequest(sha: string): Promise<{ number: number; headSha: string; baseSha: string } | null>;
+  /** Resolve the PR for a deployment SHA in a given repo (GitHub lookup; injected). */
+  resolvePullRequest(
+    owner: string,
+    name: string,
+    sha: string,
+  ): Promise<{ number: number; headSha: string; baseSha: string } | null>;
   environment?: string;
   isDuplicate?: (dedupeKey: string) => boolean | Promise<boolean>;
+}
+
+interface WebhookRepoEnvelope {
+  installation?: { id?: number };
+  repository?: { name?: string; owner?: { login?: string } };
 }
 
 /**
  * Build the `deployment_status` webhook handler (#1 dispatches to it): resolve
  * the preview (#55), record `current_sha` (supersession), and enqueue the review.
+ * Repo + installation are read from the payload — one handler serves every repo
+ * the App is installed on.
  */
-export function createDeploymentStatusHandler(repository: { owner: string; name: string }, deps: DeploymentHandlerDeps) {
+export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
   return async (payload: unknown): Promise<void> => {
     const resolved = await resolveDeploymentPreview(payload as DeploymentStatusEvent, {
       environment: deps.environment,
@@ -165,20 +176,23 @@ export function createDeploymentStatusHandler(repository: { owner: string; name:
     });
     if (!resolved.ok) return;
 
-    // installationId comes from the webhook (installation.id), not the body — the
-    // engine HMAC (#47) and tenant scoping depend on it, so skip if absent.
-    const installationId = (payload as { installation?: { id?: number } }).installation?.id;
-    if (typeof installationId !== "number") return;
+    // installationId + repo come from the webhook envelope; the engine HMAC (#47)
+    // and tenant scoping depend on a real installationId, so skip if absent.
+    const env = payload as WebhookRepoEnvelope;
+    const installationId = env.installation?.id;
+    const owner = env.repository?.owner?.login;
+    const name = env.repository?.name;
+    if (typeof installationId !== "number" || !owner || !name) return;
 
-    const pr = await deps.resolvePullRequest(resolved.sha);
+    const pr = await deps.resolvePullRequest(owner, name, resolved.sha);
     if (!pr || pr.headSha !== resolved.sha) return; // only the current head
 
-    await recordEnqueue(deps.supersession, { owner: repository.owner, name: repository.name, prNumber: pr.number }, pr.headSha);
+    await recordEnqueue(deps.supersession, { owner, name, prNumber: pr.number }, pr.headSha);
 
     const payloadJob: ReviewJobPayload = {
       installationId: String(installationId),
-      owner: repository.owner,
-      name: repository.name,
+      owner,
+      name,
       prNumber: pr.number,
       headSha: pr.headSha,
       baseSha: pr.baseSha,
@@ -189,5 +203,34 @@ export function createDeploymentStatusHandler(repository: { owner: string; name:
       deploymentId: resolved.deploymentId,
     };
     await deps.worker.enqueue(payloadJob);
+  };
+}
+
+/**
+ * Compose the App-path webhook handlers for buildServer (#1): a `pull_request`
+ * push bumps `current_sha` and cancels the in-flight older review (newest wins,
+ * #4), and `deployment_status` resolves + enqueues the review (#55). Both read
+ * the repo from the payload, so one set of handlers serves every installation.
+ */
+export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
+  onPullRequest(payload: unknown): Promise<void>;
+  onDeploymentStatus(payload: unknown): Promise<void>;
+} {
+  const onDeploymentStatus = createDeploymentStatusHandler(deps);
+  return {
+    async onPullRequest(payload) {
+      const p = payload as WebhookRepoEnvelope & {
+        pull_request?: { number?: number; head?: { sha?: string } };
+      };
+      const owner = p.repository?.owner?.login;
+      const name = p.repository?.name;
+      const prNumber = p.pull_request?.number;
+      const headSha = p.pull_request?.head?.sha;
+      if (!owner || !name || typeof prNumber !== "number" || !headSha) return;
+      // Newest push wins: bump current_sha and cancel any in-flight older review.
+      await recordEnqueue(deps.supersession, { owner, name, prNumber }, headSha);
+      await deps.worker.cancel(reviewQueueKey(owner, name, prNumber));
+    },
+    onDeploymentStatus,
   };
 }
