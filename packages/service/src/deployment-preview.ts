@@ -30,6 +30,13 @@ export interface DeploymentPreviewOptions {
   ignoreEnvironments?: string[];
   /** When set, the deployment SHA must equal this PR head SHA. */
   expectedHeadSha?: string;
+  /**
+   * Operator-allowlisted custom preview host suffixes (e.g. "preview.acme.com").
+   * A matching host that isn't a known provider is attributed provider "explicit"
+   * — safe because the deployment_status webhook is GitHub-authenticated
+   * provenance. Without this, only known provider domains are accepted.
+   */
+  allowedHostSuffixes?: string[];
   /** Returns true if `(sha, deployment_id)` was already processed. */
   isDuplicate?: (dedupeKey: string) => boolean | Promise<boolean>;
 }
@@ -55,7 +62,8 @@ export type DeploymentPreviewResult =
       deploymentId: number;
       dedupeKey: string;
       source: "deployment_status";
-      provider: Exclude<GateReviewRequest["preview"]["provider"], "explicit" | "local">;
+      /** Inferred from the host; "explicit" for an allowlisted custom domain. */
+      provider: Exclude<GateReviewRequest["preview"]["provider"], "local">;
     }
   | { ok: false; reason: string };
 
@@ -112,8 +120,14 @@ export async function resolveDeploymentPreview(
 
   const url = parseHttpUrl(status.environment_url ?? status.target_url ?? "");
   if (!url) return fail("no valid preview URL on the deployment status");
-  const provider = providerForUrl(url);
-  if (!provider) return fail(`unsupported deployment provider for host "${url.hostname}"`);
+  let provider: Exclude<GateReviewRequest["preview"]["provider"], "local"> | null = providerForUrl(url);
+  if (!provider) {
+    const allowed = (options.allowedHostSuffixes ?? []).some(
+      (suffix) => url.hostname === suffix || url.hostname.endsWith(`.${suffix}`),
+    );
+    if (!allowed) return fail(`unsupported deployment provider for host "${url.hostname}"`);
+    provider = "explicit"; // allowlisted custom domain; deployment_status is the provenance
+  }
 
   const sha = deployment.sha;
   if (!sha) return fail("deployment has no sha");

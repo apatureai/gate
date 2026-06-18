@@ -77,8 +77,14 @@ export function mapStripeEvent(event: StripeEvent): BillingUpdate | null {
         stripeCustomerId: typeof obj["customer"] === "string" ? obj["customer"] : undefined,
       };
     case "customer.subscription.updated": {
-      const status = obj["status"] === "past_due" ? "past_due" : "active";
-      return { installationId, plan: "paid", status };
+      const status = obj["status"];
+      // A subscription can transition to canceled/unpaid via an update, not only
+      // the deleted event — drop to free in that case. (cancel_at_period_end
+      // stays active/paid: access continues until the period ends.)
+      if (status === "canceled" || status === "unpaid") {
+        return { installationId, plan: "free", status: "canceled" };
+      }
+      return { installationId, plan: "paid", status: status === "past_due" ? "past_due" : "active" };
     }
     case "customer.subscription.deleted":
       return { installationId, plan: "free", status: "canceled" };

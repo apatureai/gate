@@ -43,7 +43,7 @@ export interface SelectOptions {
  * fair start order.
  */
 export function selectNextJobs(pending: PendingJob[], options: SelectOptions): PendingJob[] {
-  const inFlight = { ...(options.inFlightByInstallation ?? {}) };
+  const inFlight = options.inFlightByInstallation ?? {}; // read-only; selected counts tracked separately
   const runningKeys = new Set(options.inFlightKeys ?? []);
   const selected: PendingJob[] = [];
   const selectedKeys = new Set<string>();

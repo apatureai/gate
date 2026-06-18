@@ -96,3 +96,27 @@ describe("billing store + usage (real schema)", () => {
     expect(await countDeepReviewsForPr(query, { owner: "acme", name: "web", prNumber: 42 })).toBe(1);
   });
 });
+
+describe("mapStripeEvent — subscription.updated transitions", () => {
+  const meta = { metadata: { installation_id: "1" } };
+  it("drops to free when an update reports canceled/unpaid", () => {
+    expect(mapStripeEvent({ type: "customer.subscription.updated", data: { object: { ...meta, status: "canceled" } } })).toMatchObject({
+      plan: "free",
+      status: "canceled",
+    });
+    expect(mapStripeEvent({ type: "customer.subscription.updated", data: { object: { ...meta, status: "unpaid" } } })).toMatchObject({
+      plan: "free",
+      status: "canceled",
+    });
+  });
+  it("stays paid for active / past_due (incl. cancel_at_period_end)", () => {
+    expect(mapStripeEvent({ type: "customer.subscription.updated", data: { object: { ...meta, status: "active", cancel_at_period_end: true } } })).toMatchObject({
+      plan: "paid",
+      status: "active",
+    });
+    expect(mapStripeEvent({ type: "customer.subscription.updated", data: { object: { ...meta, status: "past_due" } } })).toMatchObject({
+      plan: "paid",
+      status: "past_due",
+    });
+  });
+});

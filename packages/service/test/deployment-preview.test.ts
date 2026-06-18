@@ -76,3 +76,22 @@ describe("resolveDeploymentPreview", () => {
     expect((await resolveDeploymentPreview(e)).ok).toBe(false);
   });
 });
+
+describe("custom-domain previews (allowedHostSuffixes)", () => {
+  function customEvent(): DeploymentStatusEvent {
+    return {
+      deployment_status: { state: "success", environment_url: "https://pr-42.preview.acme.com" },
+      deployment: { id: 1001, sha: "abc", environment: "Preview" },
+    };
+  }
+
+  it("rejects an unknown custom domain by default", async () => {
+    const out = await resolveDeploymentPreview(customEvent());
+    expect(out).toMatchObject({ ok: false });
+  });
+
+  it("accepts an allowlisted custom domain, attributed provider 'explicit'", async () => {
+    const out = await resolveDeploymentPreview(customEvent(), { allowedHostSuffixes: ["preview.acme.com"] });
+    expect(out).toMatchObject({ ok: true, provider: "explicit", url: "https://pr-42.preview.acme.com/" });
+  });
+});
