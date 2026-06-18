@@ -210,3 +210,25 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   A second automation (separate session cron) reviews + squash-merges Codex PRs
   (head != agent/build) when CI is green and the review is clean — it never
   touches agent/build, which stays for human review.
+- 2026-06-17: Deep hardening review pass (10 real fixes; tests 276→302). The
+  recurring meta-bug class: **a helper is implemented + unit-tested but never
+  wired into the orchestration.** Audit for these specifically. Fixes:
+  - engine error thrown from `engine.review` escaped both orchestrators (Action
+    posted no Check Run; App worker crashed) → wired `decideDeliveryForError`
+    into runAction + runHostedReview catch blocks → neutral Check Run.
+  - `decideDeliveryForError` / `withRateLimitRetry` / best-effort engine
+    `cancel` on supersession all existed but weren't called → wired in.
+  - `redact()` guarded circular objects but not arrays → stack-overflow risk.
+  - Stripe `verifyStripeSignature` only checked the last `v1` → breaks during
+    webhook-secret rotation (Stripe sends multiple `v1`); now accepts any match.
+  - in-memory `ReviewJobWorker` pump didn't isolate a throwing job → one bad job
+    stalled the queue / unhandled rejection; now catch+continue like BullMQ.
+  - AbortSignal reached only the poll loop, not the HTTP client (§15.3) → threaded
+    `signal` into `EngineTransport.poll/submit` via `AbortSignal.any`.
+  - App webhook handlers were single-repo + hardcoded `installationId:""` →
+    multi-tenant from the payload; added `hydrateReviewContext` (IDs-only payload)
+    + `createAppServer`/`createAppWebhookHandlers` composition roots + e2e.
+  - **Checklist for a "done" build:** error path → neutral, not crash/throw;
+    abort/supersession → cancel upstream + guard publish; signature verifiers →
+    rotation + length-mismatch; recursion → circular guard on arrays AND objects;
+    every `createX`/`decideX` helper → grep that something actually calls it.
