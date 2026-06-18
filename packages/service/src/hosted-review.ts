@@ -165,13 +165,18 @@ export function createDeploymentStatusHandler(repository: { owner: string; name:
     });
     if (!resolved.ok) return;
 
+    // installationId comes from the webhook (installation.id), not the body — the
+    // engine HMAC (#47) and tenant scoping depend on it, so skip if absent.
+    const installationId = (payload as { installation?: { id?: number } }).installation?.id;
+    if (typeof installationId !== "number") return;
+
     const pr = await deps.resolvePullRequest(resolved.sha);
     if (!pr || pr.headSha !== resolved.sha) return; // only the current head
 
     await recordEnqueue(deps.supersession, { owner: repository.owner, name: repository.name, prNumber: pr.number }, pr.headSha);
 
     const payloadJob: ReviewJobPayload = {
-      installationId: "", // filled by the App context at enqueue time
+      installationId: String(installationId),
       owner: repository.owner,
       name: repository.name,
       prNumber: pr.number,

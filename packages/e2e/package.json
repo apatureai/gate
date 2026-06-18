@@ -12,6 +12,7 @@
     "@gate/config": "workspace:*",
     "@gate/delivery": "workspace:*",
     "@gate/engine": "workspace:*",
+    "@gate/service": "workspace:*",
     "@gate/types": "workspace:*"
   }
 }

@@ -94,6 +94,8 @@ export type {
   HostedReviewResult,
   DeploymentHandlerDeps,
 } from "./hosted-review.js";
+export { hydrateReviewContext } from "./hydrate.js";
+export type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
 export { createSqlTenantDeleter, offboardTenant } from "./offboarding.js";
 export type {
   DeletedRowCounts,

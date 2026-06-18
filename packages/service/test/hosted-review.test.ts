@@ -113,6 +113,7 @@ describe("createDeploymentStatusHandler", () => {
       },
     );
     await handler({
+      installation: { id: 1 },
       deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
       deployment: { id: 7, sha: "abc", environment: "Preview" },
     });

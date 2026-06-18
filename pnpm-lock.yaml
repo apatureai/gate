@@ -118,6 +118,9 @@ importers:
       '@gate/engine':
         specifier: workspace:*
         version: link:../engine
+      '@gate/service':
+        specifier: workspace:*
+        version: link:../service
       '@gate/types':
         specifier: workspace:*
         version: link:../types
