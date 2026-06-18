@@ -182,3 +182,22 @@ as living memory: append concrete learnings, prune anything that proved wrong.
     a post-fix green Check Run — that's the in-repo deliverable.
   - When PROGRESS has no unchecked `[ ]` whose deps are met, the backlog is done:
     stop and report (don't invent work). The cron will re-check each fire.
+- 2026-06-17: Backlog complete, but "use the full budget" → do a **hardening
+  pass** on the finished build (this is legitimate, not invented work). Real
+  gaps found by reviewing the wiring end-to-end:
+  - `createDeploymentStatusHandler` hardcoded `installationId: ""` and bound to a
+    fixed repo — fixed to read `installation.id` + `repository.owner.login/name`
+    from the webhook (multi-tenant; one handler serves all installs).
+  - The queue payload is IDs-only, so the worker needs `hydrateReviewContext` +
+    a `PullRequestFetcher` to get PR title/body/fork before `runHostedReview`.
+  - §15.3 said the AbortSignal must reach the **HTTP client**, not just the poll
+    loop — threaded `signal` into `EngineTransport.poll/submit` via
+    `AbortSignal.any`, converting an aborted fetch to `EngineAbortedError`.
+  - The #49 rate-limit helper existed but was **unused** — moved it to the shared
+    `@gate/engine` layer and wired `withRateLimitRetry` into the real GitHub
+    client (`createGitHubApi`).
+  - Added the App-path composition root `createAppServer` (buildServer +
+    handlers) + App-path e2e — nothing assembled the App path end-to-end before.
+  - **Lesson:** after the backlog is "done", the highest-value budget use is
+    reviewing cross-package *wiring* (composition roots, multi-tenancy, signals,
+    helpers-that-exist-but-aren't-called) — unit tests pass while the seams leak.
