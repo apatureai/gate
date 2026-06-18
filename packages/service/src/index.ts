@@ -1,5 +1,7 @@
 export { buildServer } from "./app.js";
 export type { BuildServerOptions, WebhookHandlers } from "./app.js";
+export { createAppServer } from "./app-server.js";
+export type { AppServerDeps } from "./app-server.js";
 export { createWebhookVerifier } from "./webhooks.js";
 export type { WebhookVerifier } from "./webhooks.js";
 export { createGitHubAppAuth } from "./app-auth.js";
