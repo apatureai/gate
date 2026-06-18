@@ -102,7 +102,11 @@ export async function runHostedReview(
       { signal: deps.signal },
     );
   } catch (err) {
-    if (err instanceof EngineAbortedError) return { status: "superseded" }; // newer push won
+    if (err instanceof EngineAbortedError) {
+      // Best-effort DELETE /jobs/:id so the engine stops the superseded job (§15.1).
+      await deps.engine.cancel(err.jobId).catch(() => undefined);
+      return { status: "superseded" }; // newer push won
+    }
     // Engine unavailable / contract violation: neutral Check Run, never crash the
     // worker or block the PR (#38). The publish-time guard isn't needed — nothing
     // is published.

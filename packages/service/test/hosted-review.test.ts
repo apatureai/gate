@@ -81,12 +81,13 @@ describe("runHostedReview", () => {
     expect(d._published).toHaveLength(0);
   });
 
-  it("returns superseded when the engine job is aborted", async () => {
-    const d = deps(engine(new EngineAbortedError("j")));
+  it("returns superseded and best-effort cancels the engine job when aborted", async () => {
+    const d = deps(engine(new EngineAbortedError("job_super")));
     await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("superseded");
     expect(d._published).toHaveLength(0);
+    expect(d.engine.cancel).toHaveBeenCalledWith("job_super"); // DELETE /jobs/:id on supersession
   });
 
   it("posts a neutral Check Run (never crashes the worker) when the engine throws", async () => {
