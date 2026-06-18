@@ -92,6 +92,21 @@ describe("runAction", () => {
     expect(outcome.commentAction).toBeUndefined();
   });
 
+  it("posts a neutral Check Run (never crashes) when the engine throws", async () => {
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => {
+        throw new Error("engine 503");
+      }),
+      cancel: vi.fn(async () => {}),
+    };
+    const d = deps(engine);
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: "https://preview.example.com", previewCommand: null }, ctx(), d);
+    expect(outcome.status).toBe("engine_error");
+    expect(outcome.conclusion).toBe("neutral");
+    expect(d._published[0]?.conclusion).toBe("neutral");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+  });
+
   it("blocks only under gate:blockers on a blocked grade", async () => {
     const engine = engineReturning({ status: "completed", result: { ...golden, grade: "blocked" }, jobId: "j" });
     const d = deps(engine);

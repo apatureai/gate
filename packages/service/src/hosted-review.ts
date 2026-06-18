@@ -2,6 +2,7 @@ import {
   type CheckRun,
   type CheckRunConclusion,
   decideDelivery,
+  decideDeliveryForError,
   type GitHubCommentsApi,
   upsertStickyComment,
 } from "@gate/delivery";
@@ -49,7 +50,8 @@ export type HostedReviewStatus =
   | "published"
   | "superseded"
   | "stale_discarded"
-  | "unverified_preview";
+  | "unverified_preview"
+  | "engine_error";
 
 export interface HostedReviewResult {
   status: HostedReviewStatus;
@@ -101,7 +103,12 @@ export async function runHostedReview(
     );
   } catch (err) {
     if (err instanceof EngineAbortedError) return { status: "superseded" }; // newer push won
-    throw err;
+    // Engine unavailable / contract violation: neutral Check Run, never crash the
+    // worker or block the PR (#38). The publish-time guard isn't needed — nothing
+    // is published.
+    const failure = decideDeliveryForError("engine_unavailable");
+    await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
+    return { status: "engine_error", conclusion: failure.checkRun.conclusion };
   }
 
   // Publish-time guard: never overwrite a newer review with a stale result.

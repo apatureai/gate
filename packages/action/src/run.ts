@@ -2,6 +2,7 @@ import {
   type CheckRun,
   type CheckRunConclusion,
   decideDelivery,
+  decideDeliveryForError,
   type GitHubCommentsApi,
   upsertStickyComment,
 } from "@gate/delivery";
@@ -40,7 +41,7 @@ export interface ActionRunDeps {
   runUrl?: string;
 }
 
-export type ActionStatus = "reviewed" | "no_preview" | "unverified_preview";
+export type ActionStatus = "reviewed" | "no_preview" | "unverified_preview" | "engine_error";
 
 export interface ActionOutcome {
   status: ActionStatus;
@@ -97,15 +98,23 @@ export async function runAction(
   }
 
   // 3. Submit the hosted engine job (async /jobs, never a long synchronous call).
-  const outcome = await deps.engine.review({
-    installationId: ctx.installationId,
-    repository: ctx.repository,
-    pullRequest: ctx.pullRequest,
-    preview: { url: verified.url, provider: verified.provider, environment: config.preview.environment },
-    config,
-    publishMode,
-    depth: "deep",
-  });
+  let outcome;
+  try {
+    outcome = await deps.engine.review({
+      installationId: ctx.installationId,
+      repository: ctx.repository,
+      pullRequest: ctx.pullRequest,
+      preview: { url: verified.url, provider: verified.provider, environment: config.preview.environment },
+      config,
+      publishMode,
+      depth: "deep",
+    });
+  } catch {
+    // Engine unavailable / contract violation: neutral Check Run, never fail the PR.
+    const failure = decideDeliveryForError("engine_unavailable");
+    await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
+    return { status: "engine_error", conclusion: failure.checkRun.conclusion };
+  }
 
   // 4. Map the outcome to a safe, non-blocking delivery decision.
   const decision = decideDelivery(outcome, {

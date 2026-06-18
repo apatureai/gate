@@ -89,6 +89,15 @@ describe("runHostedReview", () => {
     expect(d._published).toHaveLength(0);
   });
 
+  it("posts a neutral Check Run (never crashes the worker) when the engine throws", async () => {
+    const d = deps(engine(new Error("engine 503")));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
+    expect(out.status).toBe("engine_error");
+    expect(d._published[0]?.conclusion).toBe("neutral");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+  });
+
   it("posts a neutral Check Run when the preview is unverified", async () => {
     const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
     const out = await runHostedReview(DEFAULT_CONFIG, { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } }, d);
