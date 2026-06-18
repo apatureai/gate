@@ -1,4 +1,5 @@
 import type { CheckRun, GitHubCommentsApi, IssueComment } from "@gate/delivery";
+import { withRateLimitRetry } from "@gate/engine";
 import type { ProviderComment } from "./preview.js";
 
 /**
@@ -44,8 +45,12 @@ export function createGitHubApi(
   };
   const base = `${API_ROOT}/repos/${target.owner}/${target.repo}`;
 
+  // All calls honor GitHub primary + secondary rate limits (#49).
+  const send = (url: string, init?: RequestInit): Promise<Response> =>
+    withRateLimitRetry(() => fetchImpl(url, init));
+
   async function rawComments(): Promise<RawComment[]> {
-    const res = await fetchImpl(`${base}/issues/${target.prNumber}/comments?per_page=100`, { headers });
+    const res = await send(`${base}/issues/${target.prNumber}/comments?per_page=100`, { headers });
     if (!res.ok) throw new Error(`list comments failed: ${res.status}`);
     return (await res.json()) as RawComment[];
   }
@@ -55,7 +60,7 @@ export function createGitHubApi(
       return (await rawComments()).map((c) => ({ id: c.id, nodeId: c.node_id, body: c.body ?? "" }));
     },
     async createComment(body: string): Promise<IssueComment> {
-      const res = await fetchImpl(`${base}/issues/${target.prNumber}/comments`, {
+      const res = await send(`${base}/issues/${target.prNumber}/comments`, {
         method: "POST",
         headers,
         body: JSON.stringify({ body }),
@@ -68,12 +73,12 @@ export function createGitHubApi(
       // Optimistic guard: re-read; skip if the comment was replaced (node_id
       // changed). The authoritative supersession backstop is the publish-time
       // SHA guard (#4).
-      const current = await fetchImpl(`${base}/issues/comments/${id}`, { headers });
+      const current = await send(`${base}/issues/comments/${id}`, { headers });
       if (current.ok) {
         const c = (await current.json()) as RawComment;
         if (c.node_id !== expectedNodeId) return { updated: false };
       }
-      const res = await fetchImpl(`${base}/issues/comments/${id}`, {
+      const res = await send(`${base}/issues/comments/${id}`, {
         method: "PATCH",
         headers,
         body: JSON.stringify({ body }),
@@ -89,7 +94,7 @@ export function createGitHubApi(
       return (await rawComments()).map((c) => ({ author: c.user?.login ?? "", body: c.body ?? "" }));
     },
     async publishCheckRun(run: CheckRun): Promise<void> {
-      const res = await fetchImpl(`${base}/check-runs`, {
+      const res = await send(`${base}/check-runs`, {
         method: "POST",
         headers,
         body: JSON.stringify({

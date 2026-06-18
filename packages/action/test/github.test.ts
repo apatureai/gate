@@ -66,6 +66,19 @@ describe("createGitHubApi", () => {
     expect(calls.some((c) => c.method === "PATCH")).toBe(true);
   });
 
+  it("retries on a GitHub rate-limit response (#49)", async () => {
+    let calls = 0;
+    const fetchImpl = (async () => {
+      calls += 1;
+      if (calls === 1) return new Response("{}", { status: 429, headers: { "retry-after": "0" } });
+      return new Response(JSON.stringify({ id: 1, node_id: "n1", body: "ok" }), { status: 201 });
+    }) as unknown as typeof fetch;
+    const gh = createGitHubApi("tok", target, fetchImpl);
+    const comment = await gh.comments.createComment("hi");
+    expect(comment.id).toBe(1);
+    expect(calls).toBe(2); // retried after the 429
+  });
+
   it("skips the update when the comment was replaced (node_id changed)", async () => {
     const { impl, calls } = fakeFetch(
       () => new Response(JSON.stringify({ id: 5, node_id: "different", body: "x" }), { status: 200 }),

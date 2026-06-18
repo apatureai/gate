@@ -33,6 +33,8 @@ export { VERIFIED_SOURCES, verifyPreviewHandoff } from "./preview-verification.j
 export type { VerifiedSource, PreviewHandoffInput, PreviewHandoffResult } from "./preview-verification.js";
 export { SCHEMA_VERSION, GateReviewResultSchema, majorVersion, parseEngineResult } from "./contract.js";
 export type { ParseEngineResult } from "./contract.js";
+export { isRateLimited, rateLimitDelayMs, withRateLimitRetry } from "./rate-limit.js";
+export type { RateLimitRetryOptions } from "./rate-limit.js";
 export { resolveEngineRoute, createAccountEngineTransport } from "./endpoint-routing.js";
 export type {
   EngineAccountRouting,

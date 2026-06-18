@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isRateLimited, rateLimitDelayMs, withRateLimitRetry } from "../src/rate-limit.js";
+import { isRateLimited, rateLimitDelayMs, withRateLimitRetry } from "../src/index.js";
 
 function res(status: number, headers: Record<string, string> = {}): Response {
   return new Response("", { status, headers });
