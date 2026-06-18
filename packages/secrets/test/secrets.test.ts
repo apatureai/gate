@@ -76,12 +76,19 @@ describe("redact", () => {
     expect(redact("https://example.com/i/1.png")).toBe("https://example.com/i/1.png");
   });
 
-  it("handles circular references", () => {
+  it("handles circular references in objects and arrays", () => {
     const a: Record<string, unknown> = { name: "a" };
     a.self = a;
     const out = redact(a) as Record<string, unknown>;
     expect(out.name).toBe("a");
     expect(out.self).toBe("[Circular]");
+
+    // Self-referential array must not infinite-loop.
+    const arr: unknown[] = ["x"];
+    arr.push(arr);
+    const redactedArr = redact(arr) as unknown[];
+    expect(redactedArr[0]).toBe("x");
+    expect(redactedArr[1]).toBe("[Circular]");
   });
 });
 

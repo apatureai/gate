@@ -27,21 +27,26 @@ export function verifyStripeSignature(
   now: number = Date.now(),
   toleranceSec = 300,
 ): boolean {
-  const parts = Object.fromEntries(
-    signatureHeader.split(",").map((kv) => {
-      const [k, v] = kv.split("=");
-      return [k?.trim(), v?.trim()];
-    }),
-  );
-  const t = Number(parts["t"]);
-  const v1 = parts["v1"];
-  if (!Number.isFinite(t) || !v1) return false;
+  // Stripe-Signature is `t=<ts>,v1=<sig>[,v1=<sig>...]`; multiple v1 appear during
+  // secret rotation, so accept any match.
+  let t = NaN;
+  const v1s: string[] = [];
+  for (const kv of signatureHeader.split(",")) {
+    const eq = kv.indexOf("=");
+    if (eq === -1) continue;
+    const key = kv.slice(0, eq).trim();
+    const val = kv.slice(eq + 1).trim();
+    if (key === "t") t = Number(val);
+    else if (key === "v1") v1s.push(val);
+  }
+  if (!Number.isFinite(t) || v1s.length === 0) return false;
   if (Math.abs(now - t * 1000) > toleranceSec * 1000) return false;
 
-  const expected = createHmac("sha256", secret).update(`${t}.${payload}`).digest("hex");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(v1);
-  return a.length === b.length && timingSafeEqual(a, b);
+  const expected = Buffer.from(createHmac("sha256", secret).update(`${t}.${payload}`).digest("hex"));
+  return v1s.some((v1) => {
+    const provided = Buffer.from(v1);
+    return expected.length === provided.length && timingSafeEqual(expected, provided);
+  });
 }
 
 export interface BillingUpdate {

@@ -32,6 +32,14 @@ describe("verifyStripeSignature", () => {
     expect(verifyStripeSignature("{}", sign(t), secret, now)).toBe(false); // tampered body
     expect(verifyStripeSignature(payload, sign(t - 10_000), secret, now)).toBe(false); // stale
   });
+
+  it("accepts any matching v1 during secret rotation (multiple v1)", () => {
+    const now = 1_000_000_000_000;
+    const t = Math.floor(now / 1000);
+    const good = createHmac("sha256", secret).update(`${t}.${payload}`).digest("hex");
+    const header = `t=${t},v1=deadbeef,v1=${good}`; // an old/wrong sig plus the valid one
+    expect(verifyStripeSignature(payload, header, secret, now)).toBe(true);
+  });
 });
 
 describe("mapStripeEvent", () => {
