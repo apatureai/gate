@@ -84,11 +84,14 @@ export function createJudgmentEngineClient(
   const backoffMs = options.submitBackoffMs ?? 500;
   const sleep = options.sleep ?? defaultSleep;
 
-  async function submitWithRetry(submission: JobSubmission): Promise<SubmitResponse> {
+  async function submitWithRetry(
+    submission: JobSubmission,
+    signal?: AbortSignal,
+  ): Promise<SubmitResponse> {
     let lastError: unknown;
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        return await transport.submit(submission);
+        return await transport.submit(submission, signal);
       } catch (err) {
         lastError = err;
         if (attempt < retries) {
@@ -108,12 +111,9 @@ export function createJudgmentEngineClient(
         depth: ctx.depth,
         request: buildGateReviewRequest(ctx),
       };
-      const response = await submitWithRetry(submission);
-      return pollUntilDone(transport, response.jobId, {
-        depth: ctx.depth,
-        ...options.poll,
-        ...pollOverrides,
-      });
+      const mergedPoll = { depth: ctx.depth, ...options.poll, ...pollOverrides };
+      const response = await submitWithRetry(submission, mergedPoll.signal);
+      return pollUntilDone(transport, response.jobId, mergedPoll);
     },
 
     async cancel(jobId) {

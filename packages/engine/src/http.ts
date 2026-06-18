@@ -42,18 +42,23 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
     return h;
   };
 
-  const withTimeout = async (fn: (signal: AbortSignal) => Promise<Response>): Promise<Response> => {
+  const withTimeout = async (
+    fn: (signal: AbortSignal) => Promise<Response>,
+    external?: AbortSignal,
+  ): Promise<Response> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
+    // Abort the in-flight request on either the timeout or supersession (§15.3).
+    const signal = external ? AbortSignal.any([controller.signal, external]) : controller.signal;
     try {
-      return await fn(controller.signal);
+      return await fn(signal);
     } finally {
       clearTimeout(timer);
     }
   };
 
   return {
-    async submit(submission: JobSubmission): Promise<SubmitResponse> {
+    async submit(submission: JobSubmission, abortSignal?: AbortSignal): Promise<SubmitResponse> {
       const body = JSON.stringify(submission);
       const requestHeaders = headers();
       if (options.hmacSecret) {
@@ -66,13 +71,15 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
           }),
         );
       }
-      const res = await withTimeout((signal) =>
-        fetchImpl(`${base}/jobs`, {
-          method: "POST",
-          headers: requestHeaders,
-          body,
-          signal,
-        }),
+      const res = await withTimeout(
+        (signal) =>
+          fetchImpl(`${base}/jobs`, {
+            method: "POST",
+            headers: requestHeaders,
+            body,
+            signal,
+          }),
+        abortSignal,
       );
       if (res.status === 202 || res.status === 409) {
         const body = (await res.json()) as { jobId: string };
@@ -87,9 +94,10 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
       throw new EngineJobError(`engine submit failed: ${res.status}`);
     },
 
-    async poll(jobId: string): Promise<JobStatus> {
-      const res = await withTimeout((signal) =>
-        fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, { headers: headers(), signal }),
+    async poll(jobId: string, abortSignal?: AbortSignal): Promise<JobStatus> {
+      const res = await withTimeout(
+        (signal) => fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, { headers: headers(), signal }),
+        abortSignal,
       );
       if (!res.ok) throw new EngineJobError(`engine poll failed: ${res.status}`);
       const status = (await res.json()) as JobStatus;

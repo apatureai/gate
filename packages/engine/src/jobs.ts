@@ -43,8 +43,9 @@ export interface SubmitResponse {
  * non-409 responses to a thrown EngineJobError.
  */
 export interface EngineTransport {
-  submit(submission: JobSubmission): Promise<SubmitResponse>;
-  poll(jobId: string): Promise<JobStatus>;
+  submit(submission: JobSubmission, signal?: AbortSignal): Promise<SubmitResponse>;
+  /** `signal` aborts the in-flight request on supersession (§15.3). */
+  poll(jobId: string, signal?: AbortSignal): Promise<JobStatus>;
   cancel(jobId: string): Promise<void>;
 }
 
@@ -135,7 +136,14 @@ export async function pollUntilDone(
   for (let attempt = 0; ; attempt++) {
     // Stage-boundary supersession check (#4): stop before doing more work.
     if (options.signal?.aborted) throw new EngineAbortedError(jobId);
-    const status = await transport.poll(jobId);
+    let status: JobStatus;
+    try {
+      status = await transport.poll(jobId, options.signal);
+    } catch (err) {
+      // A request aborted by supersession surfaces as the typed abort error.
+      if (options.signal?.aborted) throw new EngineAbortedError(jobId);
+      throw err;
+    }
     if (status.state === "completed") {
       if (!status.result) throw new EngineJobError(`job ${jobId} completed without a result`);
       return { status: "completed", result: status.result, jobId };
