@@ -71,6 +71,20 @@ describe("createInMemoryReviewWorker", () => {
     expect(observedAbort).toBe(true);
   });
 
+  it("isolates a throwing job so the queue keeps draining", async () => {
+    const worker = createInMemoryReviewWorker();
+    const processed: number[] = [];
+    worker.onJob(async (job) => {
+      if (job.prNumber === 1) throw new Error("boom");
+      processed.push(job.prNumber);
+    });
+    await worker.enqueue(payload(1, "s1"));
+    await worker.enqueue(payload(2, "s2"));
+    await tick();
+    await tick();
+    expect(processed).toEqual([2]); // job 1 failed but job 2 still ran
+  });
+
   it("supersedes a pending job for the same PR before the handler is attached", async () => {
     const worker = createInMemoryReviewWorker();
     const processed: string[] = [];

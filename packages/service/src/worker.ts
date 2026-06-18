@@ -90,6 +90,9 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
         const controller = registry.create(key);
         try {
           await handler(job, { jobId: key, signal: controller.signal });
+        } catch {
+          // Isolate a failed job (like BullMQ) so it doesn't stall the queue or
+          // surface as an unhandled rejection; the handler owns its error policy.
         } finally {
           registry.done(key, controller);
         }
