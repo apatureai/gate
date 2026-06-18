@@ -122,6 +122,12 @@ documentation gaps into reviewable work.
 - `git checkout <file>` to drop a temp change will also revert *other* unstaged
   edits to that file — re-apply intended edits after.
 - Keep `lint` as `eslint . --max-warnings=0` (warnings fail the build, #31).
+- **Close issues via the PR.** Put a `Closes #<N>` line in the PR body for every
+  issue the PR implements — GitHub auto-closes them on merge to the default
+  branch (keywords only fire on merge, not on `gh pr edit` of a merged PR, so add
+  them BEFORE merge). The review-merge automation also closes any issue the
+  merged PR references as a guarantee. The build loop never self-merges, so its
+  issues close when a human merges the build PR.
 
 ## Self-improvement log (newest first)
 
