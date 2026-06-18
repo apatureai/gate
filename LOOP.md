@@ -201,3 +201,12 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   - **Lesson:** after the backlog is "done", the highest-value budget use is
     reviewing cross-package *wiring* (composition roots, multi-tenancy, signals,
     helpers-that-exist-but-aren't-called) — unit tests pass while the seams leak.
+- 2026-06-17: **Merged-PR gotcha.** PR #57 (agent/build→main) was merged by a
+  human at 03:01, but the loop kept editing the *merged* #57 via `gh pr edit` for
+  hours instead of opening a fresh PR — so 56 later commits sat on agent/build
+  with no open PR. Fix: step 8 now opens a NEW PR when the current agent/build→
+  main PR is MERGED/CLOSED (never edit a merged PR). Check
+  `gh pr view <N> --json state` before editing; if MERGED/CLOSED, `gh pr create`.
+  A second automation (separate session cron) reviews + squash-merges Codex PRs
+  (head != agent/build) when CI is green and the review is clean — it never
+  touches agent/build, which stays for human review.
