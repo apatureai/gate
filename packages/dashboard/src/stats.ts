@@ -134,7 +134,17 @@ export async function loadFeedbackEvents(
   );
   return rows.map((r) => ({
     type: r.type,
-    metadata: typeof r.metadata === "string" ? (JSON.parse(r.metadata) as Record<string, unknown>) : r.metadata,
+    metadata: parseMetadata(r.metadata),
     createdAt: new Date(r.created_at).toISOString(),
   }));
+}
+
+/** jsonb is usually returned parsed; tolerate a string and never throw on one bad row. */
+function parseMetadata(value: Record<string, unknown> | string | null): Record<string, unknown> | null {
+  if (value === null || typeof value !== "string") return value;
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
