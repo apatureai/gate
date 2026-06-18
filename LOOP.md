@@ -10,8 +10,11 @@ as living memory: append concrete learnings, prune anything that proved wrong.
 1. Sync: `git fetch`, checkout `agent/build`, `git pull --ff-only`, merge
    `origin/main` (stop only if conflicts are non-trivial).
 2. Read this file, then `PROGRESS.md` and the plan docs.
-3. Work issues top-down (first `[ ]` whose deps are `[x]`), one coherent slice
-   per commit. **Keep going until the usage limit — be session-usage-aware.**
+3. Work issues top-down (first `[ ]` whose deps are `[x]` and that is not
+   already implemented or covered by an active PR), one coherent slice per
+   commit. If no ready issue remains, run the backlog-exhaustion protocol below
+   instead of stopping. **Keep going until the usage limit — be
+   session-usage-aware.**
    Do not stop after one issue, and do not stop at low usage (e.g. <80%). A large
    conversation/context is NOT a reason to stop — only actual session-usage
    exhaustion is. Keep implementing the next unblocked issue to maximize utility.
@@ -21,8 +24,54 @@ as living memory: append concrete learnings, prune anything that proved wrong.
 4. Verify every slice: `pnpm install` (if deps changed), `pnpm typecheck`,
    `pnpm test`, `pnpm lint` — all green before committing.
 5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push,
-   update PR #57, comment on the issue.
+   update the current open build PR (or open a new one if the previous PR was
+   merged/closed), and comment on the issue.
 6. **Before ending, improve this file** with new learnings from the run.
+
+## Backlog-exhaustion protocol
+
+An empty ready queue is a discovery trigger, not a terminal condition.
+
+1. Re-fetch GitHub state and classify every open issue: implemented on `main`,
+   covered by an active PR, blocked by in-repo dependencies, blocked by external
+   provisioning, premature for the YC sequence, or ready. Do not rely only on
+   issue state or `PROGRESS.md`; inspect commits, files, and tests.
+2. If no ready unclaimed issue exists, audit the current codebase for concrete
+   gaps. Prioritize:
+   - broken or missing end-to-end wiring and composition roots;
+   - production adapters/configuration that exist only as in-memory seams;
+   - correctness and security invariants without enforcement or regression
+     tests (tenant isolation, fork safety, stale-publish prevention, advisory
+     defaults, secret redaction);
+   - failure paths, retries, cancellation, idempotency, and rate-limit handling;
+   - CI/build/container/deploy drift and missing smoke tests;
+   - docs or acceptance claims that exceed what the code actually implements;
+   - `TODO`/`FIXME`, skipped tests, dead helpers, uncalled code, and weak type or
+     runtime-contract boundaries.
+3. Validate each candidate against the architecture and product docs. Reject
+   work that moves capture/model/eval into Gate, requests `contents: write`,
+   edits customer code, weakens advisory defaults, breaks fork safety, or is
+   only external provisioning/account-plan work.
+4. Search open issues and PRs again for each candidate. Never create a duplicate
+   issue or compete with active implementation.
+5. Create a small ordered set of GitHub issues for confirmed gaps (normally
+   1–3, not a speculative roadmap). Every generated issue must include:
+   - the observed problem and code/test evidence;
+   - why it matters to the YC golden path;
+   - complete, testable acceptance criteria;
+   - explicit dependencies and owner-repo boundary;
+   - relevant PRD/TRD/ARCHITECTURE references;
+   - area/type/priority/size labels and the appropriate milestone when present.
+6. Update `BACKLOG.md`/`PROGRESS.md` only when the new issue changes canonical
+   execution order. Keep generated work narrow enough for one coherent PR.
+7. Re-run readiness selection and implement the highest-priority ready P0/P1
+   issue created by the audit. If the audit finds no defensible code or docs
+   gap, create nothing rather than fabricating work; record the evidence and the
+   next external dependency required.
+
+Issue generation is not permission to invent features. It is a mechanism for
+turning verified implementation, integration, reliability, security, and
+documentation gaps into reviewable work.
 
 ## Conventions established (follow these — don't rediscover)
 
@@ -180,8 +229,10 @@ as living memory: append concrete learnings, prune anything that proved wrong.
   - **demo-as-test** (#42): the live-pipeline scheduled smoke test is ops, but
     the same flow runs in CI against the mock engine asserting the 90s budget +
     a post-fix green Check Run — that's the in-repo deliverable.
-  - When PROGRESS has no unchecked `[ ]` whose deps are met, the backlog is done:
-    stop and report (don't invent work). The cron will re-check each fire.
+  - When PROGRESS has no unchecked `[ ]` whose deps are met, run the
+    backlog-exhaustion protocol: audit the current implementation, create
+    non-duplicate issues for confirmed gaps, and continue with the
+    highest-priority ready P0/P1 issue. Do not fabricate speculative features.
 - 2026-06-17: Backlog complete, but "use the full budget" → do a **hardening
   pass** on the finished build (this is legitimate, not invented work). Real
   gaps found by reviewing the wiring end-to-end:
@@ -232,3 +283,10 @@ as living memory: append concrete learnings, prune anything that proved wrong.
     abort/supersession → cancel upstream + guard publish; signature verifiers →
     rotation + length-mismatch; recursion → circular guard on arrays AND objects;
     every `createX`/`decideX` helper → grep that something actually calls it.
+- 2026-06-17: **Backlog exhaustion now triggers issue discovery.** Do not stop
+  merely because every existing issue is implemented or claimed by an active
+  PR. Audit the current codebase and end-to-end wiring, create 1–3
+  non-duplicate issues for confirmed actionable gaps with full acceptance
+  criteria/dependencies/labels, then implement the highest-priority ready P0/P1
+  issue. Preserve the YC sequence and hard architecture boundaries; never
+  manufacture speculative work just to keep the loop busy.
