@@ -82,7 +82,12 @@ async function main(): Promise<void> {
       isFork,
       previewComments: await gh.listPreviewComments(),
     },
-    { engine, comments: gh.comments, publishCheckRun: gh.publishCheckRun },
+    {
+      engine,
+      comments: gh.comments,
+      getCurrentHeadSha: gh.getCurrentHeadSha,
+      publishCheckRun: gh.publishCheckRun,
+    },
   );
 
   console.log(`Apature Gate: ${outcome.status} (check run: ${outcome.conclusion})`);

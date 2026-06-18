@@ -48,7 +48,13 @@ function inMemoryGitHub() {
       return { updated: true };
     },
   };
-  return { comments, publishCheckRun: async (r: CheckRun) => void checkRuns.push(r), store, checkRuns };
+  return {
+    comments,
+    getCurrentHeadSha: async (headSha: string) => headSha,
+    publishCheckRun: async (r: CheckRun) => void checkRuns.push(r),
+    store,
+    checkRuns,
+  };
 }
 
 const ctx: ActionRunContext = {
@@ -70,7 +76,13 @@ describe("golden-path demo smoke test", () => {
       DEFAULT_CONFIG,
       { previewUrl: "https://acme-web-pr7.vercel.app", previewCommand: null },
       ctx,
-      { engine: mockEngine(golden), comments: gh.comments, publishCheckRun: gh.publishCheckRun, runUrl: "https://gate.app/runs/1" },
+      {
+        engine: mockEngine(golden),
+        comments: gh.comments,
+        getCurrentHeadSha: () => gh.getCurrentHeadSha(ctx.pullRequest.headSha),
+        publishCheckRun: gh.publishCheckRun,
+        runUrl: "https://gate.app/runs/1",
+      },
     );
     const elapsed = Date.now() - start;
 
@@ -86,7 +98,12 @@ describe("golden-path demo smoke test", () => {
       DEFAULT_CONFIG,
       { previewUrl: "https://acme-web-pr7.vercel.app", previewCommand: null },
       { ...ctx, pullRequest: { ...ctx.pullRequest, headSha: "fixed1" } },
-      { engine: mockEngine(shipped), comments: gh.comments, publishCheckRun: gh.publishCheckRun },
+      {
+        engine: mockEngine(shipped),
+        comments: gh.comments,
+        getCurrentHeadSha: () => gh.getCurrentHeadSha("fixed1"),
+        publishCheckRun: gh.publishCheckRun,
+      },
     );
     expect(outcome.conclusion).toBe("success");
     expect(gh.checkRuns.at(-1)?.conclusion).toBe("success");

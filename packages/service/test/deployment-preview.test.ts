@@ -20,12 +20,27 @@ describe("resolveDeploymentPreview", () => {
     const out = await resolveDeploymentPreview(event());
     expect(out).toEqual({
       ok: true,
-      url: "https://pr-42.example.vercel.app",
+      url: "https://pr-42.example.vercel.app/",
       sha: "abc123",
       deploymentId: 1001,
       dedupeKey: "abc123:1001",
       source: "deployment_status",
+      provider: "vercel",
     });
+  });
+
+  it.each([
+    ["https://deploy-preview-42--acme.netlify.app", "netlify"],
+    ["https://abc123.acme.pages.dev", "cloudflare"],
+    ["https://acme-pr-42.onrender.com", "render"],
+  ] as const)("classifies %s as %s", async (url, provider) => {
+    const out = await resolveDeploymentPreview(event({ url }));
+    expect(out).toMatchObject({ ok: true, provider });
+  });
+
+  it("rejects an unknown deployment provider instead of misclassifying it", async () => {
+    const out = await resolveDeploymentPreview(event({ url: "https://preview.example.com" }));
+    expect(out).toMatchObject({ ok: false, reason: expect.stringContaining("unsupported deployment provider") });
   });
 
   it("ignores non-success states", async () => {

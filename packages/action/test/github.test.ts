@@ -51,6 +51,16 @@ describe("createGitHubApi", () => {
     expect(comments).toEqual([{ author: "vercel[bot]", body: "preview here" }]);
   });
 
+  it("re-reads the current PR head for the publish-time stale guard", async () => {
+    const { impl, calls } = fakeFetch(
+      () => new Response(JSON.stringify({ head: { sha: "current-sha" } }), { status: 200 }),
+    );
+    const gh = createGitHubApi("tok", target, impl);
+
+    await expect(gh.getCurrentHeadSha()).resolves.toBe("current-sha");
+    expect(calls.at(-1)?.url).toBe("https://api.github.com/repos/acme/web/pulls/42");
+  });
+
   it("updates the sticky comment only when the node_id still matches", async () => {
     const responder = vi
       .fn()

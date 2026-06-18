@@ -36,12 +36,19 @@ export interface ActionRunInputs {
 export interface ActionRunDeps {
   engine: JudgmentEngineClient;
   comments: GitHubCommentsApi;
+  /** Publish-time SHA guard; re-reads the current PR head from GitHub. */
+  getCurrentHeadSha(): Promise<string>;
   publishCheckRun(run: CheckRun): Promise<void>;
   /** Gate-built public run URL (from the runs record), if known. */
   runUrl?: string;
 }
 
-export type ActionStatus = "reviewed" | "no_preview" | "unverified_preview" | "engine_error";
+export type ActionStatus =
+  | "reviewed"
+  | "no_preview"
+  | "unverified_preview"
+  | "engine_error"
+  | "stale_discarded";
 
 export interface ActionOutcome {
   status: ActionStatus;
@@ -52,6 +59,10 @@ export interface ActionOutcome {
 
 function neutralCheckRun(title: string, summary: string): CheckRun {
   return { name: "Apature Gate", conclusion: "neutral", title, summary };
+}
+
+async function isCurrentHead(ctx: ActionRunContext, deps: ActionRunDeps): Promise<boolean> {
+  return (await deps.getCurrentHeadSha()) === ctx.pullRequest.headSha;
 }
 
 export async function runAction(
@@ -75,6 +86,9 @@ export async function runAction(
     config,
   );
   if (!resolved.ok) {
+    if (!(await isCurrentHead(ctx, deps))) {
+      return { status: "stale_discarded", conclusion: "neutral" };
+    }
     await deps.publishCheckRun(
       neutralCheckRun("No preview", `No preview URL was found, so the review was skipped. ${resolved.reason}`),
     );
@@ -91,11 +105,23 @@ export async function runAction(
     authStateSecretName: config.preview.authStateSecretName,
   });
   if (!verified.ok) {
+    if (!(await isCurrentHead(ctx, deps))) {
+      return { status: "stale_discarded", conclusion: "neutral" };
+    }
     await deps.publishCheckRun(
       neutralCheckRun("Preview not verified", `The preview source could not be verified (${verified.reason}); skipped.`),
     );
     return { status: "unverified_preview", conclusion: "neutral", notReviewed: verified.notReviewed };
   }
+
+  const sanitizedConfig: NormalizedDesignReviewConfig = {
+    ...config,
+    preview: {
+      ...config.preview,
+      protectionBypassSecretName: verified.protectionBypassSecretName,
+      authStateSecretName: verified.authStateSecretName,
+    },
+  };
 
   // 3. Submit the hosted engine job (async /jobs, never a long synchronous call).
   let outcome;
@@ -105,12 +131,15 @@ export async function runAction(
       repository: ctx.repository,
       pullRequest: ctx.pullRequest,
       preview: { url: verified.url, provider: verified.provider, environment: config.preview.environment },
-      config,
+      config: sanitizedConfig,
       publishMode,
       depth: "deep",
     });
   } catch {
     // Engine unavailable / contract violation: neutral Check Run, never fail the PR.
+    if (!(await isCurrentHead(ctx, deps))) {
+      return { status: "stale_discarded", conclusion: "neutral" };
+    }
     const failure = decideDeliveryForError("engine_unavailable");
     await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
     return { status: "engine_error", conclusion: failure.checkRun.conclusion };
@@ -123,7 +152,12 @@ export async function runAction(
     runUrl: deps.runUrl,
   });
 
-  // 5. Post the sticky comment (when there's a result) and the Check Run.
+  // 5. Publish-time SHA guard: discard an older workflow after a newer push.
+  if (!(await isCurrentHead(ctx, deps))) {
+    return { status: "stale_discarded", conclusion: "neutral" };
+  }
+
+  // 6. Post the sticky comment (when there's a result) and the Check Run.
   let commentAction: ActionOutcome["commentAction"];
   if (decision.publishComment && decision.comment) {
     const upsert = await upsertStickyComment(deps.comments, decision.comment);

@@ -57,6 +57,7 @@ function inMemoryGitHub() {
   };
   return {
     comments,
+    getCurrentHeadSha: async () => ctx.pullRequest.headSha,
     publishCheckRun: async (run: CheckRun) => void checkRuns.push(run),
     store,
     checkRuns,
@@ -79,7 +80,13 @@ describe("TRD §11 Action-path acceptance", () => {
       DEFAULT_CONFIG,
       { previewUrl: "https://preview.example.com", previewCommand: null },
       ctx,
-      { engine: engineClient(golden, fetchImpl), comments: gh.comments, publishCheckRun: gh.publishCheckRun, runUrl: "https://gate.app/runs/1" },
+      {
+        engine: engineClient(golden, fetchImpl),
+        comments: gh.comments,
+        getCurrentHeadSha: gh.getCurrentHeadSha,
+        publishCheckRun: gh.publishCheckRun,
+        runUrl: "https://gate.app/runs/1",
+      },
     );
 
     expect(outcome.status).toBe("reviewed");
@@ -120,7 +127,12 @@ describe("TRD §11 Action-path acceptance", () => {
       DEFAULT_CONFIG,
       { previewUrl: "https://preview.example.com", previewCommand: null },
       ctx,
-      { engine: engineClient(blockerResult, fetchImpl), comments: gh.comments, publishCheckRun: gh.publishCheckRun },
+      {
+        engine: engineClient(blockerResult, fetchImpl),
+        comments: gh.comments,
+        getCurrentHeadSha: gh.getCurrentHeadSha,
+        publishCheckRun: gh.publishCheckRun,
+      },
     );
 
     expect(outcome.conclusion).toBe("neutral");
@@ -139,7 +151,12 @@ describe("TRD §11 Action-path acceptance", () => {
       blockersConfig,
       { previewUrl: "https://preview.example.com", previewCommand: null },
       ctx,
-      { engine: engineClient(blockerResult, fetchImpl), comments: gh.comments, publishCheckRun: gh.publishCheckRun },
+      {
+        engine: engineClient(blockerResult, fetchImpl),
+        comments: gh.comments,
+        getCurrentHeadSha: gh.getCurrentHeadSha,
+        publishCheckRun: gh.publishCheckRun,
+      },
     );
     expect(outcome.conclusion).toBe("failure");
   });
@@ -150,7 +167,12 @@ describe("TRD §11 Action-path acceptance", () => {
     // The GitHub adapter exposes only comment + check-run operations.
     const gh = createGitHubApi("tok", { owner: "a", repo: "b", prNumber: 1, headSha: "s" }, (async () =>
       new Response("[]", { status: 200 })) as unknown as typeof fetch);
-    expect(Object.keys(gh)).toEqual(["comments", "listPreviewComments", "publishCheckRun"]);
+    expect(Object.keys(gh)).toEqual([
+      "comments",
+      "listPreviewComments",
+      "getCurrentHeadSha",
+      "publishCheckRun",
+    ]);
     expect("createContent" in gh).toBe(false);
   });
 });

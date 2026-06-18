@@ -21,6 +21,8 @@ export interface GitHubApi {
   comments: GitHubCommentsApi;
   /** PR comments shaped for provider-bot preview discovery (author + body). */
   listPreviewComments(): Promise<ProviderComment[]>;
+  /** Re-read the PR head immediately before delivery to prevent stale publish. */
+  getCurrentHeadSha(): Promise<string>;
   publishCheckRun(run: CheckRun): Promise<void>;
 }
 
@@ -29,6 +31,10 @@ interface RawComment {
   node_id: string;
   body: string | null;
   user?: { login?: string } | null;
+}
+
+interface RawPullRequest {
+  head?: { sha?: string };
 }
 
 export function createGitHubApi(
@@ -92,6 +98,13 @@ export function createGitHubApi(
     comments,
     async listPreviewComments(): Promise<ProviderComment[]> {
       return (await rawComments()).map((c) => ({ author: c.user?.login ?? "", body: c.body ?? "" }));
+    },
+    async getCurrentHeadSha(): Promise<string> {
+      const res = await send(`${base}/pulls/${target.prNumber}`, { headers });
+      if (!res.ok) throw new Error(`get pull request failed: ${res.status}`);
+      const pr = (await res.json()) as RawPullRequest;
+      if (!pr.head?.sha) throw new Error("get pull request returned no head sha");
+      return pr.head.sha;
     },
     async publishCheckRun(run: CheckRun): Promise<void> {
       const res = await send(`${base}/check-runs`, {

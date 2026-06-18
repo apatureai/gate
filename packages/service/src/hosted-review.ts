@@ -84,6 +84,15 @@ export async function runHostedReview(
     return { status: "unverified_preview", conclusion: "neutral" };
   }
 
+  const sanitizedConfig: NormalizedDesignReviewConfig = {
+    ...config,
+    preview: {
+      ...config.preview,
+      protectionBypassSecretName: verified.protectionBypassSecretName,
+      authStateSecretName: verified.authStateSecretName,
+    },
+  };
+
   const depth = await decideReviewDepth(deps.windowStore, repo, now());
   traceDepthDecision(repo, depth);
 
@@ -95,7 +104,7 @@ export async function runHostedReview(
         repository: ctx.repository,
         pullRequest: ctx.pullRequest,
         preview: { url: verified.url, provider: verified.provider, environment: config.preview.environment },
-        config,
+        config: sanitizedConfig,
         publishMode: config.rules.gate === "blockers" ? "blocking" : "advisory",
         depth: depth.depth,
       },
@@ -208,7 +217,7 @@ export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
       headSha: pr.headSha,
       baseSha: pr.baseSha,
       previewUrl: resolved.url,
-      previewProvider: "vercel",
+      previewProvider: resolved.provider,
       previewSource: resolved.source,
       depth: "deep",
       deploymentId: resolved.deploymentId,

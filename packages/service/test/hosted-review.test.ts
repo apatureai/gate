@@ -106,6 +106,27 @@ describe("runHostedReview", () => {
     expect(d._published[0]?.conclusion).toBe("neutral");
     expect(d.engine.review).not.toHaveBeenCalled();
   });
+
+  it("removes auth and bypass secret names before handing a fork PR to the engine", async () => {
+    const engineClient = engine({ status: "completed", result: golden, jobId: "j" });
+    const d = deps(engineClient);
+    const config = {
+      ...DEFAULT_CONFIG,
+      preview: {
+        ...DEFAULT_CONFIG.preview,
+        protectionBypassSecretName: "BYPASS_SECRET",
+        authStateSecretName: "AUTH_STATE_SECRET",
+      },
+    };
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+
+    await runHostedReview(config, { ...ctx, isFork: true }, d);
+
+    const request = (engineClient.review as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(request.config.preview.protectionBypassSecretName).toBeNull();
+    expect(request.config.preview.authStateSecretName).toBeNull();
+    expect(config.preview.protectionBypassSecretName).toBe("BYPASS_SECRET");
+  });
 });
 
 describe("createDeploymentStatusHandler", () => {
@@ -130,6 +151,27 @@ describe("createDeploymentStatusHandler", () => {
 
     expect(await supersession.getCurrentSha("sha:acme/web#42")).toBe("abc");
     expect(enqueued).toEqual(["acme/web#42@abc"]);
+  });
+
+  it("enqueues non-Vercel deployments with the verified provider", async () => {
+    const enqueue = vi.fn(async () => "k");
+    const handler = createDeploymentStatusHandler({
+      supersession: createInMemorySupersessionStore(),
+      worker: { enqueue, cancel: async () => {}, onJob: () => {} },
+      resolvePullRequest: async (_o, _n, sha) => ({ number: 42, headSha: sha, baseSha: "def" }),
+    });
+
+    await handler({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: {
+        state: "success",
+        environment_url: "https://deploy-preview-42--acme.netlify.app",
+      },
+      deployment: { id: 7, sha: "abc", environment: "Preview" },
+    });
+
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ previewProvider: "netlify" }));
   });
 
   it("ignores non-success / non-matching deployments", async () => {

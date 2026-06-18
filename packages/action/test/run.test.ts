@@ -33,6 +33,7 @@ function deps(engine: JudgmentEngineClient) {
   return {
     engine,
     comments,
+    getCurrentHeadSha: vi.fn(async () => "abc123"),
     publishCheckRun: vi.fn(async (run: CheckRun) => void published.push(run)),
     runUrl: "https://gate.app/runs/run_1",
     _published: published,
@@ -84,12 +85,54 @@ describe("runAction", () => {
     expect(engine.review).not.toHaveBeenCalled();
   });
 
+  it("removes auth and bypass secret names before handing a fork PR to the engine", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const d = deps(engine);
+    const config: NormalizedDesignReviewConfig = {
+      ...DEFAULT_CONFIG,
+      preview: {
+        ...DEFAULT_CONFIG.preview,
+        protectionBypassSecretName: "BYPASS_SECRET",
+        authStateSecretName: "AUTH_STATE_SECRET",
+      },
+    };
+
+    await runAction(
+      config,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx({ isFork: true }),
+      d,
+    );
+
+    const request = (engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(request.config.preview.protectionBypassSecretName).toBeNull();
+    expect(request.config.preview.authStateSecretName).toBeNull();
+    expect(config.preview.protectionBypassSecretName).toBe("BYPASS_SECRET");
+  });
+
   it("a timed-out review posts a neutral Check Run, no comment, PR not failed", async () => {
     const engine = engineReturning({ status: "timed_out", reason: "review_timed_out", jobId: "j" });
     const d = deps(engine);
     const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: "https://preview.example.com", previewCommand: null }, ctx(), d);
     expect(outcome.conclusion).toBe("neutral");
     expect(outcome.commentAction).toBeUndefined();
+  });
+
+  it("discards a completed review when a newer PR head exists at publish time", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const d = deps(engine);
+    d.getCurrentHeadSha.mockResolvedValue("newer");
+
+    const outcome = await runAction(
+      DEFAULT_CONFIG,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx(),
+      d,
+    );
+
+    expect(outcome.status).toBe("stale_discarded");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+    expect(d.publishCheckRun).not.toHaveBeenCalled();
   });
 
   it("posts a neutral Check Run (never crashes) when the engine throws", async () => {

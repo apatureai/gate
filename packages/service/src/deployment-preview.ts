@@ -1,3 +1,5 @@
+import type { GateReviewRequest } from "@gate/types";
+
 /**
  * App-path preview discovery from the GitHub `deployment_status` webhook
  * (TRD §3.1, §4). The counterpart to the Action-path discovery (#8): filter
@@ -53,16 +55,35 @@ export type DeploymentPreviewResult =
       deploymentId: number;
       dedupeKey: string;
       source: "deployment_status";
+      provider: Exclude<GateReviewRequest["preview"]["provider"], "explicit" | "local">;
     }
   | { ok: false; reason: string };
 
-function isHttpUrl(value: string): boolean {
+function parseHttpUrl(value: string): URL | null {
   try {
     const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
+    return u.protocol === "http:" || u.protocol === "https:" ? u : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+const PROVIDER_DOMAINS = {
+  vercel: ["vercel.app"],
+  netlify: ["netlify.app"],
+  cloudflare: ["pages.dev"],
+  render: ["onrender.com"],
+} as const;
+
+function providerForUrl(
+  url: URL,
+): Exclude<GateReviewRequest["preview"]["provider"], "explicit" | "local"> | null {
+  for (const [provider, suffixes] of Object.entries(PROVIDER_DOMAINS)) {
+    if (suffixes.some((suffix) => url.hostname === suffix || url.hostname.endsWith(`.${suffix}`))) {
+      return provider as Exclude<GateReviewRequest["preview"]["provider"], "explicit" | "local">;
+    }
+  }
+  return null;
 }
 
 const fail = (reason: string): DeploymentPreviewResult => ({ ok: false, reason });
@@ -89,8 +110,10 @@ export async function resolveDeploymentPreview(
     return fail(`environment "${environment}" not in allowlist [${allowed.join(", ")}]`);
   }
 
-  const url = status.environment_url ?? status.target_url ?? "";
-  if (!isHttpUrl(url)) return fail("no valid preview URL on the deployment status");
+  const url = parseHttpUrl(status.environment_url ?? status.target_url ?? "");
+  if (!url) return fail("no valid preview URL on the deployment status");
+  const provider = providerForUrl(url);
+  if (!provider) return fail(`unsupported deployment provider for host "${url.hostname}"`);
 
   const sha = deployment.sha;
   if (!sha) return fail("deployment has no sha");
@@ -106,7 +129,15 @@ export async function resolveDeploymentPreview(
     return fail("duplicate (sha, deployment_id) already processed");
   }
 
-  return { ok: true, url, sha, deploymentId, dedupeKey, source: "deployment_status" };
+  return {
+    ok: true,
+    url: url.toString(),
+    sha,
+    deploymentId,
+    dedupeKey,
+    source: "deployment_status",
+    provider,
+  };
 }
 
 /**
