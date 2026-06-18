@@ -116,12 +116,19 @@ export type { CheckRunConclusion, CheckRun, CheckRunContext } from "@gate/delive
 export {
   registerScreenshotRoute,
   stableScreenshotUrl,
+  capabilityScreenshotUrl,
   buildRunUrl,
   buildScreenshotRecords,
+  mintScreenshotCapability,
+  verifyScreenshotCapability,
 } from "./screenshots.js";
 export type {
+  ScreenshotVisibility,
   ScreenshotRecord,
   ScreenshotRegistry,
   SignedUrlProvider,
+  ScreenshotAuthorizer,
   ScreenshotRouteOptions,
+  ScreenshotCapability,
+  ScreenshotOwnership,
 } from "./screenshots.js";
