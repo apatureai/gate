@@ -80,6 +80,9 @@ export async function runHostedReview(
     authStateSecretName: config.preview.authStateSecretName,
   });
   if (!verified.ok) {
+    if (!(await guardPublish(deps.supersession, key, ctx.pullRequest.headSha))) {
+      return { status: "stale_discarded" };
+    }
     await deps.publishCheckRun(neutralCheckRun("Preview not verified", verified.reason));
     return { status: "unverified_preview", conclusion: "neutral" };
   }
@@ -117,8 +120,11 @@ export async function runHostedReview(
       return { status: "superseded" }; // newer push won
     }
     // Engine unavailable / contract violation: neutral Check Run, never crash the
-    // worker or block the PR (#38). The publish-time guard isn't needed — nothing
-    // is published.
+    // worker or block the PR (#38). Guard the Check Run too: an older failed job
+    // must not publish any delivery after a newer push supersedes it.
+    if (!(await guardPublish(deps.supersession, key, ctx.pullRequest.headSha))) {
+      return { status: "stale_discarded" };
+    }
     const failure = decideDeliveryForError("engine_unavailable");
     await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
     return { status: "engine_error", conclusion: failure.checkRun.conclusion };

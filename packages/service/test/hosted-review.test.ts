@@ -99,12 +99,33 @@ describe("runHostedReview", () => {
     expect(d.comments.createComment).not.toHaveBeenCalled();
   });
 
+  it("does not publish an engine-error Check Run after a newer push", async () => {
+    const d = deps(engine(new Error("engine 503")));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
+    const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
+    expect(out.status).toBe("stale_discarded");
+    expect(d._published).toHaveLength(0);
+  });
+
   it("posts a neutral Check Run when the preview is unverified", async () => {
     const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
     const out = await runHostedReview(DEFAULT_CONFIG, { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } }, d);
     expect(out.status).toBe("unverified_preview");
     expect(d._published[0]?.conclusion).toBe("neutral");
     expect(d.engine.review).not.toHaveBeenCalled();
+  });
+
+  it("does not publish an unverified-preview Check Run after a newer push", async () => {
+    const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
+    const out = await runHostedReview(
+      DEFAULT_CONFIG,
+      { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } },
+      d,
+    );
+    expect(out.status).toBe("stale_discarded");
+    expect(d._published).toHaveLength(0);
   });
 
   it("removes auth and bypass secret names before handing a fork PR to the engine", async () => {

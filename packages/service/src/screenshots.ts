@@ -123,11 +123,11 @@ export function registerScreenshotRoute(app: FastifyInstance, options: Screensho
     const record = await options.registry.lookup(request.params.id);
     // 404 for missing OR unauthorized — never disclose object keys / tenant existence.
     if (!record) return reply.code(404).send({ error: "not_found" });
-    if (now() >= record.expiresAt) {
-      return reply.code(410).send({ error: "expired", message: "screenshot retention window has passed" });
-    }
     if (!(await isAuthorized(request, record))) {
       return reply.code(404).send({ error: "not_found" });
+    }
+    if (now() >= record.expiresAt) {
+      return reply.code(410).send({ error: "expired", message: "screenshot retention window has passed" });
     }
     const url = await options.signer.sign(record.objectKey);
     return reply.code(302).header("location", url).send();

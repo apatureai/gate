@@ -94,6 +94,13 @@ describe("GET /i/:id.png — authorization (#61)", () => {
     expect(signed).toBe(0);
   });
 
+  it("does not disclose an expired private artifact to an unauthorized caller", async () => {
+    app = appWith([record({ visibility: "private", expiresAt: 500 })]);
+    const res = await app.inject({ method: "GET", url: "/i/f_001.png" });
+    expect(res.statusCode).toBe(404);
+    expect(signed).toBe(0);
+  });
+
   it("allows a valid capability scoped to the finding + installation", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
     const cap = mintScreenshotCapability({ findingId: "f_001", installationId: "1", exp: 100_000 }, SECRET);
