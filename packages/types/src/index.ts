@@ -16,6 +16,8 @@ export type {
   Finding,
   GateReviewRequest,
   GateReviewResult,
+  PreviewBuildFact,
+  PreviewBuildFactKind,
 } from "./review.js";
 export type {
   FeedbackEventType,

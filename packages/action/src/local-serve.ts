@@ -26,6 +26,8 @@ export type LocalServerReason = "spawn_failed" | "early_exit" | "not_ready" | "r
 export interface LocalServerHandle {
   url: string;
   pid: number;
+  /** Captured stdout+stderr so far (bounded ring buffer) — the build/boot log (#70 U1). */
+  output(): string;
   /** Terminate the process group (SIGTERM -> grace -> SIGKILL). Idempotent. */
   stop(): Promise<void>;
 }
@@ -195,7 +197,7 @@ export async function startLocalServer(
   });
 
   if (result.ready && pid !== undefined && !exited) {
-    return { ok: true, server: { url: options.url, pid, stop } };
+    return { ok: true, server: { url: options.url, pid, output: () => tail, stop } };
   }
 
   // Not ready: classify from the poll outcome BEFORE teardown — calling stop()

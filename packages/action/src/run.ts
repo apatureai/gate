@@ -8,8 +8,10 @@ import {
 } from "@gate/delivery";
 import { type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
+import type { PreviewBuildFact } from "@gate/types";
 import { type ProviderComment, resolvePreviewUrl } from "./preview.js";
 import type { LocalServerHandle, LocalServerStartResult } from "./local-serve.js";
+import { parsePreviewBuildFacts } from "./build-facts.js";
 
 /**
  * Injected local-serve supervisor (#70). `cwd` + the allowlisted `env` are
@@ -154,6 +156,7 @@ export async function runAction(
   // — and guarantee teardown. Higher-priority sources (explicit/template/bot)
   // never reach here with source "local", so they never spawn anything.
   let server: LocalServerHandle | null = null;
+  let previewBuildFacts: PreviewBuildFact[] | undefined;
   if (resolved.resolution.source === "local" && deps.startLocalServer && inputs.previewCommand) {
     // Fork gate: running a fork's long-lived server under the app identity is the
     // repo owner's explicit opt-in. Same-repo PRs always run.
@@ -176,6 +179,9 @@ export async function runAction(
       return { status: "no_preview", conclusion: "neutral", notReviewed: started.reason };
     }
     server = started.server;
+    // U1: turn the build/boot log into grounded facts for the engine critique.
+    const facts = parsePreviewBuildFacts(server.output());
+    if (facts.length > 0) previewBuildFacts = facts;
   }
 
   try {
@@ -190,6 +196,7 @@ export async function runAction(
         config: sanitizedConfig,
         publishMode,
         depth: "deep",
+        ...(previewBuildFacts ? { previewBuildFacts } : {}),
       });
     } catch {
       // Engine unavailable / contract violation: neutral Check Run, never fail the PR.

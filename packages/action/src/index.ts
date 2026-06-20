@@ -20,6 +20,7 @@ export type {
   PreviewDiscoveryInput,
   ProviderComment,
 } from "./preview.js";
+export { parsePreviewBuildFacts } from "./build-facts.js";
 export { startLocalServer, buildAllowlistedEnv } from "./local-serve.js";
 export type {
   LocalServerReason,

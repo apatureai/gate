@@ -163,11 +163,11 @@ describe("runAction local-serve (#70 Part 4)", () => {
     ...DEFAULT_CONFIG,
     preview: { ...DEFAULT_CONFIG.preview, forkPreview: true },
   };
-  function fakeServer() {
+  function fakeServer(output = "") {
     const stop = vi.fn(async () => {});
     const startLocalServer = vi.fn(async (_cmd: string, opts: { url: string }) => ({
       ok: true as const,
-      server: { url: opts.url, pid: 4242, stop },
+      server: { url: opts.url, pid: 4242, output: () => output, stop },
     }));
     return { startLocalServer, stop };
   }
@@ -213,6 +213,15 @@ describe("runAction local-serve (#70 Part 4)", () => {
 
     expect(startLocalServer).toHaveBeenCalledOnce();
     expect(outcome.status).toBe("reviewed");
+  });
+
+  it("attaches previewBuildFacts (U1) from the boot log to the engine request", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer("Warning: Text content did not match. Hydration failed...");
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+    const req = (engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(req.previewBuildFacts?.[0]?.kind).toBe("hydration");
   });
 
   it("a not-ready preview server => neutral not-reviewed, never an engine call", async () => {
