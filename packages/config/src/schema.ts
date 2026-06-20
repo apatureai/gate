@@ -28,6 +28,11 @@ const previewSchema = z
     ready_selector: z.string().nullable().default(null),
     protection_bypass: z.string().nullable().default(null),
     auth: z.string().nullable().default(null),
+    // Run the local-serve `preview-command` on FORK PRs (#70). Default off:
+    // local-serve runs the PR's own code, and on a fork that is untrusted, so
+    // booting a long-lived server under the app's identity must be the repo
+    // owner's explicit opt-in. Same-repo PRs always run local-serve.
+    fork_preview: z.boolean().default(false),
   })
   .strict()
   .default({});

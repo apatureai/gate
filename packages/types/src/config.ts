@@ -41,6 +41,8 @@ export type NormalizedPreviewConfig = {
   protectionBypassSecretName: string | null;
   /** Name of the secret holding Playwright storage state; never the secret itself. */
   authStateSecretName: string | null;
+  /** Run the local-serve preview-command on fork PRs (#70). Default false. */
+  forkPreview: boolean;
 };
 
 export type NormalizedRoutesConfig = {

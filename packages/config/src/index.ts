@@ -37,6 +37,7 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
       readySelector: raw.preview.ready_selector,
       protectionBypassSecretName: raw.preview.protection_bypass,
       authStateSecretName: raw.preview.auth,
+      forkPreview: raw.preview.fork_preview,
     },
     routes: {
       always: raw.routes.always,
