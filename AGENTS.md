@@ -187,9 +187,10 @@ but over-engineering for the wedge, already a follow-up).
 - readiness: use the Part-1 poller; ready = HTTP status in {2xx,3xx,400,401,402,403}
   (DR-10); check child-exit each iteration first (→ early_exit); spawn error → spawn_failed.
 - **U2 hostile-redirect guard:** probe with `redirect:"manual"` (never follow). A
-  3xx whose `Location` resolves off-loopback ⇒ not a ready signal; fail with a
-  clear "preview redirected off localhost" reason. Defends the hosted engine from
-  a fork steering it off-box.
+  3xx whose `Location` resolves off-loopback ⇒ fail with the distinct
+  `redirected_off_loopback` reason (its own Check Run message), not a silent
+  follow and not a generic `not_ready`. Defends the hosted engine from a fork
+  steering it off-box.
 - stop(): group-kill the tree (`process.kill(-pgid,'SIGTERM')`) → execa's
   forceKillAfterDelay/own escalation handles SIGKILL after `graceMs`; before any
   manual SIGKILL re-check group liveness (`kill(-pgid,0)`); swallow ESRCH;
@@ -241,3 +242,77 @@ but over-engineering for the wedge, already a follow-up).
 - cgroup/ulimit pids+mem cap on the spawned server (D6 availability gap).
 - Configurable ready-path/expected-status (D1 enhancement).
 - Windows runner support (Action is a Linux container; teardown is POSIX).
+
+## Implementation-ready details (so "start building" is zero-ambiguity)
+
+### Types (exact)
+```ts
+// packages/action/src/local-serve.ts
+export type LocalServerReason =
+  | "spawn_failed"            // command never started (ENOENT, bad shell)
+  | "early_exit"             // started then exited before ready
+  | "not_ready"              // ceiling hit, never an accepted status
+  | "redirected_off_loopback"; // U2: probe 3xx Location left loopback
+
+export interface LocalServerHandle { url: string; pid: number; stop(): Promise<void>; } // stop() idempotent
+export type LocalServerStartResult =
+  | { ok: true; server: LocalServerHandle }
+  | { ok: false; reason: LocalServerReason; detail: string; tail?: string };
+
+export interface StartLocalServerOptions {
+  url: string; cwd: string; env: Record<string, string>;
+  ceilingMs?: number;   // default 120_000
+  graceMs?: number;     // default 5_000 (== execa forceKillAfterDelay default)
+  pollIntervalMs?: number; // default 2_000
+  spawnImpl?: SpawnFn;  // default execa; tests inject a fake/fixture
+  fetchImpl?: typeof fetch; now?: () => number; sleep?: (ms: number) => Promise<void>;
+}
+```
+
+### Child env — allowlist (default-deny), exact keys
+Pass ONLY: `PATH`, `HOME`, `LANG`, `LC_ALL`, `TMPDIR`, `TERM`, `CI`, `GITHUB_WORKSPACE`,
+`RUNNER_OS`, `RUNNER_TEMP`, `NODE_ENV` (pass-through if set). Everything else dropped.
+Never pass `JUDGMENT_ENGINE_API_KEY`, `JUDGMENT_ENGINE_HMAC_SECRET`, `GITHUB_TOKEN`,
+`INPUT_*`, or anything matching `/(_SECRET|_TOKEN|_KEY|PASSWORD)$/i`. Implement as an
+allowlist, not a denylist, so a new secret env var can never leak by omission.
+
+### U1 wire type (`@gate/types`, additive)
+```ts
+export type PreviewBuildFactKind = "compile_error" | "warning" | "asset_error" | "hydration" | "deprecation";
+export interface PreviewBuildFact { kind: PreviewBuildFactKind; message: string; source?: string; }
+// GateReviewRequest gains:  previewBuildFacts?: PreviewBuildFact[]   (optional → golden fixture byte-unchanged)
+```
+Engine must parse the request with the field optional/passthrough (Zod `.optional()` /
+passthrough). Consuming it = `[judgment-engine #N]`; until then carried + ignored.
+
+### Failure → Check Run copy (neutral, current-head guarded; tail is redact()'d + fenced, failure-only)
+- spawn_failed → "Preview not started — `preview-command` failed to launch."
+- early_exit → "Preview server exited before it was ready (exit N). Not reviewed."
+- not_ready → "Preview server did not respond at <url> within <ceiling>s. Not reviewed."
+- redirected_off_loopback → "Preview redirected off localhost (<host>); refused for safety."
+- fork gate → "Local preview is disabled for fork PRs; set `fork_preview: true` to enable."
+
+### Test matrix (vitest names)
+Part 3 `local-serve.test.ts`: ready / early_exit / not_ready / redirected_off_loopback /
+orphan-process-group-both-dead / grace→SIGKILL (SIGTERM-trapping fixture) / env-isolation /
+ready-status-set (401,302 ready; 404,503 not). Part 4 `run.test.ts`: spawns-only-on-local /
+fork-gate-off-skips / fork-gate-on-spawns / failure→neutral+tail+no-engine-call /
+success→review+teardown / higher-priority-source→no-spawn. Part 1: existing readiness tests +
+early-exit-short-circuit + acceptStatus-default-200. Part 6 `build-facts.test.ts`: Vite/Next/
+webpack output fixtures → expected facts; runAction attaches when present.
+
+### Per-part size + definition of done
+- P1 hoist+predicate+abortOnChildExit — **S** — DoD: green; App-path readiness behavior identical.
+- P2 fork_preview config — **XS** — DoD: schema+type+default-false tested.
+- P3 local-serve supervisor — **L** (the core) — DoD: all 8 fixture tests green; no orphan/leak in any.
+- P4 runAction wiring — **M** — DoD: fork gate + teardown + failure mapping tested with a fake supervisor.
+- P5 main.ts + Dockerfile init + README — **M** — DoD: `next`-free; signal handlers wired; README section.
+- P6 build-facts (U1) — **M** — DoD: parser table-tested; additive wire field; golden unchanged; engine dep filed.
+
+### Risk register (all mitigated in-design)
+- Detached child survives a normally-exiting parent → teardown on every path (finally+signals) + tini PID-1 (DR-2).
+- Pipe buffer deadlock on a chatty server → continuous ring-buffer drain.
+- PID reuse between SIGTERM and SIGKILL → only KILL if not-exited + `kill(-pgid,0)` liveness check.
+- `waitForReadiness` move regresses App path → injectable `acceptStatus` default-200 + re-export.
+- Fork ACE → env allowlist + loopback-only + ephemeral runner + fork opt-in (contained, not eliminated).
+- Cross-repo wire field → optional/additive; engine tolerates; golden fixture byte-unchanged.
