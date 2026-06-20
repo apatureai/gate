@@ -109,6 +109,46 @@ MCP TypeScript SDK #2023): a `close()`/teardown that signals only the direct
 child leaves an orphan tree, and a `detached` child outlives a normally-exiting
 parent. Our teardown-on-every-path + group kill + tini backstop is the answer.
 
+## Unique differentiators (beyond the standard)
+Playwright/execa/start-server-and-test all treat the dev server as an **opaque box
+to wait on, then kill**. Gate is the only one of these that (a) spawns the server
+specifically to feed a **vision-model design review** and (b) runs **untrusted
+fork code**. Those two facts unlock two things no standard tool does. This is the
+layer that makes #70 ours, not a reimplementation.
+
+**U1 — the supervisor is a REVIEW SIGNAL SOURCE, not just a launcher (headline).**
+We already capture the preview-command's stdout/stderr (for the D2 diagnostics
+tail). Parse it for structured build/runtime diagnostics — framework-agnostic
+patterns: "Failed to compile", webpack/vite/next warnings, hydration mismatch
+warnings, missing-asset / chunk-load errors, deprecation notices — and emit them
+as `previewBuildFacts` on the `GateReviewRequest`. The hosted engine then grounds
+the critique in the **build's own truth**, not just pixels: a hydration warning, a
+404'd font, or a failed CSS build is a design-quality signal a VLM would otherwise
+have to infer (or miss) from a screenshot. No standard tool does this because no
+standard tool is feeding a design reviewer. Marginal cost is low (we parse output
+we already buffer). Wire impact: additive field behind `x-schema-version`, golden
+fixture stays byte-compatible; the **engine consuming it is a judgment-engine
+change** (cross-repo dep) — Gate attaches the facts now, the engine uses them when
+ready. This is the differentiator; prioritize it.
+
+**U2 — defend the hosted reviewer against a hostile fork server (unique security
+edge).** Standard `webServer` tools follow redirects blindly. We point a *hosted
+engine* at a server *the fork controls*. A fork's dev server can 3xx the readiness
+probe (or the engine) to a non-loopback host to exfiltrate or to steer the engine
+at attacker infra. So: the readiness probe **does not follow redirects**, and a
+3xx whose `Location` is non-loopback ⇒ refuse handoff (not_ready + a clear
+"preview redirected off localhost" reason), not a silent follow. Complements the
+existing loopback-only `verifyPreviewHandoff` (which only checks the initial URL,
+not runtime redirects) and the env allowlist. Cheap, on-domain, and no standard
+tool bothers because none of them are pointing a privileged agent at untrusted
+code. Fold into Part 3.
+
+**Considered and rejected (honesty over novelty):** adaptive readiness ceiling
+tied to review depth (real but premature — the engine short-circuits triage
+anyway); per-repo boot-time "taste memory"/caching hints (DX sugar, not core);
+cgroup/eBPF honeypot for a misbehaving fork server (the D6 availability gap — real
+but over-engineering for the wedge, already a follow-up).
+
 ## Parts (implement in order)
 
 ### Part 1 — hoist `waitForReadiness` to `@gate/engine` + `abortOnChildExit`
@@ -146,6 +186,10 @@ parent. Our teardown-on-every-path + group kill + tini backstop is the answer.
   `JUDGMENT_ENGINE_API_KEY`, `JUDGMENT_ENGINE_HMAC_SECRET`, `GITHUB_TOKEN`, storageState.
 - readiness: use the Part-1 poller; ready = HTTP status in {2xx,3xx,400,401,402,403}
   (DR-10); check child-exit each iteration first (→ early_exit); spawn error → spawn_failed.
+- **U2 hostile-redirect guard:** probe with `redirect:"manual"` (never follow). A
+  3xx whose `Location` resolves off-loopback ⇒ not a ready signal; fail with a
+  clear "preview redirected off localhost" reason. Defends the hosted engine from
+  a fork steering it off-box.
 - stop(): group-kill the tree (`process.kill(-pgid,'SIGTERM')`) → execa's
   forceKillAfterDelay/own escalation handles SIGKILL after `graceMs`; before any
   manual SIGKILL re-check group liveness (`kill(-pgid,0)`); swallow ESRCH;
@@ -176,6 +220,22 @@ parent. Our teardown-on-every-path + group kill + tini backstop is the answer.
 - Dockerfile: PID-1 init (DR-2).
 - README: `preview-command` minimal example + readiness/cleanup/fork behavior.
 - Depends on Part 4. (`main.ts` is the ops entrypoint; light/no unit coverage.)
+
+### Part 6 — build-signal facts (U1, the differentiator)
+- New pure `parsePreviewBuildFacts(output: string): PreviewBuildFact[]` in
+  `@gate/action` (or `@gate/engine` if shared): framework-agnostic regex/heuristics
+  over the captured ring-buffer output → structured facts
+  `{ kind:"compile_error"|"warning"|"asset_error"|"hydration"|"deprecation", message, source? }`,
+  deduped + capped.
+- Add `previewBuildFacts?: PreviewBuildFact[]` to `GateReviewRequest` in
+  `@gate/types` — **additive, behind `x-schema-version`; golden fixture unchanged**.
+  `runAction` attaches the facts from Part 3's output to the engine request.
+- The engine *consuming* these facts to ground the critique is a **judgment-engine
+  issue** (cross-repo): tag `[judgment-engine #N]`. Gate emits now; engine uses
+  when implemented. Until then the field is carried and ignored (no harm).
+- Tests: pure-parser table tests (real Vite/Next/webpack output fixtures →
+  expected facts); `runAction` attaches facts when present; absent on non-local /
+  no-output paths. Depends on Part 3 (the output buffer). Independent of 4/5.
 
 ### Out of scope → file as a separate follow-up issue
 - cgroup/ulimit pids+mem cap on the spawned server (D6 availability gap).
