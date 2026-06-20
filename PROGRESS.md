@@ -85,3 +85,8 @@ How the loop uses it:
 - [ ] #62 - Orchestrator: live App-path server composition root (server.ts wiring) -> ready; all building blocks merged. Loop implements next.
 - [ ] #63 - Dashboard: Next.js application shell rendering the @gate/dashboard core -> UI app over the tested core; build separately from the tsc-b/vitest harness.
 - [~] #64 - Ops: production go-live checklist -> skipped: human/ops only (cloud accounts, credentials, branch protection, KMS); NOT auto-implementable by the loop. Tracking issue for go-live.
+- [~] #65 - Data: scope completed-review uniqueness by repository -> in-flight: Codex PR #67 open (review-merge loop handles it). Build loop: skip until merged.
+- [~] #66 - Infra: upgrade Vitest and Vite past audited vulnerabilities -> in-flight: Codex PR #68 open (review-merge loop handles it). Build loop: skip until merged.
+- [ ] #69 - Data: persist completed hosted reviews and durable review windows -> P1 bug; durable hosted-review persistence + review-window store (pglite-tested), composes with the depth-policy window (#7/#43).
+- [ ] #70 - Action: execute and supervise preview-command local server -> P1; spawn/supervise the preview command + readiness wait on the Action path. Stub the actual child process in tests (never launch a real server in CI).
+- [ ] #71 - Security: persist collision-safe stable screenshot artifact identities -> P1 bug; collision-safe stable artifact ids for the /i/<id>.png routes (content/identity-addressed), composes with #61 authorization + #12 tombstones.
