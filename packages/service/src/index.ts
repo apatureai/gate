@@ -78,6 +78,7 @@ export {
   mintFeedbackToken,
   verifyFeedbackToken,
   createInMemoryConsumedStore,
+  createSqlConsumedStore,
 } from "./feedback-token.js";
 export type { FeedbackVotePayload, VerifyTokenResult, ConsumedTokenStore } from "./feedback-token.js";
 export { registerFeedbackRoutes, parseDesignReviewCommand } from "./feedback-routes.js";

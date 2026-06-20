@@ -43,7 +43,11 @@ export function signEngineRequest(params: {
   };
 }
 
-export type VerifyFailureReason = "missing_signature" | "signature_mismatch" | "timestamp_skew";
+export type VerifyFailureReason =
+  | "missing_signature"
+  | "missing_installation"
+  | "signature_mismatch"
+  | "timestamp_skew";
 
 export type VerifyResult = { ok: true } | { ok: false; reason: VerifyFailureReason };
 
@@ -61,6 +65,7 @@ export function verifyEngineRequest(params: {
   maxSkewMs?: number;
   now?: number;
 }): VerifyResult {
+  if (!params.installationId) return { ok: false, reason: "missing_installation" };
   if (!params.signature) return { ok: false, reason: "missing_signature" };
 
   const expected = createHmac("sha256", params.secret)
@@ -78,7 +83,10 @@ export function verifyEngineRequest(params: {
 
   if (params.maxSkewMs !== undefined) {
     const now = params.now ?? Date.now();
-    if (Math.abs(now - Number(params.timestamp)) > params.maxSkewMs) {
+    const ts = Number(params.timestamp);
+    // A non-numeric/empty timestamp must FAIL the skew check, not silently pass
+    // it (every NaN comparison is false). Mirrors the engine-side verifier.
+    if (!Number.isFinite(ts) || Math.abs(now - ts) > params.maxSkewMs) {
       return { ok: false, reason: "timestamp_skew" };
     }
   }

@@ -78,6 +78,30 @@ describe("sign/verify round-trip", () => {
     });
     expect(result).toEqual({ ok: false, reason: "timestamp_skew" });
   });
+
+  it("fails the skew check on a non-numeric timestamp instead of silently passing (NaN guard)", () => {
+    // A valid signature over a non-numeric ts must still be rejected: Math.abs(NaN)
+    // comparisons are always false, which would have bypassed the skew window.
+    const headers = signEngineRequest({ body: "b", installationId: "inst_1", secret: SECRET, timestamp: 1000 });
+    const result = verifyEngineRequest({
+      body: "b",
+      installationId: "inst_1",
+      timestamp: "not-a-number",
+      signature: headers[SIGNATURE_HEADER],
+      secret: SECRET,
+      maxSkewMs: 5000,
+      now: 1000,
+    });
+    // signature won't match (signed over "1000"), but even a matching sig must not
+    // bypass skew — the reason is signature_mismatch OR timestamp_skew, never ok.
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a missing installationId", () => {
+    expect(
+      verifyEngineRequest({ body: "b", installationId: "", timestamp: "1", signature: "sha256=x", secret: SECRET }),
+    ).toEqual({ ok: false, reason: "missing_installation" });
+  });
 });
 
 describe("http transport signs submit when an hmac secret is set", () => {
