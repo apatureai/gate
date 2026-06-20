@@ -131,6 +131,41 @@ documentation gaps into reviewable work.
 
 ## Self-improvement log (newest first)
 
+- 2026-06-20: Build loop repointed here from judgment-engine (its build backlog
+  is live-infra-exhausted). Merged the two Codex PRs first (#67 repo-scoped run
+  identity, #68 vitest/vite security), then resolved the resulting agent/build↔main
+  merge (PROGRESS conflict + regenerated pnpm-lock via `pnpm install`). Shipped
+  #62 (live App-path composition root) + #69 (durable RunStore); triaged #63 [~]
+  (Next.js app, outside the harness). 342 tests green. Learnings:
+  - **After the review-merge loop merges Codex PRs, agent/build will conflict on
+    PROGRESS.md + pnpm-lock.yaml.** Resolve PROGRESS by hand (keep both the
+    merged `[x]` and any agent/build hardening notes), take main's lockfile
+    (`git checkout --theirs pnpm-lock.yaml`), then `pnpm install` to reconcile it
+    with the merged package.json. Re-mark the Codex issues `[x] done via PR #N`.
+  - **Service must not import @gate/action.** The App path needed a GitHub
+    comments/check-run client; `@gate/action`'s `createGitHubApi` is the right
+    shape but lives in the top consumer. Built the in-layer peer
+    `createAppReviewClient` (alongside `createGitHubPullsClient`) — same pattern,
+    no layering inversion.
+  - **A new src-level cross-package import = add BOTH the package.json dep AND a
+    tsconfig `references` entry.** Vitest's alias resolves it (tests pass) while
+    `tsc -b` fails with "Cannot find module" until the project reference exists.
+    `@gate/db`/`@gate/secrets` are devDeps (test-only) so they're NOT in refs;
+    `@gate/config` became a real dep (DEFAULT_CONFIG in src) so it needed both.
+  - **Composition roots: inject the infra-bound clients, keep one env seam.**
+    `createProductionAppServer(deps)` is fully testable with fakes + a mock engine
+    (a signed deployment_status → worker → hydrate → runHostedReview → publish);
+    the env construction (SecretStore→App auth→engine transport→Redis/SQL) is the
+    single documented go-live seam in server.ts (#64), not scattered env reads.
+  - **A no-op UPDATE is a silent durability bug.** `recordFullReview` UPDATE'd
+    `runs.last_full_review_at` but the hosted path never INSERT'd a run row, so the
+    10-min cap reset every restart. Fix = one upsert that creates the row AND sets
+    the timestamp (COALESCE so triage never clears a prior deep ts), persisting
+    only completed/publish-guarded reviews.
+  - **UI apps (Next.js) don't fit this loop's gate.** `next build` is a separate
+    toolchain with no harness unit tests; mark such issues `[~]` (the tested core
+    already exists) rather than bolting a new toolchain onto the loop.
+
 - 2026-06-16: Initialized playbook after M0 (#30,#31,#32,#33,#34,#35,#36,#50) +
   M1 #27/#8. Established the conventions and gotchas above.
 - 2026-06-16: A maintainer added vitest `resolve.alias` so `@gate/*` → source.
