@@ -23,9 +23,18 @@ as living memory: append concrete learnings, prune anything that proved wrong.
    Never leave the tree red or a commit half-done.
 4. Verify every slice: `pnpm install` (if deps changed), `pnpm typecheck`,
    `pnpm test`, `pnpm lint` — all green before committing.
-5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push,
-   update the current open build PR (or open a new one if the previous PR was
-   merged/closed), and comment on the issue.
+5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push, and
+   comment on the issue. **PR scope: one PR per milestone, not one ever-growing
+   PR.** Keep a single open build PR for the *current* milestone (M0/M1/…);
+   title it for that milestone with `Closes #<N>` per issue landed. When the
+   milestone's issues are all done, leave that PR for human review/merge and open
+   a fresh PR for the next milestone (base `main`). A giant 80-commit PR is
+   unreviewable — milestone-sized PRs (~10–25 commits) get reviewed and merged,
+   which keeps `agent/build` close to `main`. (Learned 2026-06-20: one rolling PR
+   had to be split into stacked review PRs after the fact; do it incrementally.)
+   - If you ever need post-hoc review branches, cut them from an `agent/build`
+     that has ALREADY merged latest `main` — otherwise early snapshots conflict
+     on `pnpm-lock.yaml` and can't merge phase-by-phase.
 6. **Before ending, improve this file** with new learnings from the run.
 
 ## Backlog-exhaustion protocol
