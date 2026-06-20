@@ -102,6 +102,8 @@ export { hydrateReviewContext } from "./hydrate.js";
 export type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
 export { createGitHubPullsClient } from "./github-pulls.js";
 export type { GitHubPullsClient } from "./github-pulls.js";
+export { createAppReviewClient } from "./app-github.js";
+export type { AppReviewClient, AppReviewTarget } from "./app-github.js";
 export { createSqlTenantDeleter, offboardTenant } from "./offboarding.js";
 export type {
   DeletedRowCounts,
