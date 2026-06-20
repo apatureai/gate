@@ -20,6 +20,13 @@ export type {
   PreviewDiscoveryInput,
   ProviderComment,
 } from "./preview.js";
+export { startLocalServer, buildAllowlistedEnv } from "./local-serve.js";
+export type {
+  LocalServerReason,
+  LocalServerHandle,
+  LocalServerStartResult,
+  StartLocalServerOptions,
+} from "./local-serve.js";
 
 /**
  * Minimal GitHub token permissions the Action path requires.
