@@ -135,8 +135,22 @@ documentation gaps into reviewable work.
   is live-infra-exhausted). Merged the two Codex PRs first (#67 repo-scoped run
   identity, #68 vitest/vite security), then resolved the resulting agent/build↔main
   merge (PROGRESS conflict + regenerated pnpm-lock via `pnpm install`). Shipped
-  #62 (live App-path composition root) + #69 (durable RunStore); triaged #63 [~]
-  (Next.js app, outside the harness). 342 tests green. Learnings:
+  #62 (live App-path composition root), #69 (durable RunStore), and #71
+  (collision-safe screenshot artifact ids); triaged #63 [~] (Next.js app, outside
+  the harness). Also merged 6 sibling-repo research PRs and left core #103 (CI
+  red: empty ANTHROPIC_API_KEY). 350 tests green. Learnings:
+  - **A run-local id is never an auth/route key (#71).** The engine's `findingId`
+    is only unique within a run (golden fixture reuses `f_001`), so keying `/i/:id`
+    + capabilities by it let a token resolve a collided artifact in another
+    run/repo. Fix = a deterministic collision-safe id
+    `sha256(installation:owner:name:headSha:findingId)` (`deriveArtifactId`) in the
+    SHARED `@gate/types` so the App service AND dashboard derive the SAME id with
+    no lookup (avoids duplication + a service↔dashboard dep).
+  - **Default-deny tenant RLS is incompatible with bearer-token + capability
+    reads.** `/i` serves anonymous-public + capability-private artifacts with NO
+    tenant GUC, so a default-deny policy 404s them. The boundary there is the
+    unguessable id + route auth (#61) + explicit `installation_id` scoping + an FK
+    cascade — and DOCUMENT why RLS is omitted on that table so nobody "fixes" it.
   - **After the review-merge loop merges Codex PRs, agent/build will conflict on
     PROGRESS.md + pnpm-lock.yaml.** Resolve PROGRESS by hand (keep both the
     merged `[x]` and any agent/build hardening notes), take main's lockfile
