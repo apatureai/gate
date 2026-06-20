@@ -131,13 +131,18 @@ export {
   capabilityScreenshotUrl,
   buildRunUrl,
   buildScreenshotRecords,
+  deriveArtifactId,
   mintScreenshotCapability,
   verifyScreenshotCapability,
+  createInMemoryScreenshotRegistry,
+  createSqlScreenshotRegistry,
 } from "./screenshots.js";
 export type {
   ScreenshotVisibility,
+  ArtifactScope,
   ScreenshotRecord,
   ScreenshotRegistry,
+  ScreenshotRegistryWriter,
   SignedUrlProvider,
   ScreenshotAuthorizer,
   ScreenshotRouteOptions,

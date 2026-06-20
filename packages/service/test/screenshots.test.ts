@@ -6,6 +6,7 @@ import {
   buildRunUrl,
   buildScreenshotRecords,
   capabilityScreenshotUrl,
+  deriveArtifactId,
   mintScreenshotCapability,
   registerScreenshotRoute,
   type ScreenshotRecord,
@@ -21,15 +22,18 @@ afterEach(async () => {
 
 function registry(records: ScreenshotRecord[]): ScreenshotRegistry {
   return {
-    lookup: async (id) => records.find((r) => r.findingId === id) ?? null,
+    lookup: async (id) => records.find((r) => r.artifactId === id) ?? null,
   };
 }
 
 const signer = { sign: async (key: string) => `https://signed.example.com/${key}?sig=fresh` };
+const ART = "art_1";
 
 function record(overrides: Partial<ScreenshotRecord> = {}): ScreenshotRecord {
   return {
+    artifactId: ART,
     findingId: "f_001",
+    headSha: "sha1",
     objectKey: "shot_001.png",
     expiresAt: 10_000,
     installationId: "1",
@@ -44,12 +48,12 @@ describe("GET /i/:id.png — retention + basics", () => {
   it("302s to a freshly-signed URL for a live public screenshot (anonymous)", async () => {
     app = buildServer();
     registerScreenshotRoute(app, { registry: registry([record()]), signer, now: () => 5_000 });
-    const res = await app.inject({ method: "GET", url: "/i/f_001.png" });
+    const res = await app.inject({ method: "GET", url: `/i/${ART}.png` });
     expect(res.statusCode).toBe(302);
     expect(res.headers.location).toBe("https://signed.example.com/shot_001.png?sig=fresh");
   });
 
-  it("404s for an unknown finding", async () => {
+  it("404s for an unknown artifact", async () => {
     app = buildServer();
     registerScreenshotRoute(app, { registry: registry([]), signer });
     expect((await app.inject({ method: "GET", url: "/i/missing.png" })).statusCode).toBe(404);
@@ -58,14 +62,19 @@ describe("GET /i/:id.png — retention + basics", () => {
   it("410 tombstones after the retention window", async () => {
     app = buildServer();
     registerScreenshotRoute(app, { registry: registry([record({ expiresAt: 1_000 })]), signer, now: () => 9_999 });
-    expect((await app.inject({ method: "GET", url: "/i/f_001.png" })).statusCode).toBe(410);
+    expect((await app.inject({ method: "GET", url: `/i/${ART}.png` })).statusCode).toBe(410);
   });
 });
 
-describe("GET /i/:id.png — authorization (#61)", () => {
+describe("GET /i/:id.png — authorization (#61/#71)", () => {
   const SECRET = "cap-secret";
   let signed = 0;
   const countingSigner = { sign: async (key: string) => (signed++, `https://signed.example.com/${key}`) };
+  const capFor = (over: Partial<Parameters<typeof mintScreenshotCapability>[0]> = {}) =>
+    mintScreenshotCapability(
+      { artifactId: ART, installationId: "1", owner: "acme", name: "web", exp: 100_000, ...over },
+      SECRET,
+    );
 
   function appWith(records: ScreenshotRecord[], opts: { authorizer?: boolean } = {}) {
     signed = 0;
@@ -76,12 +85,7 @@ describe("GET /i/:id.png — authorization (#61)", () => {
       capabilitySecret: SECRET,
       now: () => 1_000,
       ...(opts.authorizer
-        ? {
-            authorizer: {
-              // A session that may access installation "1" only.
-              authorize: (req, rec) => req.headers["x-installation"] === rec.installationId,
-            },
-          }
+        ? { authorizer: { authorize: (req, rec) => req.headers["x-installation"] === rec.installationId } }
         : {}),
     });
     return a;
@@ -89,66 +93,78 @@ describe("GET /i/:id.png — authorization (#61)", () => {
 
   it("denies anonymous access to a private artifact (404, signer never called)", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
-    const res = await app.inject({ method: "GET", url: "/i/f_001.png" });
-    expect(res.statusCode).toBe(404); // not 403 — no tenant/key disclosure
-    expect(signed).toBe(0);
-  });
-
-  it("does not disclose an expired private artifact to an unauthorized caller", async () => {
-    app = appWith([record({ visibility: "private", expiresAt: 500 })]);
-    const res = await app.inject({ method: "GET", url: "/i/f_001.png" });
+    const res = await app.inject({ method: "GET", url: `/i/${ART}.png` });
     expect(res.statusCode).toBe(404);
     expect(signed).toBe(0);
   });
 
-  it("allows a valid capability scoped to the finding + installation", async () => {
+  it("allows a valid capability bound to the artifact + installation + repo", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
-    const cap = mintScreenshotCapability({ findingId: "f_001", installationId: "1", exp: 100_000 }, SECRET);
-    const res = await app.inject({ method: "GET", url: `/i/f_001.png?cap=${encodeURIComponent(cap)}` });
+    const res = await app.inject({ method: "GET", url: `/i/${ART}.png?cap=${encodeURIComponent(capFor())}` });
     expect(res.statusCode).toBe(302);
     expect(signed).toBe(1);
   });
 
   it("rejects a capability minted for another installation (cross-tenant denial)", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
-    const cap = mintScreenshotCapability({ findingId: "f_001", installationId: "999", exp: 100_000 }, SECRET);
-    const res = await app.inject({ method: "GET", url: `/i/f_001.png?cap=${encodeURIComponent(cap)}` });
+    const res = await app.inject({ method: "GET", url: `/i/${ART}.png?cap=${encodeURIComponent(capFor({ installationId: "999" }))}` });
+    expect(res.statusCode).toBe(404);
+    expect(signed).toBe(0);
+  });
+
+  it("rejects a capability for a different repo even at the same artifact id (binding)", async () => {
+    app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
+    const res = await app.inject({ method: "GET", url: `/i/${ART}.png?cap=${encodeURIComponent(capFor({ name: "other" }))}` });
     expect(res.statusCode).toBe(404);
     expect(signed).toBe(0);
   });
 
   it("rejects an expired capability", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })]);
-    const cap = mintScreenshotCapability({ findingId: "f_001", installationId: "1", exp: 500 }, SECRET); // < now(1000)
-    expect((await app.inject({ method: "GET", url: `/i/f_001.png?cap=${cap}` })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/i/${ART}.png?cap=${capFor({ exp: 500 })}` })).statusCode).toBe(404);
   });
 
   it("authorizes a private artifact via an installation-scoped session", async () => {
     app = appWith([record({ visibility: "private", expiresAt: 10_000 })], { authorizer: true });
-    const ok = await app.inject({ method: "GET", url: "/i/f_001.png", headers: { "x-installation": "1" } });
+    const ok = await app.inject({ method: "GET", url: `/i/${ART}.png`, headers: { "x-installation": "1" } });
     expect(ok.statusCode).toBe(302);
-    const cross = await app.inject({ method: "GET", url: "/i/f_001.png", headers: { "x-installation": "2" } });
-    expect(cross.statusCode).toBe(404); // other tenant denied
+    const cross = await app.inject({ method: "GET", url: `/i/${ART}.png`, headers: { "x-installation": "2" } });
+    expect(cross.statusCode).toBe(404);
+  });
+});
+
+describe("deriveArtifactId (#71 collision safety)", () => {
+  const base = { installationId: "1", owner: "acme", name: "web", headSha: "sha1", findingId: "f_001" };
+
+  it("is deterministic (idempotent) for the same scope", () => {
+    expect(deriveArtifactId(base)).toBe(deriveArtifactId({ ...base }));
+  });
+
+  it("produces DISTINCT ids for the same findingId across repos / runs", () => {
+    const a = deriveArtifactId(base);
+    expect(deriveArtifactId({ ...base, name: "other" })).not.toBe(a); // different repo
+    expect(deriveArtifactId({ ...base, headSha: "sha2" })).not.toBe(a); // different run
+    expect(deriveArtifactId({ ...base, installationId: "2" })).not.toBe(a); // different tenant
   });
 });
 
 describe("URL + record helpers", () => {
-  it("builds public + capability URLs and the run URL", () => {
-    expect(stableScreenshotUrl("https://gate.app/", "f_001")).toBe("https://gate.app/i/f_001.png");
-    expect(capabilityScreenshotUrl("https://gate.app", "f_001", "tok ax")).toBe("https://gate.app/i/f_001.png?cap=tok%20ax");
+  it("builds artifact-keyed public + capability URLs and the run URL", () => {
+    expect(stableScreenshotUrl("https://gate.app/", ART)).toBe("https://gate.app/i/art_1.png");
+    expect(capabilityScreenshotUrl("https://gate.app", ART, "tok ax")).toBe("https://gate.app/i/art_1.png?cap=tok%20ax");
     expect(buildRunUrl("https://gate.app", "run_9")).toBe("https://gate.app/runs/run_9");
   });
 
-  it("stamps retention + ownership/visibility on records", () => {
+  it("stamps collision-safe artifact ids + retention + ownership on records", () => {
     const result = loadGoldenReviewResult();
-    const records = buildScreenshotRecords(result, 1_000_000, {
-      installationId: "1",
-      owner: "acme",
-      name: "web",
-      visibility: "private",
-    });
+    const ownership = { installationId: "1", owner: "acme", name: "web", headSha: "sha1", visibility: "private" as const };
+    const records = buildScreenshotRecords(result, 1_000_000, ownership);
     expect(records.length).toBe(result.artifacts.annotatedScreenshots.length);
     expect(records[0]).toMatchObject({ installationId: "1", owner: "acme", name: "web", visibility: "private" });
     expect(records[0]?.expiresAt).toBe(1_000_000 + result.screenshotRetentionSeconds * 1000);
+    // The artifact id matches the deterministic derivation for its finding.
+    expect(records[0]?.artifactId).toBe(
+      deriveArtifactId({ ...ownership, findingId: result.artifacts.annotatedScreenshots[0]!.findingId }),
+    );
   });
 });

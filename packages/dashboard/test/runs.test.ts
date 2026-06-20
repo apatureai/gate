@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { pgliteExecutor, runMigrations } from "@gate/db";
-import { loadGoldenReviewResult } from "@gate/types";
+import { deriveArtifactId, loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
 import { buildFindingBrowser, listRunHistory, prUrl } from "../src/runs.js";
 
@@ -34,17 +34,28 @@ describe("listRunHistory", () => {
 describe("buildFindingBrowser", () => {
   it("maps findings to stable screenshot URLs + PR link", () => {
     const result = loadGoldenReviewResult();
-    const browser = buildFindingBrowser(result, {
+    const ctx = {
       baseUrl: "https://gate.app/",
+      installationId: "1",
       owner: "acme",
       name: "web",
       prNumber: 42,
-    });
+      headSha: "sha1",
+    };
+    const browser = buildFindingBrowser(result, ctx);
     expect(browser.prUrl).toBe("https://github.com/acme/web/pull/42");
     expect(browser.grade).toBe(result.grade);
 
     const withShot = browser.findings.find((f) => f.id === result.artifacts.annotatedScreenshots[0]?.findingId);
-    expect(withShot?.screenshotUrl).toBe(`https://gate.app/i/${withShot?.id}.png`);
+    // URL uses the collision-safe artifact id (#71), not the run-local finding id.
+    const expectedId = deriveArtifactId({
+      installationId: ctx.installationId,
+      owner: ctx.owner,
+      name: ctx.name,
+      headSha: ctx.headSha,
+      findingId: withShot!.id,
+    });
+    expect(withShot?.screenshotUrl).toBe(`https://gate.app/i/${expectedId}.png`);
 
     // a finding without an annotated screenshot has a null url
     const noShot = browser.findings.find((f) => !result.artifacts.annotatedScreenshots.some((s) => s.findingId === f.id));

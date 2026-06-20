@@ -1,4 +1,4 @@
-import type { Finding, GateReviewResult } from "@gate/types";
+import { deriveArtifactId, type Finding, type GateReviewResult } from "@gate/types";
 
 /**
  * Run history + finding browser data layer (TRD §13, §8). Gate stores run
@@ -62,8 +62,8 @@ export function prUrl(owner: string, name: string, prNumber: number): string {
   return `https://github.com/${owner}/${name}/pull/${prNumber}`;
 }
 
-function stableScreenshotUrl(baseUrl: string, findingId: string): string {
-  return `${baseUrl.replace(/\/$/, "")}/i/${findingId}.png`;
+function stableScreenshotUrl(baseUrl: string, artifactId: string): string {
+  return `${baseUrl.replace(/\/$/, "")}/i/${artifactId}.png`;
 }
 
 export interface FindingView extends Finding {
@@ -78,10 +78,16 @@ export interface FindingBrowser {
   findings: FindingView[];
 }
 
-/** Build the per-run finding browser from an engine result. */
+/**
+ * Build the per-run finding browser from an engine result. Screenshot URLs use
+ * the collision-safe artifact id (#71) — derived from the run's
+ * installation/repo/head-SHA + finding id — so they match the registry's stable
+ * route exactly and never collide across runs/repos (requires `installationId`
+ * + `headSha` in the context).
+ */
 export function buildFindingBrowser(
   result: GateReviewResult,
-  ctx: { baseUrl: string; owner: string; name: string; prNumber: number },
+  ctx: { baseUrl: string; installationId: string; owner: string; name: string; prNumber: number; headSha: string },
 ): FindingBrowser {
   const annotated = new Set(result.artifacts.annotatedScreenshots.map((s) => s.findingId));
   return {
@@ -90,7 +96,18 @@ export function buildFindingBrowser(
     overall: result.overall,
     findings: result.findings.map((f) => ({
       ...f,
-      screenshotUrl: annotated.has(f.id) ? stableScreenshotUrl(ctx.baseUrl, f.id) : null,
+      screenshotUrl: annotated.has(f.id)
+        ? stableScreenshotUrl(
+            ctx.baseUrl,
+            deriveArtifactId({
+              installationId: ctx.installationId,
+              owner: ctx.owner,
+              name: ctx.name,
+              headSha: ctx.headSha,
+              findingId: f.id,
+            }),
+          )
+        : null,
     })),
   };
 }

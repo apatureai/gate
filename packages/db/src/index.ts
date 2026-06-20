@@ -11,6 +11,7 @@ export const TABLES = [
   "feedback_events",
   "billing_customers",
   "webhook_log",
+  "screenshot_artifacts",
 ] as const;
 
 export type TableName = (typeof TABLES)[number];
