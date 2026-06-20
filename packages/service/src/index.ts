@@ -110,6 +110,8 @@ export { createGitHubPullsClient } from "./github-pulls.js";
 export type { GitHubPullsClient } from "./github-pulls.js";
 export { createAppReviewClient } from "./app-github.js";
 export type { AppReviewClient, AppReviewTarget } from "./app-github.js";
+export { createInMemoryRunStore, createSqlRunStore } from "./run-store.js";
+export type { RunStore, CompletedRunRecord } from "./run-store.js";
 export { createSqlTenantDeleter, offboardTenant } from "./offboarding.js";
 export type {
   DeletedRowCounts,

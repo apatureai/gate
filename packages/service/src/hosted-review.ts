@@ -15,6 +15,7 @@ import { resolveDeploymentPreview, type DeploymentStatusEvent } from "./deployme
 import { type ReviewJobPayload, reviewQueueKey } from "./queue.js";
 import type { ReviewJobWorker } from "./worker.js";
 import type { FullReviewWindowStore } from "./review-window.js";
+import type { RunStore } from "./run-store.js";
 import { currentShaKey, guardPublish, recordEnqueue, type SupersessionStore } from "./supersession.js";
 
 /**
@@ -39,6 +40,13 @@ export interface HostedReviewDeps {
   engine: JudgmentEngineClient;
   comments: GitHubCommentsApi;
   publishCheckRun(run: CheckRun): Promise<void>;
+  /**
+   * Durable completed-run store (#69). When set, a completed published review is
+   * persisted (and the deep full-review timestamp recorded) via one upsert,
+   * making dashboard/billing queries and the 10-min cap durable; the windowStore
+   * UPDATE no-ops without a run row, so this is the authoritative writer.
+   */
+  runStore?: RunStore;
   feedback?: FeedbackSink;
   /** Supersession signal from the worker (#48), threaded into the engine. */
   signal?: AbortSignal;
@@ -136,7 +144,27 @@ export async function runHostedReview(
   }
 
   if (outcome.status === "completed") {
-    await recordFullReviewIfDeep(deps.windowStore, repo, depth.depth, now());
+    if (deps.runStore) {
+      // One upsert persists the completed run + records the deep full-review
+      // timestamp (durable across restarts, #69); idempotent on the #65 identity.
+      const at = now();
+      await deps.runStore.recordCompletedRun({
+        installationId: ctx.installationId,
+        owner: repo.owner,
+        name: repo.name,
+        prNumber: repo.prNumber,
+        headSha: ctx.pullRequest.headSha,
+        grade: outcome.result.grade,
+        depth: depth.depth,
+        engineVersion: outcome.result.metadata.engineVersion,
+        model: outcome.result.metadata.model,
+        uiDnaVersion: outcome.result.metadata.uiDnaVersion,
+        lastFullReviewAtMs: depth.depth === "deep" ? at : undefined,
+        expiresAtMs: at + outcome.result.screenshotRetentionSeconds * 1000,
+      });
+    } else {
+      await recordFullReviewIfDeep(deps.windowStore, repo, depth.depth, now());
+    }
   }
 
   const decision = decideDelivery(outcome, {

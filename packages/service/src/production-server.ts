@@ -9,6 +9,7 @@ import { type DeploymentHandlerDeps, runHostedReview } from "./hosted-review.js"
 import { hydrateReviewContext, type PullRequestFetcher } from "./hydrate.js";
 import type { ReviewJobPayload } from "./queue.js";
 import type { FullReviewWindowStore } from "./review-window.js";
+import type { RunStore } from "./run-store.js";
 import { runStartupChecks, type StartupCheckDeps } from "./startup.js";
 import type { SupersessionStore } from "./supersession.js";
 import type { WebhookDedupeStore } from "./webhook-dedup.js";
@@ -43,6 +44,8 @@ export interface ProductionAppServerDeps {
   supersession: SupersessionStore;
   worker: ReviewJobWorker;
   windowStore: FullReviewWindowStore;
+  /** Durable completed-run store (#69); persists runs + the deep full-review window. */
+  runStore?: RunStore;
   /** Resolve the open PR for a deployment SHA (installation-authed lookup, #55). */
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
@@ -86,6 +89,7 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       engine: clients.engine,
       comments: clients.comments,
       publishCheckRun: clients.publishCheckRun,
+      runStore: deps.runStore,
       feedback: deps.feedback,
       signal: ctx.signal,
       runUrl: deps.runUrl?.(job),

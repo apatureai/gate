@@ -12,6 +12,7 @@ import {
 } from "../src/hosted-review.js";
 import { createInMemoryReviewWorker } from "../src/worker.js";
 import { createInMemoryFullReviewWindow } from "../src/review-window.js";
+import { createInMemoryRunStore } from "../src/run-store.js";
 import { createInMemorySupersessionStore, recordEnqueue } from "../src/supersession.js";
 
 const golden = loadGoldenReviewResult();
@@ -245,5 +246,51 @@ describe("createAppWebhookHandlers", () => {
     });
     await handlers.onPullRequest({ repository: { name: "web" } }); // missing owner/pr/sha
     expect(worker.cancel).not.toHaveBeenCalled();
+  });
+});
+
+describe("runHostedReview durable run persistence (#69)", () => {
+  it("persists a completed published review to the run store", async () => {
+    const runStore = createInMemoryRunStore();
+    const d = { ...deps(engine({ status: "completed", result: golden, jobId: "j" })), runStore };
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+
+    const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
+    expect(out.status).toBe("published");
+    expect(runStore.runs.size).toBe(1);
+    const [stored] = [...runStore.runs.values()];
+    expect(stored).toMatchObject({ owner: "acme", name: "web", prNumber: 42, headSha: "abc", grade: golden.grade });
+    expect(stored?.lastFullReviewAtMs).toBeTypeOf("number"); // deep -> window recorded
+  });
+
+  it("does NOT persist a run for superseded / stale / engine-error / unverified reviews", async () => {
+    // stale (newer push before publish)
+    const stale = { ...deps(engine({ status: "completed", result: golden, jobId: "j" })), runStore: createInMemoryRunStore() };
+    await recordEnqueue(stale.supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, stale)).status).toBe("stale_discarded");
+    expect(stale.runStore.runs.size).toBe(0);
+
+    // superseded (engine aborted)
+    const sup = { ...deps(engine(new EngineAbortedError("j"))), runStore: createInMemoryRunStore() };
+    await recordEnqueue(sup.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, sup)).status).toBe("superseded");
+    expect(sup.runStore.runs.size).toBe(0);
+
+    // engine error
+    const err = { ...deps(engine(new Error("503"))), runStore: createInMemoryRunStore() };
+    await recordEnqueue(err.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, err)).status).toBe("engine_error");
+    expect(err.runStore.runs.size).toBe(0);
+
+    // unverified preview
+    const unv = { ...deps(engine({ status: "completed", result: golden, jobId: "j" })), runStore: createInMemoryRunStore() };
+    await recordEnqueue(unv.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    const out = await runHostedReview(
+      DEFAULT_CONFIG,
+      { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } },
+      unv,
+    );
+    expect(out.status).toBe("unverified_preview");
+    expect(unv.runStore.runs.size).toBe(0);
   });
 });
