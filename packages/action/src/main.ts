@@ -3,6 +3,7 @@ import { loadDesignReviewConfig } from "@gate/config";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
 import type { GateMode } from "@gate/types";
 import { createGitHubApi } from "./github.js";
+import { buildAllowlistedEnv, startLocalServer as runLocalServer, type LocalServerHandle } from "./local-serve.js";
 import { runAction } from "./run.js";
 
 /**
@@ -62,6 +63,29 @@ async function main(): Promise<void> {
     }),
   );
 
+  // Local build-and-serve supervisor (#70): pre-bind the runner cwd + an
+  // allowlisted env (never the runner's secrets) and the dev-server PORT derived
+  // from the target URL. Track the live handle so a job cancellation (SIGTERM)
+  // tears the server down — on the Action path, supersession IS the cancelled job.
+  let activeServer: LocalServerHandle | null = null;
+  const startLocalServer = async (command: string, opts: { url: string }) => {
+    const env = buildAllowlistedEnv();
+    try {
+      const port = new URL(opts.url).port;
+      if (port) env.PORT = port;
+    } catch {
+      /* non-URL: let the command pick its own port */
+    }
+    const result = await runLocalServer(command, { url: opts.url, cwd: process.cwd(), env });
+    if (result.ok) activeServer = result.server;
+    return result;
+  };
+  const teardownOnSignal = (code: number): void => {
+    void Promise.resolve(activeServer?.stop()).finally(() => process.exit(code));
+  };
+  process.once("SIGINT", () => teardownOnSignal(130));
+  process.once("SIGTERM", () => teardownOnSignal(143));
+
   const outcome = await runAction(
     config,
     {
@@ -87,6 +111,7 @@ async function main(): Promise<void> {
       comments: gh.comments,
       getCurrentHeadSha: gh.getCurrentHeadSha,
       publishCheckRun: gh.publishCheckRun,
+      startLocalServer,
     },
   );
 
