@@ -23,3 +23,5 @@ export type {
   FeedbackEvent,
 } from "./feedback.js";
 export { GOLDEN_REVIEW_RESULT_PATH, loadGoldenReviewResult } from "./golden.js";
+export { deriveArtifactId } from "./artifact-id.js";
+export type { ArtifactScope } from "./artifact-id.js";

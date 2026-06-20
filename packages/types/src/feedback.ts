@@ -19,6 +19,8 @@ export type FeedbackActor = {
   login: string;
   /** Whether the actor is a repo collaborator; drives down-weighting. */
   isCollaborator: boolean;
+  /** Rater's repo permission level (admin/write/read/none), if known. */
+  permission?: string;
 };
 
 export type FeedbackEvent = {

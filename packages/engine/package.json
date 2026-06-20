@@ -1,0 +1,20 @@
+{
+  "name": "@gate/engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Gate-side judgment-engine async job client (POST/GET/DELETE /jobs, idempotency, poll/cancel).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gate/secrets": "workspace:*",
+    "@gate/types": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@gate/config": "workspace:*"
+  }
+}

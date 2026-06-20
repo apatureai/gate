@@ -3,6 +3,9 @@
   "references": [
     { "path": "packages/types" },
     { "path": "packages/config" },
+    { "path": "packages/engine" },
+    { "path": "packages/delivery" },
+    { "path": "packages/dashboard" },
     { "path": "packages/db" },
     { "path": "packages/redis" },
     { "path": "packages/secrets" },

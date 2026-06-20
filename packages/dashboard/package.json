@@ -1,0 +1,22 @@
+{
+  "name": "@gate/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Hosted dashboard core: GitHub OAuth, sessions, installation-scoped access, nav model. Consumed by the Next.js shell.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@gate/config": "workspace:*",
+    "@gate/secrets": "workspace:*",
+    "@gate/types": "workspace:*",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.0",
+    "@gate/db": "workspace:*"
+  }
+}

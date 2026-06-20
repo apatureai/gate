@@ -40,6 +40,8 @@ export function redact(value: unknown, seen: WeakSet<object> = new WeakSet()): u
     return looksLikeSignedUrl(value) || looksLikeImageData(value) ? REDACTED : value;
   }
   if (Array.isArray(value)) {
+    if (seen.has(value)) return "[Circular]";
+    seen.add(value);
     return value.map((item) => redact(item, seen));
   }
   if (value !== null && typeof value === "object") {
