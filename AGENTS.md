@@ -58,12 +58,56 @@ is language-agnostic: run an init process (tini / Docker `init: true`) as PID 1 
 SIGTERM is forwarded to the action and zombies are reaped. Add this to the Action
 Dockerfile (Part 5).
 
-**DR-3..8** = the debate-locked design decisions D1–D6 (readiness = first HTTP
-status < 500; failure-only secret-scrubbed Check Run tail; SIGTERM→5s→SIGKILL
-process-group teardown with liveness guard; run fork code contained + split
-same-repo vs fork behind a default-off `fork_preview`; reuse + hoist
-`waitForReadiness` to `@gate/engine` with `abortOnChildExit`; process-group +
-stripped env + ceiling, no containerize). See the issue spec for rationale.
+**DR-3..8** = the debate-locked design decisions D1–D6 (readiness; failure-only
+secret-scrubbed Check Run tail; SIGTERM→5s→SIGKILL process-group teardown with
+liveness guard; run fork code contained + split same-repo vs fork behind a
+default-off `fork_preview`; reuse + hoist `waitForReadiness` to `@gate/engine`
+with `abortOnChildExit`; process-group + stripped env + ceiling, no containerize).
+See the issue spec for rationale.
+
+**DR-9 Use `execa` for spawn + teardown — do not hand-roll signals/timers.**
+`execa` is the de-facto Node process library; its `forceKillAfterDelay` defaults
+to **5s** (SIGTERM→SIGKILL, exactly D3) and `cleanup:true` kills the child when
+the parent exits. We still spawn `detached:true` and group-kill (`-pgid`) for the
+*tree* (execa/`ChildProcess.kill` only signals the direct child). The
+injected-`spawnImpl` seam stays for tests. Rationale: the SIGTERM→SIGKILL
+escalation and parent-exit cleanup are subtle and library-hardened — the MCP
+TypeScript SDK shipped an orphan bug doing this by hand. The load-bearing
+correctness fact (industry-confirmed): **a detached child is NOT auto-killed when
+the parent exits normally** — so teardown on every path (`finally` + signal
+handlers) + the tini PID-1 backstop (DR-2) is mandatory, not optional.
+
+**DR-10 Readiness ready-status set = Playwright `webServer`'s exact set.** Ready =
+an HTTP response with status in {2xx, 3xx, 400, 401, 402, 403} (this is what
+Playwright's battle-tested `webServer` accepts). 404/405+/5xx and
+connection-refused = not ready, keep polling to the ceiling. Supersedes the
+looser "status < 500". Optional later enhancement: log-regex readiness (mirror
+Playwright's 2025 `wait` field) for servers whose HTTP readiness lies.
+
+## Industry-standard approaches & prior art (researched 2026-06-20)
+We are NOT inventing process supervision; we mirror the hardened references and
+borrow their tuning. What we take from each:
+- **Playwright `webServer`** (closest analog — boots a server, waits, points a
+  browser at it, tears it down): the **ready-status set** (DR-10), `detached`
+  process-group teardown with a SIGKILL fallback, `reuseExistingServer:!CI`
+  (always start fresh in CI), and the log-regex `wait` option (our optional
+  enhancement). https://playwright.dev/docs/test-webserver
+- **`execa`** (DR-9): `forceKillAfterDelay` (5s default = D3), `cleanup`,
+  `detached`. The spawn/teardown engine. https://www.npmjs.com/package/execa
+- **`start-server-and-test` / `wait-on`**: the canonical "start → wait → run →
+  shut down" CLI/readiness pattern; the design reference for the overall flow.
+  (Not adopted directly: they wrap a test *command*; our "test" is an in-process
+  engine review, not a shell command.)
+- **`tree-kill` / `execa-tree-kill`**: cross-platform tree teardown; only needed
+  if Windows support is ever added (we're Linux-only, so `-pgid` group kill
+  suffices). https://github.com/pkrumins/node-tree-kill
+- **tini / dumb-init**: container PID-1 init for signal forwarding + zombie
+  reaping (DR-2) — the standard Docker fix.
+
+Known failure mode the references all warn about (and one shipped as a bug —
+MCP TypeScript SDK #2023): a `close()`/teardown that signals only the direct
+child leaves an orphan tree, and a `detached` child outlives a normally-exiting
+parent. Our teardown-on-every-path + group kill + tini backstop is the answer.
 
 ## Parts (implement in order)
 
@@ -74,6 +118,10 @@ stripped env + ceiling, no containerize). See the issue spec for rationale.
 - Extend options with `abortOnChildExit?: () => boolean` (or an extra `AbortSignal`)
   so the loop short-circuits when the spawned child has exited, instead of polling
   a dead port to the ceiling.
+- Make the ready predicate injectable: `acceptStatus?: (status:number)=>boolean`,
+  **default = strict 200** so the App path is unchanged; the Action path (Part 3)
+  passes the Playwright set {2xx,3xx,400,401,402,403} (DR-10). This keeps Part 1 a
+  behavior-preserving refactor.
 - Verified safe: `@gate/engine` does not depend on `@gate/service` (no cycle);
   nothing but `service`/`e2e` import `service`.
 - Tests: move `readiness.test.ts`; add an early-exit short-circuit case. AC: green
@@ -90,19 +138,25 @@ stripped env + ceiling, no containerize). See the issue spec for rationale.
   `startLocalServer(command, { url, ceilingMs=120_000, graceMs=5_000, env, cwd, spawnImpl?, fetchImpl?, now?, sleep? })`
   → `{ ok:true; server } | { ok:false; reason:"spawn_failed"|"early_exit"|"not_ready"; detail }`;
   `LocalServerHandle = { url; stop():Promise<void> }` (idempotent).
-- spawn `{ shell:true, detached:true, cwd, env:<allowlist>, stdio:["ignore","pipe","pipe"] }`;
-  drain stdout/stderr into a bounded ~16KB ring buffer (continuous, never blocks).
+- spawn via **execa** (DR-9): `{ shell:true, detached:true, cwd, env:<allowlist>,
+  cleanup:true, forceKillAfterDelay:graceMs, stdio:["ignore","pipe","pipe"] }`.
+  Drain stdout/stderr into a bounded ~16KB ring buffer (continuous, never blocks).
+  Injected `spawnImpl` defaults to execa; tests pass a fake/fixture spawner.
 - env allowlist: PATH/HOME/cwd/NODE_ENV/CI + standard runner vars; NEVER
   `JUDGMENT_ENGINE_API_KEY`, `JUDGMENT_ENGINE_HMAC_SECRET`, `GITHUB_TOKEN`, storageState.
-- readiness: use the Part-1 poller; ready = first HTTP response status < 500;
-  check child-exit each iteration first (→ early_exit); `child.on('error')` → spawn_failed.
-- stop(): SIGTERM → wait `graceMs` (unref'd timer) → if group still alive
-  (`kill(-pgid,0)`) SIGKILL; clear timer on child exit; swallow ESRCH; idempotent.
+- readiness: use the Part-1 poller; ready = HTTP status in {2xx,3xx,400,401,402,403}
+  (DR-10); check child-exit each iteration first (→ early_exit); spawn error → spawn_failed.
+- stop(): group-kill the tree (`process.kill(-pgid,'SIGTERM')`) → execa's
+  forceKillAfterDelay/own escalation handles SIGKILL after `graceMs`; before any
+  manual SIGKILL re-check group liveness (`kill(-pgid,0)`); swallow ESRCH;
+  idempotent. (Group kill because execa/`.kill()` only signals the direct child.)
 - Tests (REAL fixture node processes, localhost only): ready, early_exit, not_ready,
   orphan/process-group (child-of-child both dead after stop), grace→SIGKILL (fixture
   traps SIGTERM), env-isolation, readiness-semantics (401/302 ready, 503 not).
   Deterministic via injected `now`/`sleep`/short `ceilingMs`/`graceMs`; each test
   awaits real process death. Depends on Part 1.
+- Adds `execa` to `@gate/action` deps (ESM-only, fits NodeNext). Update the
+  pnpm lockfile; CI installs `--frozen-lockfile`.
 
 ### Part 4 — wire into `runAction` (fork gate + teardown + failure mapping)
 - Inject `deps.startLocalServer`. After `verifyPreviewHandoff`, when
