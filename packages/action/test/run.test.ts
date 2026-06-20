@@ -157,3 +157,73 @@ describe("runAction", () => {
     expect(outcome.conclusion).toBe("failure");
   });
 });
+
+describe("runAction local-serve (#70 Part 4)", () => {
+  const forkPreviewOn: NormalizedDesignReviewConfig = {
+    ...DEFAULT_CONFIG,
+    preview: { ...DEFAULT_CONFIG.preview, forkPreview: true },
+  };
+  function fakeServer() {
+    const stop = vi.fn(async () => {});
+    const startLocalServer = vi.fn(async (_cmd: string, opts: { url: string }) => ({
+      ok: true as const,
+      server: { url: opts.url, pid: 4242, stop },
+    }));
+    return { startLocalServer, stop };
+  }
+
+  it("starts + supervises the local server, hands off, and tears down (same-repo)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer, stop } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    expect(startLocalServer).toHaveBeenCalledOnce();
+    expect(outcome.status).toBe("reviewed");
+    // engine got the local URL, and the server was torn down.
+    expect((engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0].preview.url).toContain("127.0.0.1");
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT spawn when a higher-priority source resolved (explicit URL wins)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: "https://preview.example.com", previewCommand: "npm run dev" }, ctx(), d);
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  it("skips a fork PR by default (no spawn, no engine call), neutral Check Run", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx({ isFork: true }), d);
+
+    expect(outcome.status).toBe("no_preview");
+    expect(startLocalServer).not.toHaveBeenCalled();
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(d._published[0]?.title).toContain("fork");
+  });
+
+  it("runs a fork PR when fork_preview is enabled", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(forkPreviewOn, { previewUrl: null, previewCommand: "npm run dev" }, ctx({ isFork: true }), d);
+
+    expect(startLocalServer).toHaveBeenCalledOnce();
+    expect(outcome.status).toBe("reviewed");
+  });
+
+  it("a not-ready preview server => neutral not-reviewed, never an engine call", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const startLocalServer = vi.fn(async () => ({ ok: false as const, reason: "not_ready" as const, detail: "x", tail: "boot log" }));
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    expect(outcome.status).toBe("no_preview");
+    expect(outcome.notReviewed).toBe("not_ready");
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(d._published[0]?.conclusion).toBe("neutral");
+  });
+});
