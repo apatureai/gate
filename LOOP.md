@@ -140,6 +140,30 @@ documentation gaps into reviewable work.
 
 ## Self-improvement log (newest first)
 
+- 2026-06-20: Built #70 (preview-command local-serve supervision) end-to-end in 6
+  parts (PR #77, 379 tests). Heavily scoped/debated/benchmarked first (see
+  AGENTS.md). Learnings:
+  - **Classify a process failure from the poll outcome, BEFORE teardown.** First
+    cut called `stop()` (SIGTERM) then checked `exited` → a not-ready server we
+    killed ourselves looked like `early_exit`. Use the readiness result's reason
+    (`child_exited` vs `ceiling_exceeded`) captured before stop(). The
+    real-fixture test caught it; a mock would not have.
+  - **execa wasn't worth it here (refined DR-9).** We must group-kill the tree
+    (`process.kill(-pgid)`) because a dev server forks children; execa's
+    `forceKillAfterDelay` only signals the direct child, and `cleanup` is covered
+    by the signal handlers + tini. So the grace→SIGKILL is ours anyway → no dep.
+  - **`@gate/secrets` `redact()` does NOT scrub free text** — only structured
+    keys/payloads + signed-URLs. So it can't sanitize an arbitrary command tail;
+    put the tail in the Action log, a generic reason in the Check Run, and file a
+    real text secret-scrubber as a follow-up (#78). Don't assume a "redact"
+    helper scrubs everything — read it.
+  - **`\bfail\b` doesn't match "failed"** (no word boundary inside the word). Word
+    boundaries bite on stemmed words; the build-facts test caught it.
+  - **Real fixture-process tests are worth the ms.** Spawning real `node -e`
+    fixtures (free port, group-death assertions, SIGTERM-trapping fixture for the
+    SIGKILL path) proved the no-orphan guarantee in a way mocks can't, and caught
+    two real bugs. Inject only time (`now`/`sleep`/short ceiling) for determinism.
+
 - 2026-06-20: Build loop repointed here from judgment-engine (its build backlog
   is live-infra-exhausted). Merged the two Codex PRs first (#67 repo-scoped run
   identity, #68 vitest/vite security), then resolved the resulting agent/build↔main
