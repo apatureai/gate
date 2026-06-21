@@ -235,4 +235,19 @@ describe("runAction local-serve (#70 Part 4)", () => {
     expect(engine.review).not.toHaveBeenCalled();
     expect(d._published[0]?.conclusion).toBe("neutral");
   });
+
+  it("surfaces a secret-scrubbed, fenced tail of the command output on the failure Check Run (#78)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const tail = "build failed\nAPI_KEY=s3cr3tLeakedValue\nstack trace here";
+    const startLocalServer = vi.fn(async () => ({ ok: false as const, reason: "early_exit" as const, detail: "x", tail }));
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    const summary = d._published[0]?.summary ?? "";
+    expect(summary).toContain("```"); // fenced
+    expect(summary).toContain("secrets scrubbed");
+    expect(summary).toContain("[REDACTED secret]");
+    expect(summary).not.toContain("s3cr3tLeakedValue"); // the secret never reaches the PR
+    expect(summary).toContain("build failed"); // ordinary output is preserved for DX
+  });
 });

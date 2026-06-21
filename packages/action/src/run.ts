@@ -7,6 +7,7 @@ import {
   upsertStickyComment,
 } from "@gate/delivery";
 import { type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
+import { scrubTail } from "@gate/secrets";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { PreviewBuildFact } from "@gate/types";
 import { type ProviderComment, resolvePreviewUrl } from "./preview.js";
@@ -34,6 +35,22 @@ function localFailureSummary(result: Extract<LocalServerStartResult, { ok: false
     default:
       return "The preview server did not become ready in time. See the Action log for the command output.";
   }
+}
+
+/** Max scrubbed tail length surfaced on the PR Check Run (the full tail goes to the Action log). */
+const CHECK_RUN_TAIL_LEN = 2000;
+
+/**
+ * Build the failure Check Run summary: the human reason plus, when there is
+ * command output, a secret-scrubbed + length-capped tail fenced and labeled as
+ * untrusted (#78). The raw tail still goes to the Action log; only the scrubbed
+ * form is allowed onto the PR.
+ */
+function localFailureCheckRunSummary(result: Extract<LocalServerStartResult, { ok: false }>): string {
+  const reason = localFailureSummary(result);
+  if (!result.tail || result.tail.trim().length === 0) return reason;
+  const tail = scrubTail(result.tail, CHECK_RUN_TAIL_LEN);
+  return `${reason}\n\nPreview-command output (untrusted, secrets scrubbed):\n\`\`\`\n${tail}\n\`\`\``;
 }
 
 /**
@@ -175,7 +192,7 @@ export async function runAction(
     if (!started.ok) {
       if (started.tail) console.error(`[gate] preview-command output (untrusted):\n${started.tail}`);
       if (!(await isCurrentHead(ctx, deps))) return { status: "stale_discarded", conclusion: "neutral" };
-      await deps.publishCheckRun(neutralCheckRun("Preview not ready", localFailureSummary(started)));
+      await deps.publishCheckRun(neutralCheckRun("Preview not ready", localFailureCheckRunSummary(started)));
       return { status: "no_preview", conclusion: "neutral", notReviewed: started.reason };
     }
     server = started.server;

@@ -41,6 +41,9 @@ importers:
       '@gate/engine':
         specifier: workspace:*
         version: link:../engine
+      '@gate/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@gate/types':
         specifier: workspace:*
         version: link:../types
