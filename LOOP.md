@@ -140,6 +140,32 @@ documentation gaps into reviewable work.
 
 ## Self-improvement log (newest first)
 
+- 2026-06-21 (later): CI-quality + go-live. The user flagged "why do I keep getting
+  CI errors" — root cause was a Linux-only failure local macOS runs never caught.
+  Then shipped #64's codeable seam. Learnings:
+  - **Local green ≠ CI green; the same test failing EVERY CI run is a real
+    platform bug, not flake.** gate's `grace→SIGKILL` test failed every Linux CI
+    run (~5.2s) but passed on macOS — `stop()` gated SIGKILL on the direct-child
+    `exited` flag, but with `{shell:true}` the shell can exit while a trapped
+    grandchild survives (Linux), orphaning it. Fixed: gate teardown on
+    `groupAlive()`, not `exited`. When CI is red but local is green, READ THE CI
+    LOG (`gh run view --log-failed`) and check the macOS/Linux divergence before
+    assuming flake.
+  - **A duplicate JSON key silently drops the first value.** Two `"pnpm"` blocks
+    in root `package.json` meant the `vite` override was ignored (JSON keeps the
+    last). CI's `esbuild`/vitest warned `Duplicate key`; merged them. Read CI
+    warnings, not just errors.
+  - **Derive a "required env" list from the canonical source, never hand-copy
+    (#64).** `PRODUCTION_ENV_VARS` is built from `@gate/secrets`
+    `APP_SECRET_ENV_VARS` (+ the two infra URLs), so it can't drift from the
+    actual `SecretStore`. `assertProductionEnv` reports ALL missing at once (one
+    fix pass), wired opt-in behind an `env` dep so it never breaks existing tests.
+  - **Don't build what you can't verify.** #63 (Next.js dashboard app) is the last
+    gate codeable issue, but disk was ~99% full (can't install Next / run
+    `next build`) and an unverified `next build` CI step would risk the just-fixed
+    green CI. Correct call: don't ship blind TSX; do the verifiable #64 seam
+    instead and leave #63 for an environment that can build it.
+
 - 2026-06-21: Shipped the three #70 follow-ups onto PR #77 — #78 (secret-scrubbed
   failure tail), #80 (configurable ready_path/ready_status), #79 (ulimit resource
   cap). 398 tests, golden unchanged. Learnings:
