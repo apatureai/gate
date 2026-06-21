@@ -140,6 +140,37 @@ documentation gaps into reviewable work.
 
 ## Self-improvement log (newest first)
 
+- 2026-06-21: Shipped the three #70 follow-ups onto PR #77 — #78 (secret-scrubbed
+  failure tail), #80 (configurable ready_path/ready_status), #79 (ulimit resource
+  cap). 398 tests, golden unchanged. Learnings:
+  - **A text secret-scrubber needs UPPER_SNAKE-aware key matching (#78).** The
+    first `key=value` pattern used `\b(secret|token|...)\b`, which does NOT match
+    "SECRET" inside `AWS_SECRET_ACCESS_KEY` (underscores are word chars → no
+    boundary). Match an identifier that *contains* a secret word
+    (`[A-Za-z0-9_]*(?:secret|token|…)[A-Za-z0-9_]*`) instead. Also: a value
+    lookahead `(?!\[REDACTED)` stops a later pattern re-masking an already-masked
+    token, and scrub-THEN-cap (not cap-then-scrub) so a secret can't survive by
+    straddling the truncation cut.
+  - **Group-replace direction matters.** For `signed-url` the captured group is
+    the part to KEEP (`?sig=`) and the value is masked; for `key=value` the
+    captured group IS the value to mask. Capture the VALUE in both and replace the
+    capture — don't mix "mask the captured group" with patterns that capture the
+    keep-part.
+  - **A Linux-only feature can still ship as a pure, fully-tested builder (#79).**
+    `buildResourceCappedCommand(cmd, limits, platform)` constructs the `ulimit`
+    prologue deterministically and is a no-op off Linux; tests assert the string
+    (MiB→KiB, hard-cap-no-`-S`, non-Linux passthrough) without needing a real
+    fork-bomb or a Linux host. The kernel does the enforcing in prod; CI tests the
+    construction. Same "pure core, live seam" split as the JE engine.
+  - **Adding a cross-package import = package.json dep + tsconfig ref + the vitest
+    alias must already exist.** `@gate/action` → `@gate/secrets` (#78) needed the
+    workspace dep + tsconfig reference; the vitest alias was already present.
+    typecheck (project refs) is what catches the missing reference.
+  - **Mutate PR/issue bodies via `--body-file`, never `--body "$(sed …)"`.** A
+    prior run's failed `sed` had wiped a JE PR body to empty; here I wrote the new
+    #77 body to a file, set it with `--body-file`, and re-read to confirm the 4
+    `Closes #N` lines. Verify after every body edit.
+
 - 2026-06-20: Built #70 (preview-command local-serve supervision) end-to-end in 6
   parts (PR #77, 379 tests). Heavily scoped/debated/benchmarked first (see
   AGENTS.md). Learnings:
