@@ -20,7 +20,10 @@ import { parsePreviewBuildFacts } from "./build-facts.js";
  * reads and is testable with a fake. Returns the start result; the caller
  * tears down via the handle's `stop()` in a `finally`.
  */
-export type StartLocalServerFn = (command: string, opts: { url: string }) => Promise<LocalServerStartResult>;
+export type StartLocalServerFn = (
+  command: string,
+  opts: { url: string; readyPath?: string | null; readyStatus?: number[] | null },
+) => Promise<LocalServerStartResult>;
 
 /** Human reason per local-serve failure; the raw child output goes to the Action log, not the PR. */
 function localFailureSummary(result: Extract<LocalServerStartResult, { ok: false }>): string {
@@ -188,7 +191,11 @@ export async function runAction(
       return { status: "no_preview", conclusion: "neutral", notReviewed: "fork preview disabled" };
     }
 
-    const started = await deps.startLocalServer(inputs.previewCommand, { url: verified.url });
+    const started = await deps.startLocalServer(inputs.previewCommand, {
+      url: verified.url,
+      readyPath: config.preview.readyPath,
+      readyStatus: config.preview.readyStatus,
+    });
     if (!started.ok) {
       if (started.tail) console.error(`[gate] preview-command output (untrusted):\n${started.tail}`);
       if (!(await isCurrentHead(ctx, deps))) return { status: "stale_discarded", conclusion: "neutral" };

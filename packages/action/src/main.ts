@@ -68,7 +68,10 @@ async function main(): Promise<void> {
   // from the target URL. Track the live handle so a job cancellation (SIGTERM)
   // tears the server down — on the Action path, supersession IS the cancelled job.
   let activeServer: LocalServerHandle | null = null;
-  const startLocalServer = async (command: string, opts: { url: string }) => {
+  const startLocalServer = async (
+    command: string,
+    opts: { url: string; readyPath?: string | null; readyStatus?: number[] | null },
+  ) => {
     const env = buildAllowlistedEnv();
     try {
       const port = new URL(opts.url).port;
@@ -76,7 +79,13 @@ async function main(): Promise<void> {
     } catch {
       /* non-URL: let the command pick its own port */
     }
-    const result = await runLocalServer(command, { url: opts.url, cwd: process.cwd(), env });
+    const result = await runLocalServer(command, {
+      url: opts.url,
+      readyPath: opts.readyPath,
+      readyStatus: opts.readyStatus,
+      cwd: process.cwd(),
+      env,
+    });
     if (result.ok) activeServer = result.server;
     return result;
   };

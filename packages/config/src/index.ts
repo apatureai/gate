@@ -35,6 +35,8 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
       urlTemplate: raw.preview.url_template,
       waitSeconds: raw.preview.wait_seconds,
       readySelector: raw.preview.ready_selector,
+      readyPath: raw.preview.ready_path,
+      readyStatus: raw.preview.ready_status,
       protectionBypassSecretName: raw.preview.protection_bypass,
       authStateSecretName: raw.preview.auth,
       forkPreview: raw.preview.fork_preview,

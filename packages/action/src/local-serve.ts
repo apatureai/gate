@@ -40,6 +40,10 @@ export interface StartLocalServerOptions {
   url: string;
   cwd: string;
   env: Record<string, string>;
+  /** Poll this path (resolved against `url`) for readiness instead of the base URL (#80). */
+  readyPath?: string | null;
+  /** Accept only these status codes as ready (#80); null/empty → the default Playwright set. */
+  readyStatus?: number[] | null;
   ceilingMs?: number; // default 120_000
   graceMs?: number; // default 5_000
   pollIntervalMs?: number; // default 2_000
@@ -83,9 +87,28 @@ function isLoopbackHost(host: string): boolean {
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Accepted readiness statuses: Playwright webServer's set (DR-10). 599 = synthetic "refused". */
-function acceptStatus(status: number): boolean {
+function defaultAcceptStatus(status: number): boolean {
   if (status === 599) return false;
   return (status >= 200 && status <= 399) || status === 400 || status === 401 || status === 402 || status === 403;
+}
+
+/** Build the readiness acceptor: an explicit status set (#80) or the default Playwright set. */
+function acceptStatusFor(readyStatus: number[] | null | undefined): (status: number) => boolean {
+  if (readyStatus && readyStatus.length > 0) {
+    const allowed = new Set(readyStatus);
+    return (status: number) => status !== 599 && allowed.has(status);
+  }
+  return defaultAcceptStatus;
+}
+
+/** Resolve the readiness probe URL: `readyPath` against the base, else the base URL (#80). */
+function resolveReadyUrl(baseUrl: string, readyPath: string | null | undefined): string {
+  if (!readyPath) return baseUrl;
+  try {
+    return new URL(readyPath, baseUrl).toString();
+  } catch {
+    return baseUrl;
+  }
 }
 
 export async function startLocalServer(
@@ -185,9 +208,10 @@ export async function startLocalServer(
     return res;
   }) as unknown as typeof fetch;
 
+  const readyUrl = resolveReadyUrl(options.url, options.readyPath);
   const result = await waitForReadiness({
-    url: options.url,
-    acceptStatus,
+    url: readyUrl,
+    acceptStatus: acceptStatusFor(options.readyStatus),
     abortOnChildExit: () => exited,
     ceilingMs: options.ceilingMs,
     pollIntervalMs: options.pollIntervalMs,
@@ -212,5 +236,5 @@ export async function startLocalServer(
   if (childDiedOnItsOwn) {
     return { ok: false, reason: "early_exit", detail: exitDetail, tail };
   }
-  return { ok: false, reason: "not_ready", detail: `no accepted response at ${options.url} within ${options.ceilingMs ?? 120_000}ms`, tail };
+  return { ok: false, reason: "not_ready", detail: `no accepted response at ${readyUrl} within ${options.ceilingMs ?? 120_000}ms`, tail };
 }

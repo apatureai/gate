@@ -42,9 +42,19 @@ serves the PR locally** in the runner, then reviews that:
 4. **Always tears the server down** — the whole process tree (SIGTERM → 5s →
    SIGKILL) on success, failure, timeout, or job cancellation. No orphans.
 
+**Readiness tuning (`.designreview.yml`):** by default the base URL is polled and
+the status set above is accepted. Override per repo:
+
+```yaml
+preview:
+  ready_path: /healthz      # poll this path instead of the base URL
+  ready_status: [200]       # accept ONLY these status codes (stricter than the default set)
+```
+
 If the server fails to start / become ready, the review is skipped with a
-neutral "Preview not ready" Check Run (the PR is never blocked); the raw
-command output goes to the **Action log**, not the PR.
+neutral "Preview not ready" Check Run (the PR is never blocked). The raw command
+output goes to the **Action log**; a **secret-scrubbed**, length-capped tail is
+also attached to the Check Run (fenced, labeled untrusted) for quick triage.
 
 **Forks:** local-serve runs the PR's own code, so on a fork (untrusted) it is
 **disabled by default**. Set `preview: { fork_preview: true }` in

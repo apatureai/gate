@@ -26,6 +26,11 @@ const previewSchema = z
     url_template: z.string().nullable().default(null),
     wait_seconds: z.number().int().min(0).default(0),
     ready_selector: z.string().nullable().default(null),
+    // Local-serve readiness (#80): poll this path instead of the base URL, and/or
+    // require an explicit set of acceptable status codes (defaults to the
+    // Playwright webServer set). Both apply only to the #70 preview-command server.
+    ready_path: z.string().nullable().default(null),
+    ready_status: z.array(z.number().int().min(100).max(599)).nullable().default(null),
     protection_bypass: z.string().nullable().default(null),
     auth: z.string().nullable().default(null),
     // Run the local-serve `preview-command` on FORK PRs (#70). Default off:

@@ -79,6 +79,58 @@ describe("startLocalServer (#70 Part 3 — real fixtures)", () => {
     }
   }, 20_000);
 
+  it("ready_status (#80): a custom status set accepts an otherwise-unready code (503)", async () => {
+    const port = await freePort();
+    // 503 is NOT in the default Playwright ready set → would be not_ready by default.
+    const res = await startLocalServer(serve(503), {
+      url: `http://127.0.0.1:${port}`,
+      cwd: process.cwd(),
+      env: envWith(port),
+      readyStatus: [503],
+      ceilingMs: 10_000,
+      pollIntervalMs: 100,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      active = res.server;
+      await res.server.stop();
+    }
+  }, 20_000);
+
+  it("ready_status (#80): the default set still rejects 503 (no custom set → not_ready)", async () => {
+    const port = await freePort();
+    const res = await startLocalServer(serve(503), {
+      url: `http://127.0.0.1:${port}`,
+      cwd: process.cwd(),
+      env: envWith(port),
+      ceilingMs: 600,
+      pollIntervalMs: 100,
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe("not_ready");
+  }, 20_000);
+
+  it("ready_path (#80): polls a specific path that 200s while the base 404s", async () => {
+    const port = await freePort();
+    // Base "/" → 404 (not ready); "/healthz" → 200 (ready).
+    const fixture = node(
+      `require("http").createServer((q,r)=>{if(q.url==="/healthz"){r.writeHead(200);r.end("ok")}else{r.writeHead(404);r.end("nf")}}).listen(process.env.PORT,"127.0.0.1")`,
+    );
+    const res = await startLocalServer(fixture, {
+      url: `http://127.0.0.1:${port}`,
+      cwd: process.cwd(),
+      env: envWith(port),
+      readyPath: "/healthz",
+      ceilingMs: 10_000,
+      pollIntervalMs: 100,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      active = res.server;
+      await res.server.stop();
+    }
+  }, 20_000);
+
   it("early_exit: a command that exits before ready → early_exit, not an engine handoff", async () => {
     const port = await freePort();
     const res = await startLocalServer(node("process.exit(1)"), {
