@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  vite: 6.4.3
   ioredis: ^5.11.1
 
 importers:
@@ -41,6 +42,9 @@ importers:
       '@gate/engine':
         specifier: workspace:*
         version: link:../engine
+      '@gate/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@gate/types':
         specifier: workspace:*
         version: link:../types
@@ -958,7 +962,7 @@ packages:
     resolution: {integrity: sha512-EZOrpDbkKotFAP7wPAQV1UIyoGOk4oX7ynWhBhLB7v+meMHbQhU16oPpIYGTTe4oFlhpryGpgpcZP/sin3hYuw==}
     peerDependencies:
       msw: ^2.4.9
-      vite: ^5.0.0 || ^6.0.0 || ^7.0.0-0
+      vite: 6.4.3
     peerDependenciesMeta:
       msw:
         optional: true

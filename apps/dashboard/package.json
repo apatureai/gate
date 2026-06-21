@@ -1,0 +1,30 @@
+{
+  "name": "@gate/dashboard-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Next.js (app-router) shell rendering the @gate/dashboard hosted-tier core (#63). Standalone — NOT part of the monorepo tsc -b/vitest/eslint harness; built with `next build`.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gate/dashboard": "file:../../packages/dashboard",
+    "@gate/service": "file:../../packages/service",
+    "@gate/types": "file:../../packages/types",
+    "next": "^15.1.6",
+    "pg": "^8.13.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.2"
+  }
+}

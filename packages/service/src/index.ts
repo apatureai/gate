@@ -10,6 +10,8 @@ export type {
 } from "./production-server.js";
 export { runStartupChecks } from "./startup.js";
 export type { StartupCheckDeps } from "./startup.js";
+export { PRODUCTION_ENV_VARS, checkRequiredEnv, assertProductionEnv } from "./production-readiness.js";
+export type { EnvCheckResult } from "./production-readiness.js";
 export { createWebhookVerifier } from "./webhooks.js";
 export type { WebhookVerifier } from "./webhooks.js";
 export { createGitHubAppAuth } from "./app-auth.js";
@@ -78,6 +80,7 @@ export {
   mintFeedbackToken,
   verifyFeedbackToken,
   createInMemoryConsumedStore,
+  createSqlConsumedStore,
 } from "./feedback-token.js";
 export type { FeedbackVotePayload, VerifyTokenResult, ConsumedTokenStore } from "./feedback-token.js";
 export { registerFeedbackRoutes, parseDesignReviewCommand } from "./feedback-routes.js";

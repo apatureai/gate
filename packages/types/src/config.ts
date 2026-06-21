@@ -37,10 +37,16 @@ export type NormalizedPreviewConfig = {
   waitSeconds: number;
   /** CSS selector signaling the page is ready, or null. */
   readySelector: string | null;
+  /** Local-serve (#70/#80): path to poll for readiness instead of the base URL, or null. */
+  readyPath: string | null;
+  /** Local-serve (#70/#80): explicit acceptable readiness status codes, or null for the default set. */
+  readyStatus: number[] | null;
   /** Name of the secret holding a Vercel protection-bypass token; never the secret itself. */
   protectionBypassSecretName: string | null;
   /** Name of the secret holding Playwright storage state; never the secret itself. */
   authStateSecretName: string | null;
+  /** Run the local-serve preview-command on fork PRs (#70). Default false. */
+  forkPreview: boolean;
 };
 
 export type NormalizedRoutesConfig = {

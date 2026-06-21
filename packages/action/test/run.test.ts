@@ -157,3 +157,97 @@ describe("runAction", () => {
     expect(outcome.conclusion).toBe("failure");
   });
 });
+
+describe("runAction local-serve (#70 Part 4)", () => {
+  const forkPreviewOn: NormalizedDesignReviewConfig = {
+    ...DEFAULT_CONFIG,
+    preview: { ...DEFAULT_CONFIG.preview, forkPreview: true },
+  };
+  function fakeServer(output = "") {
+    const stop = vi.fn(async () => {});
+    const startLocalServer = vi.fn(async (_cmd: string, opts: { url: string }) => ({
+      ok: true as const,
+      server: { url: opts.url, pid: 4242, output: () => output, stop },
+    }));
+    return { startLocalServer, stop };
+  }
+
+  it("starts + supervises the local server, hands off, and tears down (same-repo)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer, stop } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    expect(startLocalServer).toHaveBeenCalledOnce();
+    expect(outcome.status).toBe("reviewed");
+    // engine got the local URL, and the server was torn down.
+    expect((engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0].preview.url).toContain("127.0.0.1");
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT spawn when a higher-priority source resolved (explicit URL wins)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: "https://preview.example.com", previewCommand: "npm run dev" }, ctx(), d);
+    expect(startLocalServer).not.toHaveBeenCalled();
+  });
+
+  it("skips a fork PR by default (no spawn, no engine call), neutral Check Run", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx({ isFork: true }), d);
+
+    expect(outcome.status).toBe("no_preview");
+    expect(startLocalServer).not.toHaveBeenCalled();
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(d._published[0]?.title).toContain("fork");
+  });
+
+  it("runs a fork PR when fork_preview is enabled", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer();
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(forkPreviewOn, { previewUrl: null, previewCommand: "npm run dev" }, ctx({ isFork: true }), d);
+
+    expect(startLocalServer).toHaveBeenCalledOnce();
+    expect(outcome.status).toBe("reviewed");
+  });
+
+  it("attaches previewBuildFacts (U1) from the boot log to the engine request", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const { startLocalServer } = fakeServer("Warning: Text content did not match. Hydration failed...");
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+    const req = (engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(req.previewBuildFacts?.[0]?.kind).toBe("hydration");
+  });
+
+  it("a not-ready preview server => neutral not-reviewed, never an engine call", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const startLocalServer = vi.fn(async () => ({ ok: false as const, reason: "not_ready" as const, detail: "x", tail: "boot log" }));
+    const d = { ...deps(engine), startLocalServer };
+    const outcome = await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    expect(outcome.status).toBe("no_preview");
+    expect(outcome.notReviewed).toBe("not_ready");
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(d._published[0]?.conclusion).toBe("neutral");
+  });
+
+  it("surfaces a secret-scrubbed, fenced tail of the command output on the failure Check Run (#78)", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const tail = "build failed\nAPI_KEY=s3cr3tLeakedValue\nstack trace here";
+    const startLocalServer = vi.fn(async () => ({ ok: false as const, reason: "early_exit" as const, detail: "x", tail }));
+    const d = { ...deps(engine), startLocalServer };
+    await runAction(DEFAULT_CONFIG, { previewUrl: null, previewCommand: "npm run dev" }, ctx(), d);
+
+    const summary = d._published[0]?.summary ?? "";
+    expect(summary).toContain("```"); // fenced
+    expect(summary).toContain("secrets scrubbed");
+    expect(summary).toContain("[REDACTED secret]");
+    expect(summary).not.toContain("s3cr3tLeakedValue"); // the secret never reaches the PR
+    expect(summary).toContain("build failed"); // ordinary output is preserved for DX
+  });
+});

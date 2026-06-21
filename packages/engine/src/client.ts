@@ -24,6 +24,8 @@ export interface ReviewRequestContext {
   config: NormalizedDesignReviewConfig;
   publishMode: GateReviewRequest["publishMode"];
   depth: ReviewDepth;
+  /** Build/runtime diagnostics from a local-serve preview (#70 U1); additive. */
+  previewBuildFacts?: GateReviewRequest["previewBuildFacts"];
 }
 
 /** Assemble a GateReviewRequest from resolved preview + normalized config + PR context. */
@@ -36,6 +38,9 @@ export function buildGateReviewRequest(ctx: ReviewRequestContext): GateReviewReq
     config: ctx.config,
     publishMode: ctx.publishMode,
     depth: ctx.depth,
+    ...(ctx.previewBuildFacts && ctx.previewBuildFacts.length > 0
+      ? { previewBuildFacts: ctx.previewBuildFacts }
+      : {}),
   };
 }
 

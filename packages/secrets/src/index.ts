@@ -5,8 +5,9 @@ export type { TenantKeyManager } from "./tenant-kms.js";
 export type { SealedSecret } from "./envelope.js";
 export { sealSecret, openSecret } from "./envelope.js";
 export type { AppSecretKey, SecretStore } from "./store.js";
-export { APP_SECRET_KEYS, EnvSecretStore } from "./store.js";
+export { APP_SECRET_KEYS, APP_SECRET_ENV_VARS, secretEnvVarName, EnvSecretStore } from "./store.js";
 export { REDACTED, redact } from "./redact.js";
+export { scrubText, scrubTail } from "./scrub-text.js";
 export { storageStateForPr, assertStorageStateAllowed } from "./fork.js";
 export {
   originScopeStorageState,

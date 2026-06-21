@@ -9,6 +9,7 @@
     { "path": "../types" },
     { "path": "../config" },
     { "path": "../engine" },
-    { "path": "../delivery" }
+    { "path": "../delivery" },
+    { "path": "../secrets" }
   ]
 }

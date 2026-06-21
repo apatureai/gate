@@ -21,8 +21,11 @@ describe("defaults", () => {
         urlTemplate: null,
         waitSeconds: 0,
         readySelector: null,
+        readyPath: null,
+        readyStatus: null,
         protectionBypassSecretName: null,
         authStateSecretName: null,
+        forkPreview: false,
       },
       routes: { always: ["/"], maxPerPr: 5, map: {} },
       viewports: ["mobile", "desktop"],
@@ -44,6 +47,9 @@ preview:
   wait_seconds: 5
   protection_bypass: VERCEL_BYPASS
   auth: STORAGE_STATE
+  fork_preview: true
+  ready_path: /healthz
+  ready_status: [200, 204]
 routes:
   always: ["/", "/pricing"]
   max_per_pr: 3
@@ -66,6 +72,9 @@ tokens:
     expect(config.preview.waitSeconds).toBe(5);
     expect(config.preview.protectionBypassSecretName).toBe("VERCEL_BYPASS");
     expect(config.preview.authStateSecretName).toBe("STORAGE_STATE");
+    expect(config.preview.forkPreview).toBe(true);
+    expect(config.preview.readyPath).toBe("/healthz");
+    expect(config.preview.readyStatus).toEqual([200, 204]);
     expect(config.routes.maxPerPr).toBe(3);
     expect(config.routes.map).toEqual({ "src/app/checkout": "/checkout" });
     expect(config.viewports).toEqual(["mobile", "tablet", "desktop"]);

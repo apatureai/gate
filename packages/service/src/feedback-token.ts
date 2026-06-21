@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { FeedbackEventType } from "@gate/types";
+import type { SqlQuery } from "./review-window.js";
 
 /**
  * One-time HMAC tokens for feedback votes (TRD §7.1, §8). Every vote is a POST
@@ -70,6 +71,24 @@ export function createInMemoryConsumedStore(): ConsumedTokenStore {
       if (used.has(jti)) return false;
       used.add(jti);
       return true;
+    },
+  };
+}
+
+/**
+ * Durable, cluster-wide single-use store (use this in production, not the
+ * in-memory one). `INSERT ... ON CONFLICT DO NOTHING` makes consume atomic: the
+ * first caller inserts the `jti` and gets `true`; any replay (another instance,
+ * after a restart, concurrent) conflicts, returns no row, and gets `false`.
+ */
+export function createSqlConsumedStore(query: SqlQuery): ConsumedTokenStore {
+  return {
+    async consume(jti) {
+      const { rows } = await query<{ jti: string }>(
+        "INSERT INTO feedback_consumed_tokens (jti) VALUES ($1) ON CONFLICT (jti) DO NOTHING RETURNING jti",
+        [jti],
+      );
+      return rows.length > 0;
     },
   };
 }

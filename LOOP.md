@@ -23,9 +23,18 @@ as living memory: append concrete learnings, prune anything that proved wrong.
    Never leave the tree red or a commit half-done.
 4. Verify every slice: `pnpm install` (if deps changed), `pnpm typecheck`,
    `pnpm test`, `pnpm lint` — all green before committing.
-5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push,
-   update the current open build PR (or open a new one if the previous PR was
-   merged/closed), and comment on the issue.
+5. Flip `PROGRESS.md`, commit (plain message, **no AI attribution**), push, and
+   comment on the issue. **PR scope: one PR per milestone, not one ever-growing
+   PR.** Keep a single open build PR for the *current* milestone (M0/M1/…);
+   title it for that milestone with `Closes #<N>` per issue landed. When the
+   milestone's issues are all done, leave that PR for human review/merge and open
+   a fresh PR for the next milestone (base `main`). A giant 80-commit PR is
+   unreviewable — milestone-sized PRs (~10–25 commits) get reviewed and merged,
+   which keeps `agent/build` close to `main`. (Learned 2026-06-20: one rolling PR
+   had to be split into stacked review PRs after the fact; do it incrementally.)
+   - If you ever need post-hoc review branches, cut them from an `agent/build`
+     that has ALREADY merged latest `main` — otherwise early snapshots conflict
+     on `pnpm-lock.yaml` and can't merge phase-by-phase.
 6. **Before ending, improve this file** with new learnings from the run.
 
 ## Backlog-exhaustion protocol
@@ -130,6 +139,114 @@ documentation gaps into reviewable work.
   issues close when a human merges the build PR.
 
 ## Self-improvement log (newest first)
+
+- 2026-06-21 (#63): built the `apps/dashboard` Next.js app shell over the tested
+  `@gate/dashboard` core. Learnings:
+  - **Add a framework app WITHOUT touching the green CI: isolate it 4 ways.** A
+    Next app would otherwise break the root harness — so keep `apps/**` OUT of
+    `pnpm-workspace.yaml` (no `--frozen-lockfile` churn / heavy install), OUT of
+    the root tsconfig references (`tsc -b` skips it), OUT of the vitest globs
+    (already `packages/*`), and ADD it to the flat-eslint global `ignores`
+    (`eslint .` would otherwise try to parse the TSX and fail). Verified the
+    existing 404 tests + lint + typecheck still pass with the app present BEFORE
+    pushing. The app uses `file:../../packages/*` deps so it installs standalone.
+  - **Read the real core signatures; don't assume field names.** `ConfigValidation`
+    is `{ok}|{ok:false,issues}` (not `{valid,errors}`); `RateCounts` is
+    `positive/negative/neutral` (not `accepted/dismissed`); `NavItem` has `key`.
+    Grepping each type before writing the TSX caught three wrong-field bugs that
+    `next build` (unavailable here) would otherwise have been the only safety net
+    for.
+  - **Don't ship an unverifiable CI step.** Couldn't run `next build` (disk ~99%
+    full → installing Next risks corrupting node_modules for BOTH repos), so did
+    NOT add a `next build` CI job (an unverified job would re-red CI). Shipped the
+    app code (isolated, zero CI risk) + a README with the exact build/CI-wiring
+    steps, marked `[~]`. Ship what you can verify; document + defer what you can't.
+  - **Name the real seam, stub honestly.** The finding browser needs the full
+    `GateReviewResult`, but the `runs` table is metadata-only (the blob is an
+    engine object-storage artifact) — so `loadRunResult` is a documented stub
+    returning null (page renders "not available yet") rather than a fabricated
+    query against a non-existent column.
+
+- 2026-06-21 (later): CI-quality + go-live. The user flagged "why do I keep getting
+  CI errors" — root cause was a Linux-only failure local macOS runs never caught.
+  Then shipped #64's codeable seam. Learnings:
+  - **Local green ≠ CI green; the same test failing EVERY CI run is a real
+    platform bug, not flake.** gate's `grace→SIGKILL` test failed every Linux CI
+    run (~5.2s) but passed on macOS — `stop()` gated SIGKILL on the direct-child
+    `exited` flag, but with `{shell:true}` the shell can exit while a trapped
+    grandchild survives (Linux), orphaning it. Fixed: gate teardown on
+    `groupAlive()`, not `exited`. When CI is red but local is green, READ THE CI
+    LOG (`gh run view --log-failed`) and check the macOS/Linux divergence before
+    assuming flake.
+  - **A duplicate JSON key silently drops the first value.** Two `"pnpm"` blocks
+    in root `package.json` meant the `vite` override was ignored (JSON keeps the
+    last). CI's `esbuild`/vitest warned `Duplicate key`; merged them. Read CI
+    warnings, not just errors.
+  - **Derive a "required env" list from the canonical source, never hand-copy
+    (#64).** `PRODUCTION_ENV_VARS` is built from `@gate/secrets`
+    `APP_SECRET_ENV_VARS` (+ the two infra URLs), so it can't drift from the
+    actual `SecretStore`. `assertProductionEnv` reports ALL missing at once (one
+    fix pass), wired opt-in behind an `env` dep so it never breaks existing tests.
+  - **Don't build what you can't verify.** #63 (Next.js dashboard app) is the last
+    gate codeable issue, but disk was ~99% full (can't install Next / run
+    `next build`) and an unverified `next build` CI step would risk the just-fixed
+    green CI. Correct call: don't ship blind TSX; do the verifiable #64 seam
+    instead and leave #63 for an environment that can build it.
+
+- 2026-06-21: Shipped the three #70 follow-ups onto PR #77 — #78 (secret-scrubbed
+  failure tail), #80 (configurable ready_path/ready_status), #79 (ulimit resource
+  cap). 398 tests, golden unchanged. Learnings:
+  - **A text secret-scrubber needs UPPER_SNAKE-aware key matching (#78).** The
+    first `key=value` pattern used `\b(secret|token|...)\b`, which does NOT match
+    "SECRET" inside `AWS_SECRET_ACCESS_KEY` (underscores are word chars → no
+    boundary). Match an identifier that *contains* a secret word
+    (`[A-Za-z0-9_]*(?:secret|token|…)[A-Za-z0-9_]*`) instead. Also: a value
+    lookahead `(?!\[REDACTED)` stops a later pattern re-masking an already-masked
+    token, and scrub-THEN-cap (not cap-then-scrub) so a secret can't survive by
+    straddling the truncation cut.
+  - **Group-replace direction matters.** For `signed-url` the captured group is
+    the part to KEEP (`?sig=`) and the value is masked; for `key=value` the
+    captured group IS the value to mask. Capture the VALUE in both and replace the
+    capture — don't mix "mask the captured group" with patterns that capture the
+    keep-part.
+  - **A Linux-only feature can still ship as a pure, fully-tested builder (#79).**
+    `buildResourceCappedCommand(cmd, limits, platform)` constructs the `ulimit`
+    prologue deterministically and is a no-op off Linux; tests assert the string
+    (MiB→KiB, hard-cap-no-`-S`, non-Linux passthrough) without needing a real
+    fork-bomb or a Linux host. The kernel does the enforcing in prod; CI tests the
+    construction. Same "pure core, live seam" split as the JE engine.
+  - **Adding a cross-package import = package.json dep + tsconfig ref + the vitest
+    alias must already exist.** `@gate/action` → `@gate/secrets` (#78) needed the
+    workspace dep + tsconfig reference; the vitest alias was already present.
+    typecheck (project refs) is what catches the missing reference.
+  - **Mutate PR/issue bodies via `--body-file`, never `--body "$(sed …)"`.** A
+    prior run's failed `sed` had wiped a JE PR body to empty; here I wrote the new
+    #77 body to a file, set it with `--body-file`, and re-read to confirm the 4
+    `Closes #N` lines. Verify after every body edit.
+
+- 2026-06-20: Built #70 (preview-command local-serve supervision) end-to-end in 6
+  parts (PR #77, 379 tests). Heavily scoped/debated/benchmarked first (see
+  AGENTS.md). Learnings:
+  - **Classify a process failure from the poll outcome, BEFORE teardown.** First
+    cut called `stop()` (SIGTERM) then checked `exited` → a not-ready server we
+    killed ourselves looked like `early_exit`. Use the readiness result's reason
+    (`child_exited` vs `ceiling_exceeded`) captured before stop(). The
+    real-fixture test caught it; a mock would not have.
+  - **execa wasn't worth it here (refined DR-9).** We must group-kill the tree
+    (`process.kill(-pgid)`) because a dev server forks children; execa's
+    `forceKillAfterDelay` only signals the direct child, and `cleanup` is covered
+    by the signal handlers + tini. So the grace→SIGKILL is ours anyway → no dep.
+  - **`@gate/secrets` `redact()` does NOT scrub free text** — only structured
+    keys/payloads + signed-URLs. So it can't sanitize an arbitrary command tail;
+    put the tail in the Action log, a generic reason in the Check Run, and file a
+    real text secret-scrubber as a follow-up (#78). Don't assume a "redact"
+    helper scrubs everything — read it.
+  - **`\bfail\b` doesn't match "failed"** (no word boundary inside the word). Word
+    boundaries bite on stemmed words; the build-facts test caught it.
+  - **Real fixture-process tests are worth the ms.** Spawning real `node -e`
+    fixtures (free port, group-death assertions, SIGTERM-trapping fixture for the
+    SIGKILL path) proved the no-orphan guarantee in a way mocks can't, and caught
+    two real bugs. Inject only time (`now`/`sleep`/short ceiling) for determinism.
 
 - 2026-06-20: Build loop repointed here from judgment-engine (its build backlog
   is live-infra-exhausted). Merged the two Codex PRs first (#67 repo-scoped run

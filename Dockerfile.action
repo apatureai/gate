@@ -17,8 +17,14 @@ RUN pnpm prune --prod
 
 FROM base AS runtime
 ENV NODE_ENV=production
+# tini as PID 1 (#70 DR-2): forwards SIGTERM to the action so a cancelled job
+# tears down the local-serve process tree, and reaps any zombies the
+# preview-command leaves behind. Without an init, PID 1 ignores SIGTERM and
+# orphaned children can linger.
+RUN apt-get update && apt-get install -y --no-install-recommends tini \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=prune /app/node_modules ./node_modules
 COPY --from=prune /app/packages ./packages
 COPY --from=prune /app/package.json ./package.json
 COPY --from=prune /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-ENTRYPOINT ["node", "packages/action/dist/main.js"]
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "packages/action/dist/main.js"]

@@ -20,6 +20,16 @@ export type {
   PreviewDiscoveryInput,
   ProviderComment,
 } from "./preview.js";
+export { parsePreviewBuildFacts } from "./build-facts.js";
+export { startLocalServer, buildAllowlistedEnv } from "./local-serve.js";
+export type {
+  LocalServerReason,
+  LocalServerHandle,
+  LocalServerStartResult,
+  StartLocalServerOptions,
+} from "./local-serve.js";
+export { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS } from "./resource-cap.js";
+export type { ResourceLimits } from "./resource-cap.js";
 
 /**
  * Minimal GitHub token permissions the Action path requires.

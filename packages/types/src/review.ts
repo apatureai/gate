@@ -34,6 +34,17 @@ export type Finding = {
   suggestion: string | null;
 };
 
+/**
+ * Build/runtime diagnostics extracted from a locally-served preview's output
+ * (#70 U1). When Gate runs the repo's preview-command, its compiler/dev-server
+ * output (failed compiles, hydration warnings, missing assets) is parsed into
+ * these facts and passed to the engine so the critique is grounded in the
+ * build's own truth, not just pixels. Engine consumption is additive; absent for
+ * hosted-preview reviews.
+ */
+export type PreviewBuildFactKind = "compile_error" | "warning" | "asset_error" | "hydration" | "deprecation";
+export type PreviewBuildFact = { kind: PreviewBuildFactKind; message: string; source?: string };
+
 export type GateReviewRequest = {
   installationId: string;
   repository: {
@@ -57,6 +68,8 @@ export type GateReviewRequest = {
   publishMode: PublishMode;
   /** Review depth; added by §15.1 async job contract. */
   depth: ReviewDepth;
+  /** Build/runtime diagnostics from a local-serve preview (#70 U1); additive. */
+  previewBuildFacts?: PreviewBuildFact[];
 };
 
 export type GateReviewResult = {
