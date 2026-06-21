@@ -11,6 +11,7 @@ import type { ReviewJobPayload } from "./queue.js";
 import type { FullReviewWindowStore } from "./review-window.js";
 import type { RunStore } from "./run-store.js";
 import { runStartupChecks, type StartupCheckDeps } from "./startup.js";
+import { assertProductionEnv } from "./production-readiness.js";
 import type { SupersessionStore } from "./supersession.js";
 import type { WebhookDedupeStore } from "./webhook-dedup.js";
 import type { ReviewJobWorker } from "./worker.js";
@@ -61,6 +62,13 @@ export interface ProductionAppServerDeps {
   readiness?: () => boolean | Promise<boolean>;
   /** Boot invariant checks (Redis `noeviction`, #34); run before `listen`. */
   startup?: StartupCheckDeps;
+  /**
+   * When set, fail fast at `start()` if any required production env var is missing
+   * (#64). Pass `process.env` from the composition root to enforce; omit in
+   * tests/dev. Custom `requiredEnv` overrides the default `PRODUCTION_ENV_VARS`.
+   */
+  env?: NodeJS.ProcessEnv;
+  requiredEnv?: readonly string[];
   /** Build the dashboard run URL for a job's Check Run details link. */
   runUrl?(job: ReviewJobPayload): string | undefined;
   now?: () => number;
@@ -113,6 +121,9 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
   return {
     server,
     async start({ host = "0.0.0.0", port }) {
+      // Fail fast if a required production env var is missing (#64) — one
+      // aggregated error, before any connection is attempted.
+      if (deps.env) assertProductionEnv(deps.env, deps.requiredEnv);
       // Fail fast if a boot invariant is violated (e.g. Redis eviction would let
       // the publish-time SHA guard read nil and pass a stale SHA, §15.3).
       if (deps.startup) await runStartupChecks(deps.startup);

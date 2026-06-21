@@ -29,6 +29,14 @@ const ENV_VARS: Record<AppSecretKey, string> = {
   engineEndpoint: "JUDGMENT_ENGINE_ENDPOINT",
 };
 
+/** The env var name backing each app secret key (the canonical source for go-live env checks, #64). */
+export function secretEnvVarName(key: AppSecretKey): string {
+  return ENV_VARS[key];
+}
+
+/** Env var names for every required app secret — the source of truth for the production-readiness check (#64). */
+export const APP_SECRET_ENV_VARS: readonly string[] = APP_SECRET_KEYS.map((k) => ENV_VARS[k]);
+
 /**
  * Resolves app secrets from environment variables. The production store binds
  * the same interface to a managed KMS/secret manager (AWS Secrets Manager).
