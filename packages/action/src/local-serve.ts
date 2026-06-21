@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { waitForReadiness } from "@gate/engine";
+import { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS, type ResourceLimits } from "./resource-cap.js";
 
 /**
  * Local build-and-serve supervisor for the Action path (#70). Spawns the repo's
@@ -44,6 +45,8 @@ export interface StartLocalServerOptions {
   readyPath?: string | null;
   /** Accept only these status codes as ready (#80); null/empty → the default Playwright set. */
   readyStatus?: number[] | null;
+  /** Resource cap (pids + memory) for the child group (#79); defaults to DEFAULT_RESOURCE_LIMITS. */
+  resourceLimits?: ResourceLimits;
   ceilingMs?: number; // default 120_000
   graceMs?: number; // default 5_000
   pollIntervalMs?: number; // default 2_000
@@ -120,7 +123,11 @@ export async function startLocalServer(
   const probeTimeoutMs = options.probeTimeoutMs ?? 3_000;
   const sleep = options.sleep ?? defaultSleep;
 
-  const child = spawn(command, {
+  // #79: cap pids + memory on the child group (Linux) so a fork-bomb / balloon
+  // can't wedge the runner before teardown. No-op off Linux; the time ceiling +
+  // env allowlist + loopback still apply.
+  const cappedCommand = buildResourceCappedCommand(command, options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS);
+  const child = spawn(cappedCommand, {
     shell: true,
     detached: true, // own process group -> group-kill the tree on teardown
     cwd: options.cwd,

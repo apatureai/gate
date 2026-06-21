@@ -60,7 +60,9 @@ also attached to the Check Run (fenced, labeled untrusted) for quick triage.
 **disabled by default**. Set `preview: { fork_preview: true }` in
 `.designreview.yml` to opt in. The spawned server runs with an **allowlisted
 env** (your runner secrets — engine keys, `GITHUB_TOKEN` — are never passed to
-it), is loopback-only, and an off-localhost redirect is refused.
+it), is loopback-only, and an off-localhost redirect is refused. On **Linux** the
+child group is also resource-capped (`ulimit`: ≤512 procs, ≤4 GiB/proc by
+default) so a fork-bomb or memory balloon can't wedge the runner before teardown.
 
 ## Security: hostile-PR capture
 
