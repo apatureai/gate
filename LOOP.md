@@ -140,6 +140,33 @@ documentation gaps into reviewable work.
 
 ## Self-improvement log (newest first)
 
+- 2026-06-21 (#63): built the `apps/dashboard` Next.js app shell over the tested
+  `@gate/dashboard` core. Learnings:
+  - **Add a framework app WITHOUT touching the green CI: isolate it 4 ways.** A
+    Next app would otherwise break the root harness — so keep `apps/**` OUT of
+    `pnpm-workspace.yaml` (no `--frozen-lockfile` churn / heavy install), OUT of
+    the root tsconfig references (`tsc -b` skips it), OUT of the vitest globs
+    (already `packages/*`), and ADD it to the flat-eslint global `ignores`
+    (`eslint .` would otherwise try to parse the TSX and fail). Verified the
+    existing 404 tests + lint + typecheck still pass with the app present BEFORE
+    pushing. The app uses `file:../../packages/*` deps so it installs standalone.
+  - **Read the real core signatures; don't assume field names.** `ConfigValidation`
+    is `{ok}|{ok:false,issues}` (not `{valid,errors}`); `RateCounts` is
+    `positive/negative/neutral` (not `accepted/dismissed`); `NavItem` has `key`.
+    Grepping each type before writing the TSX caught three wrong-field bugs that
+    `next build` (unavailable here) would otherwise have been the only safety net
+    for.
+  - **Don't ship an unverifiable CI step.** Couldn't run `next build` (disk ~99%
+    full → installing Next risks corrupting node_modules for BOTH repos), so did
+    NOT add a `next build` CI job (an unverified job would re-red CI). Shipped the
+    app code (isolated, zero CI risk) + a README with the exact build/CI-wiring
+    steps, marked `[~]`. Ship what you can verify; document + defer what you can't.
+  - **Name the real seam, stub honestly.** The finding browser needs the full
+    `GateReviewResult`, but the `runs` table is metadata-only (the blob is an
+    engine object-storage artifact) — so `loadRunResult` is a documented stub
+    returning null (page renders "not available yet") rather than a fabricated
+    query against a non-existent column.
+
 - 2026-06-21 (later): CI-quality + go-live. The user flagged "why do I keep getting
   CI errors" — root cause was a Linux-only failure local macOS runs never caught.
   Then shipped #64's codeable seam. Learnings:
