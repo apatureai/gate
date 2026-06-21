@@ -181,14 +181,19 @@ export async function startLocalServer(
   const stop = async (): Promise<void> => {
     if (stopped) return;
     stopped = true;
-    if (exited || pid === undefined) return;
+    if (pid === undefined) return;
+    // Gate teardown on GROUP liveness, not the direct-child `exited` flag: with
+    // `{shell:true}` the direct child is the shell, which can exit while a trapped
+    // grandchild (the dev server) survives. Keying on `exited` would skip the
+    // SIGKILL and orphan that grandchild (Linux runners — the prod target).
+    if (!groupAlive()) return;
     killGroup("SIGTERM");
     const start = (options.now ?? Date.now)();
-    // Poll for clean exit up to graceMs, then SIGKILL the group if still alive.
-    while (!exited && (options.now ?? Date.now)() - start < graceMs) {
+    // Poll for the whole group to exit up to graceMs, then SIGKILL any survivor.
+    while (groupAlive() && (options.now ?? Date.now)() - start < graceMs) {
       await sleep(Math.min(100, graceMs));
     }
-    if (!exited && groupAlive()) killGroup("SIGKILL");
+    if (groupAlive()) killGroup("SIGKILL");
   };
 
   // U2 hostile-redirect guard: probe with redirect:"manual"; an off-loopback 3xx
