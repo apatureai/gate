@@ -1,11 +1,16 @@
 import type { Severity } from "@gate/types";
-import sharp from "sharp";
 
 /**
  * Annotated screenshots (TRD §7.1). Boxes are drawn from **recorded DOM geometry
  * rects** (from the engine's capture geometry map), never from VLM-predicted
  * pixel coordinates — so the box always lands on the real element. Gate composites
  * an SVG overlay onto the base screenshot with `sharp`.
+ *
+ * `sharp` (a native module) is loaded lazily inside `annotateScreenshot` rather
+ * than at the top level: this module is re-exported through the `@gate/service`
+ * barrel, which the dashboard imports only for capability/URL helpers — eagerly
+ * loading sharp there forces its native binary on a path that never annotates
+ * and breaks `next build` page-data collection.
  */
 
 export interface Rect {
@@ -75,6 +80,7 @@ export async function annotateScreenshot(
   input: Buffer,
   annotations: Annotation[],
 ): Promise<Buffer> {
+  const { default: sharp } = await import("sharp");
   const meta = await sharp(input).metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
