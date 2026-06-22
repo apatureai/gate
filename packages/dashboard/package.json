@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@gate/config": "workspace:*",
+    "@gate/engine": "workspace:*",
     "@gate/secrets": "workspace:*",
     "@gate/types": "workspace:*",
     "yaml": "^2.6.1"
