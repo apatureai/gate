@@ -1,5 +1,5 @@
 import { buildFindingBrowser, listRunHistory } from "@gate/dashboard";
-import { capabilityScreenshotUrl, mintScreenshotCapability } from "@gate/service";
+import { capabilityScreenshotUrl, mintScreenshotCapability } from "@gate/service/screenshot-capability";
 import { deriveArtifactId } from "@gate/types";
 import { getQuery } from "@/lib/db";
 import { env } from "@/lib/env";

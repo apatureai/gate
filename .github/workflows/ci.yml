@@ -41,3 +41,42 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  dashboard:
+    name: dashboard next build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install root dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Gate packages
+        run: pnpm build
+
+      - name: Setup dashboard npm cache
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: apps/dashboard
+        run: npm ci
+
+      - name: Build dashboard
+        working-directory: apps/dashboard
+        run: npm run build

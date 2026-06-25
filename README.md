@@ -161,7 +161,7 @@ Monorepo: pnpm workspace, TypeScript project references (`tsc -b`), Vitest, ESLi
 ### `apps/*`
 | App | What it is |
 |---|---|
-| `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with `next build`. (Partial — see below.) |
+| `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with its own isolated `next build` CI job. |
 
 ---
 
@@ -175,11 +175,11 @@ Be honest about what's real:
   configurable readiness) are all implemented with the green CI gate.
 - **Dashboard core: built and tested.** The `@gate/dashboard` core (OAuth → run history
   → findings → stats → config → billing) is complete.
-- **`apps/dashboard` Next.js shell: partial.** The app shell consumes the tested core but
-  is **isolated from the CI harness** (separate react/next toolchain). `next build`
-  verification, an isolated CI job, and the object-storage result loader (`loadRunResult` —
-  the `runs` table is metadata-only) are **deferred** (need a disk-capable env). Finishing
-  this is issue **#63**.
+- **`apps/dashboard` Next.js shell: built and isolated.** The app shell consumes the
+  tested core, keeps React/Next outside the root pnpm workspace, and has its own
+  CI job that builds the root `@gate/*` packages before running `npm ci` +
+  `next build` in `apps/dashboard`. The object-storage result URL signer remains
+  a go-live provisioning seam under issue **#64**.
 - **Go-live: human/ops provisioning.** Cloud accounts, secrets, KMS, and branch protection
   are operator actions, not code. The **code seam** is done (a fail-fast boot check that
   refuses to serve if required env vars are missing). See [`docs/go-live.md`](docs/go-live.md)
@@ -197,8 +197,8 @@ pnpm install
 pnpm typecheck && pnpm test && pnpm lint   # the green gate; all three must pass
 ```
 
-> `apps/dashboard` is **not** part of this gate. Build it separately with `next build`
-> from `apps/dashboard` (env-dependent — see #63).
+> `apps/dashboard` is **not** part of this root gate. CI builds it in a separate job:
+> root `pnpm build`, then `npm ci && npm run build` from `apps/dashboard`.
 
 **Test rules:** there is **no live model and no live network in tests** — the engine is
 always **mocked**, and capture/preview runs in a sandbox. Keep it that way.

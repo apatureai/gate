@@ -17,10 +17,18 @@ This keeps the CI `lint · typecheck · test` job green. The app builds with its
 ```bash
 pnpm -w -r build                 # build the @gate/* packages first (the app uses their dist via file: links)
 cd apps/dashboard
-pnpm install                     # installs Next + React (needs disk; not run in the root CI)
-pnpm build                       # next build  ← the CI check for this app (see "CI wiring" below)
-pnpm dev                         # local dev
+npm ci                           # installs Next + React from package-lock.json
+npm run build                    # next build  ← the CI check for this app (see "CI wiring" below)
+npm run dev                      # local dev
 ```
+
+## CI Wiring
+
+Root CI keeps the framework-free package gate (`pnpm lint`, `pnpm typecheck`,
+`pnpm test`) separate from the Next toolchain. A second `dashboard next build`
+job installs the root pnpm workspace, builds the `@gate/*` package `dist/`
+outputs, then runs `npm ci` and `npm run build` in this directory. That ordering
+is required because the app depends on the local packages through `file:` links.
 
 ## Required env
 
@@ -43,7 +51,6 @@ pnpm dev                         # local dev
 - `/[installationId]/config` — `validateConfig` + `buildProposeConfigUrl` (user opens the PR; Gate never writes, no `contents: write`).
 - `/[installationId]/billing` — plan/status + `computeMonthlyTotalCents`.
 
-## Remaining wiring (deferred — needs a disk-capable build env)
+## Remaining Wiring
 
-- **CI `next build` job:** add a separate workflow job (own `pnpm install` inside `apps/dashboard`) so a Next build break is isolated from the core `lint · typecheck · test` check. Not added yet because `next build` could not be run/verified in the authoring environment (near-full disk).
-- **`loadRunResult` (`src/lib/results.ts`):** the full `GateReviewResult` lives in object storage (the `runs` table is metadata only); wire the R2/S3 loader so the finding browser renders stored results.
+- **`signResultUrl` (`src/lib/results.ts`):** the full `GateReviewResult` lives in object storage (the `runs` table is metadata only). The tested core loader exists; go-live must bind this app-side signer to the provisioned R2/S3 store.
