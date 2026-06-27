@@ -2,6 +2,7 @@ import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
 import {
   cancelEngineJob,
+  EngineAbortedError,
   type EngineTransport,
   idempotencyKey,
   type JobStatus,
@@ -91,6 +92,40 @@ describe("runEngineJob", () => {
     const outcome = await runEngineJob(t, submission, { depth: "triage", ...clock });
     expect(submit).toHaveBeenCalledTimes(1);
     expect(outcome).toMatchObject({ status: "completed", jobId: "existing" });
+  });
+
+  it("does not submit when already superseded", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const submit = vi.fn(async (): Promise<SubmitResponse> => ({ status: 202, jobId: "job_1" }));
+    const t = transport({ submit });
+
+    await expect(
+      runEngineJob(t, submission, { depth: "deep", signal: controller.signal, ...virtualClock() }),
+    ).rejects.toMatchObject({
+      name: "EngineAbortedError",
+      jobId: `submit:${submission.idempotencyKey}`,
+    });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("passes the supersession signal to submit and maps an in-flight submit abort", async () => {
+    const controller = new AbortController();
+    let submitSignal: AbortSignal | undefined;
+    const submit = vi.fn(async (_submission: JobSubmission, signal?: AbortSignal): Promise<SubmitResponse> => {
+      submitSignal = signal;
+      controller.abort();
+      throw new Error("aborted by fetch");
+    });
+    const poll = vi.fn(async (): Promise<JobStatus> => ({ jobId: "job_1", state: "running" }));
+    const t = transport({ submit, poll });
+
+    await expect(
+      runEngineJob(t, submission, { depth: "triage", signal: controller.signal, ...virtualClock() }),
+    ).rejects.toBeInstanceOf(EngineAbortedError);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submitSignal).toBe(controller.signal);
+    expect(poll).not.toHaveBeenCalled();
   });
 
   it("times out at the deadline with review_timed_out and stops (no retry)", async () => {

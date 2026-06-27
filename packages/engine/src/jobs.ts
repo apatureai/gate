@@ -91,6 +91,10 @@ export function idempotencyKey(prNumber: number, headSha: string): string {
   return `${prNumber}:${headSha}`;
 }
 
+function submitAbortId(submission: JobSubmission): string {
+  return `submit:${submission.idempotencyKey}`;
+}
+
 /**
  * Depth-aware poll delay (TRD §15.1): triage first poll ~10s, deep ~30s, then
  * +10s each subsequent attempt. `attempt` is 0-based.
@@ -175,7 +179,15 @@ export async function runEngineJob(
   submission: JobSubmission,
   options: PollOptions,
 ): Promise<PollOutcome> {
-  const response = await transport.submit(submission);
+  if (options.signal?.aborted) throw new EngineAbortedError(submitAbortId(submission));
+  let response: SubmitResponse;
+  try {
+    response = await transport.submit(submission, options.signal);
+  } catch (err) {
+    if (options.signal?.aborted) throw new EngineAbortedError(submitAbortId(submission));
+    throw err;
+  }
+  if (options.signal?.aborted) throw new EngineAbortedError(response.jobId);
   // Both 202 and 409 yield a jobId to poll; 409 means capture is already running.
   return pollUntilDone(transport, response.jobId, options);
 }
