@@ -16,6 +16,8 @@ export { NAV_ITEMS } from "./nav.js";
 export type { NavItem } from "./nav.js";
 export { listRunHistory, prUrl, buildFindingBrowser } from "./runs.js";
 export type { SqlQuery, RunSummary, FindingView, FindingBrowser } from "./runs.js";
+export { withDashboardTenant } from "./tenant-query.js";
+export type { DashboardTenantRunner } from "./tenant-query.js";
 export { loadRunResult, createSignedUrlResultStorage } from "./results.js";
 export type { StoredResult, ResultStorage, LoadRunResult } from "./results.js";
 export {

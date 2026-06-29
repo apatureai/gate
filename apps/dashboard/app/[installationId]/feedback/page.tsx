@@ -1,5 +1,5 @@
 import { computeFeedbackStats, feedbackTrend, loadFeedbackEvents } from "@gate/dashboard";
-import { getQuery } from "@/lib/db";
+import { withTenantQuery } from "@/lib/db";
 import { requireInstallation } from "@/lib/session";
 
 /** Per-repo feedback stats + acceptance trend, via the core (RLS-scoped). */
@@ -18,7 +18,7 @@ export default async function FeedbackPage({
     return <p>Select a repository from the installation page to see feedback stats.</p>;
   }
 
-  const events = await loadFeedbackEvents(getQuery(), { owner, name });
+  const events = await withTenantQuery(installationId, (query) => loadFeedbackEvents(query, { owner, name }));
   const stats = computeFeedbackStats(events);
   const trend = feedbackTrend(events);
 

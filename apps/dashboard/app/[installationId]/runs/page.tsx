@@ -1,5 +1,5 @@
 import { listRunHistory, prUrl } from "@gate/dashboard";
-import { getQuery } from "@/lib/db";
+import { withTenantQuery } from "@/lib/db";
 import { requireInstallation } from "@/lib/session";
 
 /** Per-repo run history (newest first), via the core `listRunHistory` (RLS-scoped). */
@@ -18,7 +18,7 @@ export default async function RunsPage({
     return <p>Select a repository from the installation page to see its runs.</p>;
   }
 
-  const runs = await listRunHistory(getQuery(), { owner, name });
+  const runs = await withTenantQuery(installationId, (query) => listRunHistory(query, { owner, name }));
 
   return (
     <section>

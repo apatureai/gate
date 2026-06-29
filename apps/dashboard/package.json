@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@gate/dashboard": "file:../../packages/dashboard",
+    "@gate/db": "file:../../packages/db",
     "@gate/service": "file:../../packages/service",
     "@gate/types": "file:../../packages/types",
     "next": "^15.1.6",
