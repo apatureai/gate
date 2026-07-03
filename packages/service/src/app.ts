@@ -86,18 +86,31 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       if (!ok) return reply.code(401).send({ error: "invalid_signature" });
     }
 
-    // At-least-once delivery dedup (#49): skip a re-delivered id with a 200.
-    if (options.webhookDedupe && delivery && (await options.webhookDedupe.seenDelivery(delivery))) {
-      return reply.code(200).send({ duplicate: true });
+    // At-least-once delivery dedup (#49): reserve before dispatch so concurrent
+    // duplicates skip, but release the reservation if dispatch fails so GitHub's
+    // retry can recover (#97).
+    let reservedDelivery = false;
+    if (options.webhookDedupe && delivery) {
+      if (await options.webhookDedupe.seenDelivery(delivery)) {
+        return reply.code(200).send({ duplicate: true });
+      }
+      reservedDelivery = true;
     }
 
-    if (event === "pull_request") {
-      await handlers.onPullRequest?.(request.body, delivery);
-      return reply.code(202).send({ accepted: true, event });
-    }
-    if (event === "deployment_status") {
-      await handlers.onDeploymentStatus?.(request.body, delivery);
-      return reply.code(202).send({ accepted: true, event });
+    try {
+      if (event === "pull_request") {
+        await handlers.onPullRequest?.(request.body, delivery);
+        return reply.code(202).send({ accepted: true, event });
+      }
+      if (event === "deployment_status") {
+        await handlers.onDeploymentStatus?.(request.body, delivery);
+        return reply.code(202).send({ accepted: true, event });
+      }
+    } catch (err) {
+      if (reservedDelivery && delivery) {
+        await options.webhookDedupe?.releaseDelivery(delivery).catch(() => undefined);
+      }
+      throw err;
     }
     // Accept-and-ignore other events so GitHub sees a 2xx and stops retrying.
     return reply.code(202).send({ ignored: true, event });
