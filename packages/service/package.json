@@ -6,6 +6,16 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./screenshot-capability": {
+      "types": "./dist/screenshot-capability.d.ts",
+      "default": "./dist/screenshot-capability.js"
+    }
+  },
   "scripts": {
     "test": "vitest run"
   },
