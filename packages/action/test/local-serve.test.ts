@@ -157,18 +157,20 @@ describe("startLocalServer (#70 Part 3 — real fixtures)", () => {
     if (!res.ok) expect(res.reason).toBe("not_ready");
   }, 20_000);
 
-  it("redirected_off_loopback (U2): a 3xx to a non-loopback host is refused, not followed", async () => {
+  it("redirected_off_loopback (U2): a 3xx to a non-loopback host fails fast, not after the ceiling", async () => {
     const port = await freePort();
+    const startedAt = Date.now();
     const res = await startLocalServer(serve(302, `,{location:"http://evil.example.com/"}`), {
       url: `http://127.0.0.1:${port}`,
       cwd: process.cwd(),
       env: envWith(port),
-      ceilingMs: 600,
+      ceilingMs: 30_000,
       pollIntervalMs: 100,
     });
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.reason).toBe("redirected_off_loopback");
-  }, 20_000);
+  }, 5_000);
 
   it("orphan-free: a server that spawns a same-group child — stop() reaps the whole tree", async () => {
     const port = await freePort();

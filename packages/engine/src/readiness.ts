@@ -90,6 +90,9 @@ export async function waitForReadiness(options: ReadinessOptions): Promise<Readi
     if (await probe(options.url, fetchImpl, accept, options.signal, options.headers)) {
       return { ready: true, elapsedMs: now() - start };
     }
+    // A terminal child/probe condition can be discovered during the fetch
+    // itself; don't sleep another interval after that point.
+    if (options.abortOnChildExit?.()) return { ready: false, reason: "child_exited" };
     if (now() - start >= ceiling) return { ready: false, reason: "ceiling_exceeded" };
     await sleep(interval);
   }

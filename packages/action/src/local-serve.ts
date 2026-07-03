@@ -224,7 +224,7 @@ export async function startLocalServer(
   const result = await waitForReadiness({
     url: readyUrl,
     acceptStatus: acceptStatusFor(options.readyStatus),
-    abortOnChildExit: () => exited,
+    abortOnChildExit: () => exited || offLoopbackHost !== null,
     ceilingMs: options.ceilingMs,
     pollIntervalMs: options.pollIntervalMs,
     fetchImpl: probeFetch,
