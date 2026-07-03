@@ -1,5 +1,5 @@
 import { computeMonthlyTotalCents, createSqlBillingStore } from "@gate/dashboard";
-import { getQuery } from "@/lib/db";
+import { withTenantQuery } from "@/lib/db";
 import { requireInstallation } from "@/lib/session";
 
 /** Billing summary for the installation (plan/status + an est. monthly total). */
@@ -14,7 +14,7 @@ export default async function BillingPage({
   await requireInstallation(Number(installationId));
   const { seats } = await searchParams;
 
-  const billing = await createSqlBillingStore(getQuery()).get(installationId);
+  const billing = await withTenantQuery(installationId, (query) => createSqlBillingStore(query).get(installationId));
   const seatCount = Number(seats ?? "0");
   const monthlyCents = computeMonthlyTotalCents(Number.isFinite(seatCount) ? seatCount : 0);
 

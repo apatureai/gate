@@ -1,5 +1,6 @@
 import { Pool } from "pg";
-import type { SqlQuery } from "@gate/dashboard";
+import { withDashboardTenant, type SqlQuery } from "@gate/dashboard";
+import { pgTenantRunner } from "@gate/db/tenant";
 
 /**
  * Postgres adapter exposing the core's `SqlQuery` seam. The dashboard core
@@ -15,10 +16,9 @@ function getPool(): Pool {
   return pool;
 }
 
-export function getQuery(): SqlQuery {
-  const p = getPool();
-  return async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => {
-    const res = await p.query(sql, params as unknown[] | undefined);
-    return { rows: res.rows as T[] };
-  };
+export function withTenantQuery<T>(
+  installationId: string | number,
+  fn: (query: SqlQuery) => Promise<T>,
+): Promise<T> {
+  return withDashboardTenant(pgTenantRunner(getPool()), installationId, fn);
 }

@@ -6,6 +6,16 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./tenant": {
+      "types": "./dist/tenant.d.ts",
+      "default": "./dist/tenant.js"
+    }
+  },
   "files": [
     "dist",
     "migrations"

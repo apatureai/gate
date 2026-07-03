@@ -1,7 +1,7 @@
 import { buildFindingBrowser, listRunHistory } from "@gate/dashboard";
 import { capabilityScreenshotUrl, mintScreenshotCapability } from "@gate/service/screenshot-capability";
 import { deriveArtifactId } from "@gate/types";
-import { getQuery } from "@/lib/db";
+import { withTenantQuery } from "@/lib/db";
 import { env } from "@/lib/env";
 import { loadRunResult } from "@/lib/results";
 import { requireInstallation } from "@/lib/session";
@@ -26,7 +26,7 @@ export default async function FindingBrowserPage({
 
   if (!owner || !name) return <p>Missing repository context.</p>;
 
-  const runs = await listRunHistory(getQuery(), { owner, name });
+  const runs = await withTenantQuery(installationId, (query) => listRunHistory(query, { owner, name }));
   const run = runs.find((r) => r.id === runId);
   if (!run) return <p>Run not found.</p>;
 

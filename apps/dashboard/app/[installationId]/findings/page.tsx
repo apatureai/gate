@@ -1,6 +1,6 @@
 import { listRunHistory } from "@gate/dashboard";
 import Link from "next/link";
-import { getQuery } from "@/lib/db";
+import { withTenantQuery } from "@/lib/db";
 import { requireInstallation } from "@/lib/session";
 
 /** Finding browser index: pick a run to see its annotated findings. */
@@ -19,7 +19,7 @@ export default async function FindingsIndex({
     return <p>Select a repository from the installation page to browse findings.</p>;
   }
 
-  const runs = await listRunHistory(getQuery(), { owner, name });
+  const runs = await withTenantQuery(installationId, (query) => listRunHistory(query, { owner, name }));
   const qs = `?owner=${encodeURIComponent(owner)}&name=${encodeURIComponent(name)}`;
 
   return (
