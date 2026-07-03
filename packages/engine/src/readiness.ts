@@ -47,6 +47,7 @@ export interface ReadinessOptions {
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const defaultAccept = (status: number): boolean => status === 200;
+const FLOOR_CHECK_INTERVAL_MS = 100;
 
 async function probe(
   url: string,
@@ -61,6 +62,46 @@ async function probe(
   } catch {
     return false; // not reachable yet
   }
+}
+
+async function sleepAbortably(ms: number, sleep: (ms: number) => Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    await sleep(ms);
+    return;
+  }
+  if (signal.aborted) return;
+
+  let cleanup = (): void => undefined;
+  const aborted = new Promise<void>((resolve) => {
+    const onAbort = (): void => resolve();
+    signal.addEventListener("abort", onAbort, { once: true });
+    cleanup = () => signal.removeEventListener("abort", onAbort);
+  });
+
+  try {
+    await Promise.race([sleep(ms), aborted]);
+  } finally {
+    cleanup();
+  }
+}
+
+async function waitFloor(options: {
+  floorMs: number;
+  signal?: AbortSignal;
+  abortOnChildExit?: () => boolean;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}): Promise<Extract<ReadinessResult, { ready: false }> | null> {
+  const start = options.now();
+  while (options.now() - start < options.floorMs) {
+    if (options.signal?.aborted) return { ready: false, reason: "aborted" };
+    if (options.abortOnChildExit?.()) return { ready: false, reason: "child_exited" };
+    const remaining = options.floorMs - (options.now() - start);
+    await sleepAbortably(Math.min(remaining, FLOOR_CHECK_INTERVAL_MS), options.sleep, options.signal);
+  }
+  if (options.signal?.aborted) return { ready: false, reason: "aborted" };
+  if (options.abortOnChildExit?.()) return { ready: false, reason: "child_exited" };
+  return null;
 }
 
 export async function waitForReadiness(options: ReadinessOptions): Promise<ReadinessResult> {
@@ -79,8 +120,14 @@ export async function waitForReadiness(options: ReadinessOptions): Promise<Readi
   // Override floor (wait_seconds): never declare ready before this.
   const floorMs = (options.waitSeconds ?? 0) * 1000;
   if (floorMs > 0) {
-    await sleep(floorMs);
-    if (aborted()) return { ready: false, reason: "aborted" };
+    const floorAbort = await waitFloor({
+      floorMs,
+      signal: options.signal,
+      abortOnChildExit: options.abortOnChildExit,
+      now,
+      sleep,
+    });
+    if (floorAbort) return floorAbort;
   }
 
   for (;;) {

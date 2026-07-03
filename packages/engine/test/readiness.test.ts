@@ -63,4 +63,55 @@ describe("waitForReadiness — Part 1 extensions (#70)", () => {
     });
     expect(result).toEqual({ ready: false, reason: "child_exited" });
   });
+
+  it("aborts promptly when superseded during the wait_seconds floor", async () => {
+    const controller = new AbortController();
+    let t = 0;
+    let sleeps = 0;
+    let probes = 0;
+    const result = await waitForReadiness({
+      url: "u",
+      waitSeconds: 10,
+      signal: controller.signal,
+      fetchImpl: (async () => {
+        probes += 1;
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch,
+      now: () => t,
+      sleep: async (ms) => {
+        sleeps += 1;
+        t += ms;
+        controller.abort();
+      },
+    });
+
+    expect(result).toEqual({ ready: false, reason: "aborted" });
+    expect(sleeps).toBe(1);
+    expect(t).toBeLessThan(10_000);
+    expect(probes).toBe(0);
+  });
+
+  it("short-circuits when the child exits during the wait_seconds floor", async () => {
+    let t = 0;
+    let alive = true;
+    let probes = 0;
+    const result = await waitForReadiness({
+      url: "u",
+      waitSeconds: 10,
+      abortOnChildExit: () => !alive,
+      fetchImpl: (async () => {
+        probes += 1;
+        return new Response("", { status: 200 });
+      }) as unknown as typeof fetch,
+      now: () => t,
+      sleep: async (ms) => {
+        t += ms;
+        alive = false;
+      },
+    });
+
+    expect(result).toEqual({ ready: false, reason: "child_exited" });
+    expect(t).toBeLessThan(10_000);
+    expect(probes).toBe(0);
+  });
 });
