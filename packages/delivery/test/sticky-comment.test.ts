@@ -6,6 +6,7 @@ import {
   type IssueComment,
   renderStickyComment,
   STICKY_MARKER,
+  suppressFindings,
   upsertStickyComment,
 } from "../src/index.js";
 
@@ -73,6 +74,34 @@ describe("renderStickyComment", () => {
     expect(out).toContain("Should fix (");
     expect(out).toContain("Nits (");
   });
+
+  it("applies rules.suppress: omits findings whose element or id matches", () => {
+    // Suppress the minor finding by its element selector and the nit by its id.
+    const out = renderStickyComment(golden, {
+      headSha: "abc1234",
+      suppress: [".pricing-grid", "f_003"],
+    });
+    expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept
+    expect(out).not.toContain("Pricing card grid overflows"); // suppressed by element
+    expect(out).not.toContain("Inconsistent vertical rhythm"); // suppressed by id
+    expect(out).not.toContain("Nits ("); // nits section empties out
+  });
+
+  it("still renders the grade even when suppression empties the list", () => {
+    const out = renderStickyComment(golden, {
+      headSha: "abc1234",
+      suppress: ["f_001", "f_002", "f_003"],
+    });
+    expect(out).toContain("Needs work"); // grade reflects the engine verdict, not the filter
+    expect(out).not.toContain("Should fix (");
+    expect(out).not.toContain("Nits (");
+  });
+
+  it("an unset suppress list lists everything (backward-compatible)", () => {
+    const out = renderStickyComment(golden, { headSha: "abc1234", suppress: [] });
+    expect(out).toContain("Should fix (");
+    expect(out).toContain("Nits (");
+  });
 });
 
 describe("findingsAtOrAbove", () => {
@@ -87,6 +116,27 @@ describe("findingsAtOrAbove", () => {
 
   it("blocker floor keeps only blockers", () => {
     expect(findingsAtOrAbove(golden.findings, "blocker")).toHaveLength(0);
+  });
+});
+
+describe("suppressFindings", () => {
+  it("drops findings whose element selector matches an entry", () => {
+    const keep = suppressFindings(golden.findings, [".pricing-grid"]);
+    expect(keep.map((f) => f.id)).toEqual(["f_001", "f_003"]);
+  });
+
+  it("drops findings whose stable id matches an entry", () => {
+    const keep = suppressFindings(golden.findings, ["f_001"]);
+    expect(keep.map((f) => f.id)).toEqual(["f_002", "f_003"]);
+  });
+
+  it("matches exactly — a partial/substring entry suppresses nothing", () => {
+    expect(suppressFindings(golden.findings, ["pricing", "f_00"])).toHaveLength(golden.findings.length);
+  });
+
+  it("defaults to keeping everything when the list is empty or unset", () => {
+    expect(suppressFindings(golden.findings, [])).toHaveLength(golden.findings.length);
+    expect(suppressFindings(golden.findings)).toHaveLength(golden.findings.length);
   });
 });
 

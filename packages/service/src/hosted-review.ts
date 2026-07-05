@@ -171,6 +171,7 @@ export async function runHostedReview(
     headSha: ctx.pullRequest.headSha,
     gate: config.rules.gate,
     minSeverityToComment: config.rules.minSeverityToComment,
+    suppress: config.rules.suppress,
     runUrl: deps.runUrl,
   });
   if (decision.publishComment && decision.comment) {

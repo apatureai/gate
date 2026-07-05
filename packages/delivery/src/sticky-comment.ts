@@ -15,6 +15,22 @@ export function findingsAtOrAbove(findings: Finding[], min: Severity = "nit"): F
 }
 
 /**
+ * Drop findings the repo has explicitly muted via `rules.suppress` (TRD §3). A
+ * suppress entry matches a finding when it exactly equals the finding's stable
+ * `id` or its `element` selector — the two identity fields callers can name in
+ * `.designreview.yml` (`["f_001", "#cookie-banner"]`). Matching is exact, not
+ * glob/regex: pattern semantics are undefined in the config contract, so an
+ * ambiguous match is never guessed. Like the severity filter, this only changes
+ * what the comment *lists*; the grade and Check Run conclusion still reflect the
+ * engine's holistic verdict. An empty list (the default) keeps everything.
+ */
+export function suppressFindings(findings: Finding[], suppress: string[] = []): Finding[] {
+  if (suppress.length === 0) return findings;
+  const muted = new Set(suppress);
+  return findings.filter((f) => !muted.has(f.id) && !(f.element !== null && muted.has(f.element)));
+}
+
+/**
  * Sticky PR comment (TRD §7.1): one comment per PR, found and updated by a
  * hidden HTML marker, with a blockers table and collapsed should-fix/nits — it
  * never spams new comments. The same component serves both paths; the GitHub
@@ -40,6 +56,11 @@ export interface StickyCommentContext {
    * Findings below it are omitted; unset lists everything (`nit`).
    */
   minSeverityToComment?: Severity;
+  /**
+   * Findings the repo muted via `rules.suppress`: entries matching a finding's
+   * `id` or `element` are omitted from the comment. Unset/empty lists everything.
+   */
+  suppress?: string[];
 }
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
@@ -64,7 +85,10 @@ function detailsSection(title: string, findings: Finding[]): string | null {
 
 /** Render the sticky comment markdown (pure). */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
-  const findings = findingsAtOrAbove(result.findings, ctx.minSeverityToComment);
+  const findings = findingsAtOrAbove(
+    suppressFindings(result.findings, ctx.suppress),
+    ctx.minSeverityToComment,
+  );
   const blockers = findings.filter((f) => f.severity === "blocker");
   const shouldFix = findings.filter((f) => f.severity === "major" || f.severity === "minor");
   const nits = findings.filter((f) => f.severity === "nit");

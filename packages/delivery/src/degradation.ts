@@ -32,6 +32,8 @@ export interface DegradationContext {
   gate: GateMode;
   /** `rules.min_severity_to_comment`: findings below it are omitted from the comment. */
   minSeverityToComment?: Severity;
+  /** `rules.suppress`: findings whose id/element matches an entry are omitted from the comment. */
+  suppress?: string[];
   runUrl?: string;
   /** Capture-instability signal from engine result metadata. */
   captureUnstable?: boolean;
@@ -110,6 +112,7 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     runUrl: ctx.runUrl,
     captureCaveat: caveat,
     minSeverityToComment: ctx.minSeverityToComment,
+    suppress: ctx.suppress,
   });
   const checkRun = buildCheckRun(result, ctx.gate, { detailsUrl: ctx.runUrl });
 

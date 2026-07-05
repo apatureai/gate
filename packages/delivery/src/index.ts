@@ -2,6 +2,7 @@ export {
   STICKY_MARKER,
   renderStickyComment,
   findingsAtOrAbove,
+  suppressFindings,
   upsertStickyComment,
 } from "./sticky-comment.js";
 export type {
