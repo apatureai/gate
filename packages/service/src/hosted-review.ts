@@ -170,6 +170,7 @@ export async function runHostedReview(
   const decision = decideDelivery(outcome, {
     headSha: ctx.pullRequest.headSha,
     gate: config.rules.gate,
+    minSeverityToComment: config.rules.minSeverityToComment,
     runUrl: deps.runUrl,
   });
   if (decision.publishComment && decision.comment) {

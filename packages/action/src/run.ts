@@ -236,6 +236,7 @@ export async function runAction(
     const decision = decideDelivery(outcome, {
       headSha: ctx.pullRequest.headSha,
       gate: config.rules.gate,
+      minSeverityToComment: config.rules.minSeverityToComment,
       runUrl: deps.runUrl,
     });
 

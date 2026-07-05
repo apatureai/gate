@@ -1,6 +1,7 @@
 import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
 import {
+  findingsAtOrAbove,
   type GitHubCommentsApi,
   type IssueComment,
   renderStickyComment,
@@ -48,6 +49,44 @@ describe("renderStickyComment", () => {
   it("surfaces a capture caveat when provided", () => {
     const out = renderStickyComment(golden, { headSha: "abc1234", captureCaveat: "Capture was unstable on 1 route." });
     expect(out).toContain("Capture was unstable");
+  });
+
+  it("applies min_severity_to_comment: omits findings below the threshold", () => {
+    // golden has one major, one minor, one nit finding.
+    const out = renderStickyComment(golden, { headSha: "abc1234", minSeverityToComment: "major" });
+    expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept (in Should fix)
+    expect(out).toContain("Should fix (1)"); // the major finding still lives here
+    expect(out).not.toContain("Pricing card grid overflows"); // minor — omitted
+    expect(out).not.toContain("Inconsistent vertical rhythm"); // nit — omitted
+    expect(out).not.toContain("Nits ("); // nits section empties out
+  });
+
+  it("still renders the grade and not-reviewed section even when findings are filtered out", () => {
+    const out = renderStickyComment(golden, { headSha: "abc1234", minSeverityToComment: "blocker" });
+    expect(out).toContain("Needs work"); // grade reflects the engine verdict, not the filter
+    expect(out).toContain("### Not reviewed");
+    expect(out).not.toContain("Primary CTA uses an off-brand color"); // all findings below blocker
+  });
+
+  it("an unset threshold lists everything (backward-compatible)", () => {
+    const out = renderStickyComment(golden, { headSha: "abc1234" });
+    expect(out).toContain("Should fix (");
+    expect(out).toContain("Nits (");
+  });
+});
+
+describe("findingsAtOrAbove", () => {
+  it("keeps only findings at or above the floor", () => {
+    const keep = findingsAtOrAbove(golden.findings, "major");
+    expect(keep.map((f) => f.severity)).toEqual(["major"]);
+  });
+
+  it("defaults to nit (keeps everything) when unset", () => {
+    expect(findingsAtOrAbove(golden.findings)).toHaveLength(golden.findings.length);
+  });
+
+  it("blocker floor keeps only blockers", () => {
+    expect(findingsAtOrAbove(golden.findings, "blocker")).toHaveLength(0);
   });
 });
 

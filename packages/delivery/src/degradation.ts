@@ -1,5 +1,5 @@
 import type { PollOutcome } from "@gate/engine";
-import type { Finding, GateMode } from "@gate/types";
+import type { Finding, GateMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
 import { renderStickyComment } from "./sticky-comment.js";
 
@@ -30,6 +30,8 @@ export interface DeliveryDecision {
 export interface DegradationContext {
   headSha: string;
   gate: GateMode;
+  /** `rules.min_severity_to_comment`: findings below it are omitted from the comment. */
+  minSeverityToComment?: Severity;
   runUrl?: string;
   /** Capture-instability signal from engine result metadata. */
   captureUnstable?: boolean;
@@ -107,6 +109,7 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     headSha: ctx.headSha,
     runUrl: ctx.runUrl,
     captureCaveat: caveat,
+    minSeverityToComment: ctx.minSeverityToComment,
   });
   const checkRun = buildCheckRun(result, ctx.gate, { detailsUrl: ctx.runUrl });
 

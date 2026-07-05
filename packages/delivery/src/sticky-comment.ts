@@ -1,4 +1,18 @@
-import type { Finding, GateReviewResult, ReviewGrade } from "@gate/types";
+import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
+
+/** Severity ladder, lowest to highest (mirrors the `.designreview.yml` enum). */
+const SEVERITY_RANK: Record<Severity, number> = { nit: 0, minor: 1, major: 2, blocker: 3 };
+
+/**
+ * Keep only findings at or above `min` severity (`rules.min_severity_to_comment`,
+ * TRD §7). This filters what the sticky comment *lists*; it never changes the
+ * grade or Check Run conclusion (those reflect the engine's holistic verdict).
+ * Defaults to `nit` — the lowest rung — so an unset threshold lists everything.
+ */
+export function findingsAtOrAbove(findings: Finding[], min: Severity = "nit"): Finding[] {
+  const floor = SEVERITY_RANK[min];
+  return findings.filter((f) => SEVERITY_RANK[f.severity] >= floor);
+}
 
 /**
  * Sticky PR comment (TRD §7.1): one comment per PR, found and updated by a
@@ -21,6 +35,11 @@ export interface StickyCommentContext {
   runUrl?: string;
   /** Capture-instability caveat to surface (TRD §7; #38). */
   captureCaveat?: string;
+  /**
+   * Lowest severity that may be listed in the comment (`rules.min_severity_to_comment`).
+   * Findings below it are omitted; unset lists everything (`nit`).
+   */
+  minSeverityToComment?: Severity;
 }
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
@@ -45,9 +64,10 @@ function detailsSection(title: string, findings: Finding[]): string | null {
 
 /** Render the sticky comment markdown (pure). */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
-  const blockers = result.findings.filter((f) => f.severity === "blocker");
-  const shouldFix = result.findings.filter((f) => f.severity === "major" || f.severity === "minor");
-  const nits = result.findings.filter((f) => f.severity === "nit");
+  const findings = findingsAtOrAbove(result.findings, ctx.minSeverityToComment);
+  const blockers = findings.filter((f) => f.severity === "blocker");
+  const shouldFix = findings.filter((f) => f.severity === "major" || f.severity === "minor");
+  const nits = findings.filter((f) => f.severity === "nit");
 
   const parts: string[] = [
     STICKY_MARKER,
