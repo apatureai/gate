@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Root pnpm workspace (all @gate/* packages share the single lockfile).
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  # Standalone Next.js dashboard app (own npm lockfile, outside the workspace).
+  - package-ecosystem: npm
+    directory: "/apps/dashboard"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
