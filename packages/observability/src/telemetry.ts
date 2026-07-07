@@ -1,5 +1,5 @@
 import { metrics } from "@opentelemetry/api";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { MeterProvider, type MetricReader } from "@opentelemetry/sdk-metrics";
 import { NodeTracerProvider, type SpanProcessor } from "@opentelemetry/sdk-trace-node";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
@@ -25,7 +25,7 @@ export interface Telemetry {
  * exporter-agnostic and testable with in-memory readers.
  */
 export function initTelemetry(options: TelemetryOptions = {}): Telemetry {
-  const resource = new Resource({
+  const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: options.serviceName ?? "gate",
     [ATTR_SERVICE_VERSION]: options.serviceVersion ?? "0.0.0",
   });

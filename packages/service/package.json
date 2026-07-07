@@ -35,6 +35,6 @@
     "@electric-sql/pglite": "^0.2.0",
     "@gate/db": "workspace:*",
     "@gate/secrets": "workspace:*",
-    "@opentelemetry/sdk-trace-base": "^1.30.0"
+    "@opentelemetry/sdk-trace-base": "^2.8.0"
   }
 }
