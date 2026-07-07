@@ -13,6 +13,7 @@ import {
 import { createInMemoryReviewWorker } from "../src/worker.js";
 import { createInMemoryFullReviewWindow } from "../src/review-window.js";
 import { createInMemoryRunStore } from "../src/run-store.js";
+import { createInMemoryScreenshotRegistry } from "../src/screenshots.js";
 import { createInMemorySupersessionStore, recordEnqueue } from "../src/supersession.js";
 
 const golden = loadGoldenReviewResult();
@@ -292,5 +293,83 @@ describe("runHostedReview durable run persistence (#69)", () => {
     );
     expect(out.status).toBe("unverified_preview");
     expect(unv.runStore.runs.size).toBe(0);
+  });
+});
+
+describe("runHostedReview screenshot artifact persistence (#89)", () => {
+  it("records screenshot artifacts for a completed, publish-guarded review", async () => {
+    const screenshotRegistry = createInMemoryScreenshotRegistry();
+    const d = {
+      ...deps(engine({ status: "completed", result: golden, jobId: "j" })),
+      screenshotRegistry,
+      now: () => 1_700_000_000_000,
+    };
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+
+    const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
+
+    expect(out.status).toBe("published");
+    expect(screenshotRegistry.records.size).toBe(golden.artifacts.annotatedScreenshots.length);
+    const [record] = [...screenshotRegistry.records.values()];
+    expect(record).toMatchObject({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      headSha: "abc",
+      visibility: "private",
+    });
+    expect(record?.expiresAt).toBe(1_700_000_000_000 + golden.screenshotRetentionSeconds * 1000);
+  });
+
+  it("does not record screenshots for stale, failed, timed-out, engine-error, or unverified reviews", async () => {
+    const staleRegistry = createInMemoryScreenshotRegistry();
+    const stale = {
+      ...deps(engine({ status: "completed", result: golden, jobId: "j" })),
+      screenshotRegistry: staleRegistry,
+    };
+    await recordEnqueue(stale.supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, stale)).status).toBe("stale_discarded");
+    expect(staleRegistry.records.size).toBe(0);
+
+    const failedRegistry = createInMemoryScreenshotRegistry();
+    const failed = {
+      ...deps(engine({ status: "failed", error: "engine failed", jobId: "j" })),
+      screenshotRegistry: failedRegistry,
+    };
+    await recordEnqueue(failed.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, failed)).status).toBe("published");
+    expect(failedRegistry.records.size).toBe(0);
+
+    const timedOutRegistry = createInMemoryScreenshotRegistry();
+    const timedOut = {
+      ...deps(engine({ status: "timed_out", reason: "review_timed_out", jobId: "j" })),
+      screenshotRegistry: timedOutRegistry,
+    };
+    await recordEnqueue(timedOut.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, timedOut)).status).toBe("published");
+    expect(timedOutRegistry.records.size).toBe(0);
+
+    const errorRegistry = createInMemoryScreenshotRegistry();
+    const error = { ...deps(engine(new Error("503"))), screenshotRegistry: errorRegistry };
+    await recordEnqueue(error.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect((await runHostedReview(DEFAULT_CONFIG, ctx, error)).status).toBe("engine_error");
+    expect(errorRegistry.records.size).toBe(0);
+
+    const unverifiedRegistry = createInMemoryScreenshotRegistry();
+    const unverified = {
+      ...deps(engine({ status: "completed", result: golden, jobId: "j" })),
+      screenshotRegistry: unverifiedRegistry,
+    };
+    await recordEnqueue(unverified.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    expect(
+      (
+        await runHostedReview(
+          DEFAULT_CONFIG,
+          { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } },
+          unverified,
+        )
+      ).status,
+    ).toBe("unverified_preview");
+    expect(unverifiedRegistry.records.size).toBe(0);
   });
 });

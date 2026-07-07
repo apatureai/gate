@@ -6,6 +6,8 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProductionAppServer, type InstallationClients } from "../src/production-server.js";
 import { createInMemoryFullReviewWindow } from "../src/review-window.js";
+import { mintFeedbackToken } from "../src/feedback-token.js";
+import { createInMemoryScreenshotRegistry, type ScreenshotRecord } from "../src/screenshots.js";
 import { createInMemorySupersessionStore } from "../src/supersession.js";
 import { createInMemoryReviewWorker } from "../src/worker.js";
 
@@ -95,5 +97,76 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     app = prod.server;
     // allkeys-lru violates the noeviction invariant -> start() rejects, never listens.
     await expect(prod.start({ port: 0 })).rejects.toThrow();
+  });
+
+  it("mounts screenshot and feedback routes when route deps are injected", async () => {
+    const screenshotRegistry = createInMemoryScreenshotRegistry();
+    const screenshot: ScreenshotRecord = {
+      artifactId: "art_1",
+      findingId: "f_001",
+      headSha: "abc",
+      objectKey: "jobs/1/shot.png",
+      expiresAt: 10_000,
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      visibility: "private",
+    };
+    await screenshotRegistry.record([screenshot]);
+    const feedbackSecret = "feedback-secret";
+    const recordedFeedback: unknown[] = [];
+
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async () => null,
+      installationClients: () => {
+        throw new Error("unused");
+      },
+      screenshotRegistry,
+      screenshotRoute: {
+        signer: { sign: async (key) => `https://signed.example.com/${key}` },
+        capabilitySecret: "cap-secret",
+        now: () => 5_000,
+        authorizer: {
+          authorize: (request, record) => request.headers["x-installation"] === record.installationId,
+        },
+      },
+      feedbackRoutes: {
+        secret: feedbackSecret,
+        sink: { record: async (event) => void recordedFeedback.push(event) },
+        now: () => 1_000,
+      },
+    });
+    app = prod.server;
+
+    const shot = await app.inject({
+      method: "GET",
+      url: "/i/art_1.png",
+      headers: { "x-installation": "1" },
+    });
+    expect(shot.statusCode).toBe(302);
+    expect(shot.headers.location).toBe("https://signed.example.com/jobs/1/shot.png");
+
+    const inertGet = await app.inject({ method: "GET", url: "/feedback" });
+    expect(inertGet.statusCode).toBe(405);
+    const token = mintFeedbackToken(
+      {
+        type: "reaction",
+        installationId: "1",
+        owner: "acme",
+        name: "web",
+        prNumber: 42,
+        headSha: "abc",
+        findingId: "f_001",
+        exp: 2_000,
+      },
+      feedbackSecret,
+    );
+    const post = await app.inject({ method: "POST", url: "/feedback", payload: { token } });
+    expect(post.statusCode).toBe(200);
+    expect(recordedFeedback).toHaveLength(1);
   });
 });

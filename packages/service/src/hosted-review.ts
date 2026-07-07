@@ -16,6 +16,11 @@ import { type ReviewJobPayload, reviewQueueKey } from "./queue.js";
 import type { ReviewJobWorker } from "./worker.js";
 import type { FullReviewWindowStore } from "./review-window.js";
 import type { RunStore } from "./run-store.js";
+import {
+  buildScreenshotRecords,
+  type ScreenshotRegistryWriter,
+  type ScreenshotVisibility,
+} from "./screenshots.js";
 import { currentShaKey, guardPublish, recordEnqueue, type SupersessionStore } from "./supersession.js";
 
 /**
@@ -47,6 +52,10 @@ export interface HostedReviewDeps {
    * UPDATE no-ops without a run row, so this is the authoritative writer.
    */
   runStore?: RunStore;
+  /** Durable screenshot-artifact registry (#71), written only for current completed reviews. */
+  screenshotRegistry?: ScreenshotRegistryWriter;
+  /** Hosted App artifacts are private unless a caller explicitly marks them public. */
+  screenshotVisibility?: ScreenshotVisibility;
   feedback?: FeedbackSink;
   /** Supersession signal from the worker (#48), threaded into the engine. */
   signal?: AbortSignal;
@@ -149,10 +158,10 @@ export async function runHostedReview(
   }
 
   if (outcome.status === "completed") {
+    const at = now();
     if (deps.runStore) {
       // One upsert persists the completed run + records the deep full-review
       // timestamp (durable across restarts, #69); idempotent on the #65 identity.
-      const at = now();
       await deps.runStore.recordCompletedRun({
         installationId: ctx.installationId,
         owner: repo.owner,
@@ -168,7 +177,19 @@ export async function runHostedReview(
         expiresAtMs: at + outcome.result.screenshotRetentionSeconds * 1000,
       });
     } else {
-      await recordFullReviewIfDeep(deps.windowStore, repo, depth.depth, now());
+      await recordFullReviewIfDeep(deps.windowStore, repo, depth.depth, at);
+    }
+
+    if (deps.screenshotRegistry) {
+      await deps.screenshotRegistry.record(
+        buildScreenshotRecords(outcome.result, at, {
+          installationId: ctx.installationId,
+          owner: repo.owner,
+          name: repo.name,
+          headSha: ctx.pullRequest.headSha,
+          visibility: deps.screenshotVisibility ?? "private",
+        }),
+      );
     }
   }
 

@@ -4,12 +4,22 @@ import type { JudgmentEngineClient } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { FastifyInstance } from "fastify";
 import { createAppServer, type AppServerDeps } from "./app-server.js";
-import type { FeedbackSink } from "./feedback-routes.js";
+import {
+  registerFeedbackRoutes,
+  type FeedbackRouteOptions,
+  type FeedbackSink,
+} from "./feedback-routes.js";
 import { type DeploymentHandlerDeps, runHostedReview } from "./hosted-review.js";
 import { hydrateReviewContext, type PullRequestFetcher } from "./hydrate.js";
 import type { ReviewJobPayload } from "./queue.js";
 import type { FullReviewWindowStore } from "./review-window.js";
 import type { RunStore } from "./run-store.js";
+import {
+  registerScreenshotRoute,
+  type ScreenshotRegistryWriter,
+  type ScreenshotRouteOptions,
+  type ScreenshotVisibility,
+} from "./screenshots.js";
 import { runStartupChecks, type StartupCheckDeps } from "./startup.js";
 import { assertProductionEnv } from "./production-readiness.js";
 import type { SupersessionStore } from "./supersession.js";
@@ -47,6 +57,12 @@ export interface ProductionAppServerDeps {
   windowStore: FullReviewWindowStore;
   /** Durable completed-run store (#69); persists runs + the deep full-review window. */
   runStore?: RunStore;
+  /** Durable screenshot artifact registry (#71); also used by the mounted /i route. */
+  screenshotRegistry?: ScreenshotRegistryWriter;
+  /** Hosted App artifacts default to private; override only for explicit public/OSS policy. */
+  screenshotVisibility?: ScreenshotVisibility;
+  /** Route deps for GET /i/:artifactId.png; requires screenshotRegistry. */
+  screenshotRoute?: Omit<ScreenshotRouteOptions, "registry">;
   /** Resolve the open PR for a deployment SHA (installation-authed lookup, #55). */
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
@@ -54,6 +70,8 @@ export interface ProductionAppServerDeps {
   /** Per-repo `.designreview.yml` (#27); defaults to `DEFAULT_CONFIG`. */
   loadConfig?(job: ReviewJobPayload): NormalizedDesignReviewConfig | Promise<NormalizedDesignReviewConfig>;
   feedback?: FeedbackSink;
+  /** Route deps for /feedback/confirm and POST /feedback. */
+  feedbackRoutes?: FeedbackRouteOptions;
   webhookDedupe?: WebhookDedupeStore;
   /** Preview environment to match on `deployment_status` (#55). */
   environment?: string;
@@ -98,6 +116,8 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       comments: clients.comments,
       publishCheckRun: clients.publishCheckRun,
       runStore: deps.runStore,
+      screenshotRegistry: deps.screenshotRegistry,
+      screenshotVisibility: deps.screenshotVisibility,
       feedback: deps.feedback,
       signal: ctx.signal,
       runUrl: deps.runUrl?.(job),
@@ -117,6 +137,12 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     logger: deps.logger,
   };
   const server = createAppServer(appDeps);
+  if (deps.screenshotRegistry && deps.screenshotRoute) {
+    registerScreenshotRoute(server, { registry: deps.screenshotRegistry, ...deps.screenshotRoute });
+  }
+  if (deps.feedbackRoutes) {
+    registerFeedbackRoutes(server, deps.feedbackRoutes);
+  }
 
   return {
     server,
