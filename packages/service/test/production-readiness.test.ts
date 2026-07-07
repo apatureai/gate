@@ -9,6 +9,7 @@ function fullEnv(): NodeJS.ProcessEnv {
 describe("production-readiness env check (#64)", () => {
   it("includes every app secret env var plus the infra URLs", () => {
     for (const v of APP_SECRET_ENV_VARS) expect(PRODUCTION_ENV_VARS).toContain(v);
+    expect(PRODUCTION_ENV_VARS).toContain("GITHUB_APP_ID");
     expect(PRODUCTION_ENV_VARS).toContain("DATABASE_URL");
     expect(PRODUCTION_ENV_VARS).toContain("REDIS_URL");
   });

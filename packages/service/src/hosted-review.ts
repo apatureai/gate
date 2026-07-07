@@ -75,7 +75,12 @@ export async function runHostedReview(
   ctx: HostedReviewContext,
   deps: HostedReviewDeps,
 ): Promise<HostedReviewResult> {
-  const repo = { owner: ctx.repository.owner, name: ctx.repository.name, prNumber: ctx.pullRequest.number };
+  const repo = {
+    installationId: ctx.installationId,
+    owner: ctx.repository.owner,
+    name: ctx.repository.name,
+    prNumber: ctx.pullRequest.number,
+  };
   const key = currentShaKey(repo);
   const now = deps.now ?? Date.now;
 
@@ -208,6 +213,7 @@ export interface DeploymentHandlerDeps {
     owner: string,
     name: string,
     sha: string,
+    installationId: number,
   ): Promise<{ number: number; headSha: string; baseSha: string } | null>;
   environment?: string;
   isDuplicate?: (dedupeKey: string) => boolean | Promise<boolean>;
@@ -240,7 +246,7 @@ export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
     const name = env.repository?.name;
     if (typeof installationId !== "number" || !owner || !name) return;
 
-    const pr = await deps.resolvePullRequest(owner, name, resolved.sha);
+    const pr = await deps.resolvePullRequest(owner, name, resolved.sha, installationId);
     if (!pr || pr.headSha !== resolved.sha) return; // only the current head
 
     await recordEnqueue(deps.supersession, { owner, name, prNumber: pr.number }, pr.headSha);

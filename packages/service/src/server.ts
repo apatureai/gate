@@ -1,4 +1,19 @@
+import { pathToFileURL } from "node:url";
+import { pgExecutor, pgTenantRunner, type QueryFn, type TenantTxRunner } from "@gate/db";
+import { createJudgmentEngineClient, createAccountEngineTransport, type JudgmentEngineClient } from "@gate/engine";
+import { createRedisConnection, type RedisConfigClient } from "@gate/redis";
+import { EnvSecretStore, type SecretStore } from "@gate/secrets";
+import { Pool } from "pg";
+import { createGitHubAppAuth, type GitHubAppAuth } from "./app-auth.js";
+import { createAppReviewClient, type AppReviewClient, type AppReviewTarget } from "./app-github.js";
+import { createGitHubPullsClient, type GitHubPullsClient } from "./github-pulls.js";
 import { createProductionAppServer, type ProductionAppServerDeps } from "./production-server.js";
+import { assertProductionEnv } from "./production-readiness.js";
+import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
+import { createSqlRunStore, type CompletedRunRecord, type RunStore } from "./run-store.js";
+import { createBullReviewWorker } from "./worker.js";
+import { createSqlWebhookDedupe } from "./webhook-dedup.js";
+import { createRedisSupersessionStore, type RedisLike, type RepoPr } from "./supersession.js";
 
 /**
  * Process entrypoint used by the container (`fly.toml` CMD). The live App-path is
@@ -13,18 +28,139 @@ import { createProductionAppServer, type ProductionAppServerDeps } from "./produ
  * clearly-marked seam (not scattered `process.env` reads) keeps the composition
  * root above fully testable with fakes + a mock engine.
  */
-function buildProductionDepsFromEnv(): ProductionAppServerDeps {
-  throw new Error(
-    "buildProductionDepsFromEnv is the go-live ops step (#64): wire the KMS SecretStore, " +
-      "GitHub App auth, per-account engine transport, and Redis/SQL stores to the provisioned " +
-      "services. The composition root (createProductionAppServer) is implemented and tested (#62).",
-  );
+export interface SqlRuntime {
+  query: SqlQuery;
+  tenant: TenantTxRunner;
 }
 
-const port = Number(process.env.PORT ?? 8080);
-createProductionAppServer(buildProductionDepsFromEnv())
-  .start({ host: "0.0.0.0", port })
-  .catch((err: unknown) => {
-    console.error(err);
-    process.exit(1);
-  });
+export interface RedisRuntime extends RedisLike, RedisConfigClient {}
+
+export interface ProductionRuntimeFactories {
+  secretStore?(env: NodeJS.ProcessEnv): SecretStore;
+  sql?(databaseUrl: string): SqlRuntime;
+  redis?(redisUrl: string): RedisRuntime;
+  reviewWorker?(redisUrl: string): ProductionAppServerDeps["worker"];
+  githubAuth?(opts: { appId: string; privateKey: string }): GitHubAppAuth;
+  githubPullsClient?(token: string): GitHubPullsClient;
+  appReviewClient?(token: string, target: AppReviewTarget): AppReviewClient;
+  engineClient?(opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }): JudgmentEngineClient;
+}
+
+function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name];
+  if (value === undefined || value.trim() === "") {
+    throw new Error(`Production readiness: missing required environment variable(s): ${name}. Set them before go-live (see docs/go-live.md, #64).`);
+  }
+  return value;
+}
+
+function createPgRuntime(databaseUrl: string): SqlRuntime {
+  const pool = new Pool({ connectionString: databaseUrl });
+  const exec = pgExecutor(pool);
+  return { query: exec.query, tenant: pgTenantRunner(pool) };
+}
+
+function installationIdOf(repo: RepoPr): string {
+  const installationId = (repo as RepoPr & { installationId?: string }).installationId;
+  if (!installationId) {
+    throw new Error("tenant-scoped review window requires installationId");
+  }
+  return installationId;
+}
+
+function createTenantFullReviewWindow(tenant: TenantTxRunner): FullReviewWindowStore {
+  return {
+    async getLastFullReviewAt(repo) {
+      return tenant.withTenant(installationIdOf(repo), (q) => createSqlFullReviewWindow(q).getLastFullReviewAt(repo));
+    },
+    async recordFullReview(repo, atMs) {
+      await tenant.withTenant(installationIdOf(repo), (q) => createSqlFullReviewWindow(q).recordFullReview(repo, atMs));
+    },
+  };
+}
+
+function createTenantRunStore(tenant: TenantTxRunner): RunStore {
+  return {
+    async recordCompletedRun(run: CompletedRunRecord) {
+      await tenant.withTenant(run.installationId, (q: QueryFn) => createSqlRunStore(q).recordCompletedRun(run));
+    },
+  };
+}
+
+export async function buildProductionDepsFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  factories: ProductionRuntimeFactories = {},
+): Promise<ProductionAppServerDeps> {
+  assertProductionEnv(env);
+  const secretStore = factories.secretStore?.(env) ?? new EnvSecretStore(env);
+  const databaseUrl = requiredEnv(env, "DATABASE_URL");
+  const redisUrl = requiredEnv(env, "REDIS_URL");
+  const appId = requiredEnv(env, "GITHUB_APP_ID");
+  const sql = factories.sql?.(databaseUrl) ?? createPgRuntime(databaseUrl);
+  const redis = factories.redis?.(redisUrl) ?? (createRedisConnection(redisUrl) as unknown as RedisRuntime);
+  const privateKey = await secretStore.get("githubAppPrivateKey");
+  const auth =
+    factories.githubAuth?.({ appId, privateKey }) ??
+    createGitHubAppAuth({ appId, privateKey });
+  const hostedEndpoint = await secretStore.get("engineEndpoint");
+  const engineApiKey = await secretStore.get("engineApiKey");
+  const engineHmacSecret = await secretStore.get("engineHmacSecret");
+  const githubPullsClient = factories.githubPullsClient ?? ((token: string) => createGitHubPullsClient(token));
+  const appReviewClient =
+    factories.appReviewClient ?? ((token: string, target: AppReviewTarget) => createAppReviewClient(token, target));
+  const engineClient =
+    factories.engineClient ??
+    ((opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }) => {
+      const { transport } = createAccountEngineTransport(
+        {},
+        { hostedEndpoint: opts.hostedEndpoint, apiKey: opts.apiKey, hmacSecret: opts.hmacSecret },
+      );
+      return createJudgmentEngineClient(transport);
+    });
+
+  return {
+    webhookSecret: await secretStore.get("webhookSecret"),
+    supersession: createRedisSupersessionStore(redis),
+    worker: factories.reviewWorker?.(redisUrl) ?? createBullReviewWorker(redisUrl),
+    windowStore: createTenantFullReviewWindow(sql.tenant),
+    runStore: createTenantRunStore(sql.tenant),
+    webhookDedupe: createSqlWebhookDedupe(sql.query),
+    startup: { redis },
+    env,
+    resolvePullRequest: async (owner, name, sha, installationId) => {
+      const token = await auth.getInstallationToken(installationId);
+      return githubPullsClient(token).resolvePullRequest(owner, name, sha);
+    },
+    installationClients: async (job) => {
+      const token = await auth.getInstallationToken(Number(job.installationId));
+      const pulls = githubPullsClient(token);
+      const review = appReviewClient(token, {
+        owner: job.owner,
+        name: job.name,
+        prNumber: job.prNumber,
+        headSha: job.headSha,
+      });
+      return {
+        fetchPullRequest: pulls.fetchPullRequest,
+        comments: review.comments,
+        publishCheckRun: review.publishCheckRun,
+        engine: engineClient({ hostedEndpoint, apiKey: engineApiKey, hmacSecret: engineHmacSecret }),
+      };
+    },
+  };
+}
+
+function isEntrypoint(): boolean {
+  const entry = process.argv[1];
+  return !!entry && import.meta.url === pathToFileURL(entry).href;
+}
+
+if (isEntrypoint()) {
+  const port = Number(process.env.PORT ?? 8080);
+  buildProductionDepsFromEnv()
+    .then((deps) => createProductionAppServer(deps).start({ host: "0.0.0.0", port }))
+    .catch((err: unknown) => {
+      console.error(err);
+      process.exit(1);
+    });
+}

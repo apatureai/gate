@@ -8,6 +8,7 @@ Provisioning + secrets to take Gate live. These need real cloud accounts/credent
 
 | Variable | Purpose |
 |---|---|
+| `GITHUB_APP_ID` | GitHub App id for JWT minting |
 | `GITHUB_APP_PRIVATE_KEY` | GitHub App auth (JWT → installation tokens) |
 | `GITHUB_WEBHOOK_SECRET` | Verify inbound webhook signatures |
 | `JUDGMENT_ENGINE_ENDPOINT` | Hosted engine `/jobs` base URL |

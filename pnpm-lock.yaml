@@ -183,6 +183,9 @@ importers:
       '@gate/config':
         specifier: workspace:*
         version: link:../config
+      '@gate/db':
+        specifier: workspace:*
+        version: link:../db
       '@gate/delivery':
         specifier: workspace:*
         version: link:../delivery
@@ -195,6 +198,9 @@ importers:
       '@gate/redis':
         specifier: workspace:*
         version: link:../redis
+      '@gate/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@gate/types':
         specifier: workspace:*
         version: link:../types
@@ -210,19 +216,19 @@ importers:
       fastify:
         specifier: ^5.1.0
         version: 5.8.5
+      pg:
+        specifier: ^8.13.1
+        version: 8.21.0
     devDependencies:
       '@electric-sql/pglite':
         specifier: ^0.2.0
         version: 0.2.17
-      '@gate/db':
-        specifier: workspace:*
-        version: link:../db
-      '@gate/secrets':
-        specifier: workspace:*
-        version: link:../secrets
       '@opentelemetry/sdk-trace-base':
         specifier: ^2.8.0
         version: 2.8.0(@opentelemetry/api@1.9.1)
+      '@types/pg':
+        specifier: ^8.11.10
+        version: 8.20.0
 
   packages/types: {}
 
