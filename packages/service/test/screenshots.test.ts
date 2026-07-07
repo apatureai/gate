@@ -149,10 +149,17 @@ describe("deriveArtifactId (#71 collision safety)", () => {
 });
 
 describe("URL + record helpers", () => {
-  it("builds artifact-keyed public + capability URLs and the run URL", () => {
+  it("builds artifact-keyed public + capability URLs and the dashboard run URL", () => {
     expect(stableScreenshotUrl("https://gate.app/", ART)).toBe("https://gate.app/i/art_1.png");
     expect(capabilityScreenshotUrl("https://gate.app", ART, "tok ax")).toBe("https://gate.app/i/art_1.png?cap=tok%20ax");
-    expect(buildRunUrl("https://gate.app", "run_9")).toBe("https://gate.app/runs/run_9");
+    expect(
+      buildRunUrl("https://gate.app", {
+        installationId: "1",
+        owner: "acme",
+        name: "web app",
+        runId: "run_9",
+      }),
+    ).toBe("https://gate.app/1/findings/run_9?owner=acme&name=web+app");
   });
 
   it("stamps collision-safe artifact ids + retention + ownership on records", () => {

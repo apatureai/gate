@@ -57,7 +57,20 @@ export function capabilityScreenshotUrl(baseUrl: string, artifactId: string, cap
   return `${stableScreenshotUrl(baseUrl, artifactId)}?cap=${encodeURIComponent(capability)}`;
 }
 
-/** Gate-owned run URL built from the runs record (never the engine's URL). */
-export function buildRunUrl(baseUrl: string, runId: string): string {
-  return `${baseUrl.replace(/\/$/, "")}/runs/${runId}`;
+export interface DashboardRunUrlScope {
+  installationId: string;
+  owner: string;
+  name: string;
+  runId: string;
+}
+
+/**
+ * Gate-owned run URL built from the dashboard route (never the engine's URL).
+ * The dashboard shell exposes per-run findings at
+ * `/:installationId/findings/:runId?owner=<owner>&name=<repo>`.
+ */
+export function buildRunUrl(baseUrl: string, scope: DashboardRunUrlScope): string {
+  const params = new URLSearchParams({ owner: scope.owner, name: scope.name });
+  const path = `/${encodeURIComponent(scope.installationId)}/findings/${encodeURIComponent(scope.runId)}`;
+  return `${baseUrl.replace(/\/$/, "")}${path}?${params.toString()}`;
 }

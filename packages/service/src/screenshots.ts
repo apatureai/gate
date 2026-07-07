@@ -6,6 +6,7 @@ import {
   mintScreenshotCapability,
   stableScreenshotUrl,
   verifyScreenshotCapability,
+  type DashboardRunUrlScope,
   type ScreenshotCapability,
   type VerifyCapabilityResult,
 } from "./screenshot-capability.js";
@@ -86,7 +87,7 @@ export {
   stableScreenshotUrl,
   verifyScreenshotCapability,
 };
-export type { ScreenshotCapability, VerifyCapabilityResult };
+export type { DashboardRunUrlScope, ScreenshotCapability, VerifyCapabilityResult };
 
 // --- route -----------------------------------------------------------------
 

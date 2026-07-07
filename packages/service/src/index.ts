@@ -151,4 +151,5 @@ export type {
   ScreenshotRouteOptions,
   ScreenshotCapability,
   ScreenshotOwnership,
+  DashboardRunUrlScope,
 } from "./screenshots.js";
