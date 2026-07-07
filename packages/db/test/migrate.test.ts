@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
@@ -26,6 +27,29 @@ describe("runMigrations", () => {
     // Re-running applies nothing.
     const secondRun = await runMigrations(exec);
     expect(secondRun).toEqual([]);
+  });
+
+  it("rolls back a failing migration without writing its marker", async () => {
+    const db = new PGlite();
+    const dir = mkdtempSync(join(tmpdir(), "gate-migrations-"));
+    try {
+      writeFileSync(join(dir, "0001_good.sql"), "CREATE TABLE good_migration (id integer PRIMARY KEY);");
+      writeFileSync(
+        join(dir, "0002_bad.sql"),
+        "CREATE TABLE rollback_probe (id integer PRIMARY KEY); INSERT INTO missing_table VALUES (1);",
+      );
+
+      await expect(runMigrations(pgliteExecutor(db), dir)).rejects.toThrow();
+
+      const tables = await tableNames(db);
+      expect(tables).toContain("good_migration");
+      expect(tables).not.toContain("rollback_probe");
+
+      const markers = await db.query<{ id: string }>("SELECT id FROM schema_migrations ORDER BY id");
+      expect(markers.rows.map((r) => r.id)).toEqual(["0001_good.sql"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("scopes the completed-review identity to repository + PR + head SHA", async () => {

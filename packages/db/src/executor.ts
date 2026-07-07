@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
 /**
  * Minimal SQL executor the migration runner depends on. Abstracts over the real
@@ -10,6 +10,23 @@ export interface SqlExecutor {
   exec(sql: string): Promise<void>;
   /** Run a single parameterized statement and return rows. */
   query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>;
+  /** Run work atomically on one connection. */
+  transaction<T>(fn: (exec: SqlExecutor) => Promise<T>): Promise<T>;
+}
+
+function pgClientExecutor(client: PoolClient): SqlExecutor {
+  return {
+    async exec(sql) {
+      await client.query(sql);
+    },
+    async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
+      const result = await client.query(sql, params as unknown[] | undefined);
+      return { rows: result.rows as T[] };
+    },
+    async transaction(fn) {
+      return fn(pgClientExecutor(client));
+    },
+  };
 }
 
 /** Adapter over a node-postgres Pool for deploy/runtime. */
@@ -21,6 +38,20 @@ export function pgExecutor(pool: Pool): SqlExecutor {
     async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
       const result = await pool.query(sql, params as unknown[] | undefined);
       return { rows: result.rows as T[] };
+    },
+    async transaction(fn) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const out = await fn(pgClientExecutor(client));
+        await client.query("COMMIT");
+        return out;
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw err;
+      } finally {
+        client.release();
+      }
     },
   };
 }
@@ -39,6 +70,17 @@ export function pgliteExecutor(db: PgliteLike): SqlExecutor {
     },
     async query<T = Record<string, unknown>>(sql: string, params?: unknown[]) {
       return db.query<T>(sql, params);
+    },
+    async transaction<T>(fn: (exec: SqlExecutor) => Promise<T>) {
+      try {
+        await db.exec("BEGIN");
+        const out = await fn(pgliteExecutor(db));
+        await db.exec("COMMIT");
+        return out;
+      } catch (err) {
+        await db.exec("ROLLBACK").catch(() => undefined);
+        throw err;
+      }
     },
   };
 }
