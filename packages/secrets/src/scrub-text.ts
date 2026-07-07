@@ -57,12 +57,16 @@ const PATTERNS: TextSecretPattern[] = [
 export function scrubText(text: string): string {
   let out = text;
   for (const p of PATTERNS) {
-    out = out.replace(p.re, (full, ...args) => {
+    out = out.replace(p.re, (full: string, ...args) => {
       if (p.group === undefined) return mask(p.kind);
       // args = [g1, g2, ..., offset, string]; capture groups are 1-based.
       const captured = args[p.group - 1] as string | undefined;
       if (captured === undefined) return mask(p.kind);
-      return full.replace(captured, mask(p.kind));
+      // The capture is the match's suffix (both group patterns end with it), so
+      // mask its LAST occurrence. A first-occurrence replace could land on the
+      // key text instead and let the value through (`PASSWORD_X=PASSWORD...`).
+      const at = full.lastIndexOf(captured);
+      return full.slice(0, at) + mask(p.kind) + full.slice(at + captured.length);
     });
   }
   return out;
