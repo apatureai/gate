@@ -107,6 +107,21 @@ describe("createJudgmentEngineClient.review", () => {
       cancel,
     });
     await client.cancel("job_9");
-    expect(cancel).toHaveBeenCalledWith("job_9");
+    expect(cancel).toHaveBeenCalledWith("job_9", undefined);
+  });
+
+  it("remembers the submitted job installation for later cancellation signing", async () => {
+    const cancel = vi.fn(async () => {});
+    const client = createJudgmentEngineClient(
+      {
+        submit: async () => ({ status: 202, jobId: "job_1" }),
+        poll: async () => ({ jobId: "job_1", state: "completed", result: goldenResult }),
+        cancel,
+      },
+      { ...clock() },
+    );
+    await client.review(ctx);
+    await client.cancel("job_1");
+    expect(cancel).toHaveBeenCalledWith("job_1", "inst_1");
   });
 });

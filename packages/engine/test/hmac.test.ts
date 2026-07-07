@@ -104,12 +104,19 @@ describe("sign/verify round-trip", () => {
   });
 });
 
-describe("http transport signs submit when an hmac secret is set", () => {
-  it("attaches headers the engine can verify over the exact sent body", async () => {
-    let captured: { body: string; headers: Record<string, string> } | undefined;
-    const fetchImpl = (async (_url: string, init: RequestInit) => {
-      captured = { body: String(init.body), headers: init.headers as Record<string, string> };
-      return new Response(JSON.stringify({ jobId: "job_1" }), { status: 202 });
+describe("http transport signs every job request when an hmac secret is set", () => {
+  it("attaches verifiable headers to submit, poll, and cancel", async () => {
+    const captured: Array<{ method: string; body: string; headers: Record<string, string> }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit = {}) => {
+      const method = init.method ?? "GET";
+      captured.push({
+        method,
+        body: typeof init.body === "string" ? init.body : "",
+        headers: init.headers as Record<string, string>,
+      });
+      if (method === "POST") return new Response(JSON.stringify({ jobId: "job_1" }), { status: 202 });
+      if (method === "DELETE") return new Response(null, { status: 204 });
+      return new Response(JSON.stringify({ jobId: "job_1", state: "running" }), { status: 200 });
     }) as unknown as typeof fetch;
 
     const transport = createHttpEngineTransport({
@@ -123,15 +130,21 @@ describe("http transport signs submit when an hmac secret is set", () => {
       request: { installationId: "inst_42" } as never,
     };
     await transport.submit(submission);
+    await transport.poll("job_1");
+    await transport.cancel("job_1");
 
-    expect(captured?.headers[INSTALLATION_HEADER]).toBe("inst_42");
-    const verify = verifyEngineRequest({
-      body: captured!.body,
-      installationId: captured!.headers[INSTALLATION_HEADER]!,
-      timestamp: captured!.headers[TIMESTAMP_HEADER]!,
-      signature: captured!.headers[SIGNATURE_HEADER]!,
-      secret: SECRET,
-    });
-    expect(verify.ok).toBe(true);
+    expect(captured.map((r) => r.method)).toEqual(["POST", "GET", "DELETE"]);
+
+    for (const request of captured) {
+      expect(request.headers[INSTALLATION_HEADER]).toBe("inst_42");
+      const verify = verifyEngineRequest({
+        body: request.body,
+        installationId: request.headers[INSTALLATION_HEADER]!,
+        timestamp: request.headers[TIMESTAMP_HEADER]!,
+        signature: request.headers[SIGNATURE_HEADER]!,
+        secret: SECRET,
+      });
+      expect(verify.ok).toBe(true);
+    }
   });
 });

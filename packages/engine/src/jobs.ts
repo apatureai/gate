@@ -45,8 +45,8 @@ export interface SubmitResponse {
 export interface EngineTransport {
   submit(submission: JobSubmission, signal?: AbortSignal): Promise<SubmitResponse>;
   /** `signal` aborts the in-flight request on supersession (§15.3). */
-  poll(jobId: string, signal?: AbortSignal): Promise<JobStatus>;
-  cancel(jobId: string): Promise<void>;
+  poll(jobId: string, signal?: AbortSignal, installationId?: string): Promise<JobStatus>;
+  cancel(jobId: string, installationId?: string): Promise<void>;
 }
 
 export class EngineJobError extends Error {
@@ -116,6 +116,8 @@ export interface PollOptions {
   deadlineMs?: number;
   /** Supersession signal; when aborted, polling stops with EngineAbortedError (#4). */
   signal?: AbortSignal;
+  /** Installation that owns the engine job; used to sign poll/cancel requests (#85). */
+  installationId?: string;
   /** Injectable clock + sleep for deterministic tests. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -142,7 +144,7 @@ export async function pollUntilDone(
     if (options.signal?.aborted) throw new EngineAbortedError(jobId);
     let status: JobStatus;
     try {
-      status = await transport.poll(jobId, options.signal);
+      status = await transport.poll(jobId, options.signal, options.installationId);
     } catch (err) {
       // A request aborted by supersession surfaces as the typed abort error.
       if (options.signal?.aborted) throw new EngineAbortedError(jobId);

@@ -89,6 +89,7 @@ export function createJudgmentEngineClient(
   const retries = options.submitRetries ?? 2;
   const backoffMs = options.submitBackoffMs ?? 500;
   const sleep = options.sleep ?? defaultSleep;
+  const jobInstallations = new Map<string, string>();
 
   async function submitWithRetry(
     submission: JobSubmission,
@@ -119,11 +120,13 @@ export function createJudgmentEngineClient(
       };
       const mergedPoll = { depth: ctx.depth, ...options.poll, ...pollOverrides };
       const response = await submitWithRetry(submission, mergedPoll.signal);
+      jobInstallations.set(response.jobId, ctx.installationId);
+      mergedPoll.installationId ??= ctx.installationId;
       return pollUntilDone(transport, response.jobId, mergedPoll);
     },
 
     async cancel(jobId) {
-      await transport.cancel(jobId);
+      await transport.cancel(jobId, jobInstallations.get(jobId));
     },
   };
 }
