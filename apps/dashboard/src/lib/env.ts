@@ -20,6 +20,8 @@ export const env = {
   baseUrl: () => process.env.DASHBOARD_BASE_URL ?? "http://localhost:3000",
   /** Base URL the engine serves stable `/i/<id>.png` screenshots from. */
   artifactBaseUrl: () => process.env.GATE_ARTIFACT_BASE_URL ?? process.env.DASHBOARD_BASE_URL ?? "",
+  /** Absolute URL template for stored GateReviewResult JSON; must include `{runId}` when set. */
+  resultObjectUrlTemplate: () => process.env.GATE_RESULT_OBJECT_URL_TEMPLATE ?? "",
   /** Secret for minting short-lived screenshot capability tokens (#61). */
   capabilitySecret: () => read("SCREENSHOT_CAPABILITY_SECRET"),
 };

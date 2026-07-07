@@ -3,6 +3,7 @@ import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
 import {
   createSignedUrlResultStorage,
+  createTemplateResultUrlSigner,
   loadRunResult,
   type ResultStorage,
   type StoredResult,
@@ -12,6 +13,14 @@ const golden = loadGoldenReviewResult();
 
 function storageOf(stored: StoredResult | null): ResultStorage {
   return { fetch: async () => stored };
+}
+
+function fakeFetch(status: number, body: unknown, schemaVersion: string | null): typeof fetch {
+  return (async () =>
+    new Response(body === undefined ? null : JSON.stringify(body), {
+      status,
+      headers: schemaVersion ? { "x-schema-version": schemaVersion } : {},
+    })) as unknown as typeof fetch;
 }
 
 describe("loadRunResult", () => {
@@ -41,14 +50,6 @@ describe("loadRunResult", () => {
 });
 
 describe("createSignedUrlResultStorage", () => {
-  function fakeFetch(status: number, body: unknown, schemaVersion: string | null): typeof fetch {
-    return (async () =>
-      new Response(body === undefined ? null : JSON.stringify(body), {
-        status,
-        headers: schemaVersion ? { "x-schema-version": schemaVersion } : {},
-      })) as unknown as typeof fetch;
-  }
-
   it("fetches + parses a signed-URL object and surfaces its schema version", async () => {
     const storage = createSignedUrlResultStorage({
       signUrl: async () => "https://store.example/results/run_1?sig=abc",
@@ -82,5 +83,38 @@ describe("createSignedUrlResultStorage", () => {
       fetchImpl: fakeFetch(500, undefined, null),
     });
     await expect(loadRunResult(storage, "run_1")).rejects.toThrow(/500/);
+  });
+});
+
+describe("createTemplateResultUrlSigner", () => {
+  it("returns null when no result-object URL template is configured", async () => {
+    const signUrl = createTemplateResultUrlSigner("");
+    await expect(signUrl("run_1")).resolves.toBeNull();
+  });
+
+  it("substitutes and URL-encodes the explicit run id placeholder", async () => {
+    const signUrl = createTemplateResultUrlSigner("https://store.example/results/{runId}.json?download={runId}");
+    await expect(signUrl("run id/1")).resolves.toBe(
+      "https://store.example/results/run%20id%2F1.json?download=run%20id%2F1",
+    );
+  });
+
+  it("requires a placeholder so a static URL cannot show the wrong run", async () => {
+    const signUrl = createTemplateResultUrlSigner("https://store.example/results/latest.json");
+    await expect(signUrl("run_1")).rejects.toThrow(/\{runId\}/);
+  });
+
+  it("fails clearly when the expanded template is not an absolute http(s) URL", async () => {
+    await expect(createTemplateResultUrlSigner("/results/{runId}.json")("run_1")).rejects.toThrow(/absolute URL/);
+    await expect(createTemplateResultUrlSigner("file:///tmp/{runId}.json")("run_1")).rejects.toThrow(/http\(s\)/);
+  });
+
+  it("feeds the signed-URL storage fetch path", async () => {
+    const storage = createSignedUrlResultStorage({
+      signUrl: createTemplateResultUrlSigner("https://store.example/results/{runId}.json"),
+      fetchImpl: fakeFetch(200, golden, SCHEMA_VERSION),
+    });
+    const res = await loadRunResult(storage, "run_1");
+    expect(res.ok).toBe(true);
   });
 });

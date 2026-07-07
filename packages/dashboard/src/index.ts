@@ -18,7 +18,7 @@ export { listRunHistory, prUrl, buildFindingBrowser } from "./runs.js";
 export type { SqlQuery, RunSummary, FindingView, FindingBrowser } from "./runs.js";
 export { withDashboardTenant } from "./tenant-query.js";
 export type { DashboardTenantRunner } from "./tenant-query.js";
-export { loadRunResult, createSignedUrlResultStorage } from "./results.js";
+export { loadRunResult, createSignedUrlResultStorage, createTemplateResultUrlSigner } from "./results.js";
 export type { StoredResult, ResultStorage, LoadRunResult } from "./results.js";
 export {
   classifyFeedback,

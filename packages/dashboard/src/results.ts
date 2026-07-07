@@ -57,6 +57,36 @@ export async function loadRunResult(storage: ResultStorage, runId: string): Prom
 }
 
 /**
+ * Build the deployment binding used by the Next.js app: an env-provided URL
+ * template for the result object. The template must include an explicit
+ * `{runId}` placeholder so a misconfigured static URL cannot silently show the
+ * wrong review. Missing config is the safe "not found yet" state.
+ */
+export function createTemplateResultUrlSigner(
+  template: string | null | undefined,
+): (runId: string) => Promise<string | null> {
+  const trimmed = template?.trim();
+  if (!trimmed) return async () => null;
+
+  return async (runId: string): Promise<string | null> => {
+    if (!trimmed.includes("{runId}")) {
+      throw new Error("GATE_RESULT_OBJECT_URL_TEMPLATE must include a {runId} placeholder");
+    }
+    const candidate = trimmed.split("{runId}").join(encodeURIComponent(runId));
+    let url: URL;
+    try {
+      url = new URL(candidate);
+    } catch {
+      throw new Error("GATE_RESULT_OBJECT_URL_TEMPLATE must expand to a valid absolute URL");
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new Error("GATE_RESULT_OBJECT_URL_TEMPLATE must expand to an http(s) URL");
+    }
+    return url.toString();
+  };
+}
+
+/**
  * Build a {@link ResultStorage} over a signed-URL fetcher — the common object-
  * store shape: the deployment mints a short-lived GET URL for the run's result
  * object and this reads + JSON-parses it. A 404 (or a null URL) is `not_found`;

@@ -46,6 +46,7 @@ is required because the app depends on the local packages through `file:` links.
 | `DASHBOARD_BASE_URL` | Public base URL (OAuth redirect) |
 | `DATABASE_URL` | Postgres (non-superuser, no BYPASSRLS, so RLS holds) |
 | `GATE_ARTIFACT_BASE_URL` | Engine base URL serving `/i/<id>.png` |
+| `GATE_RESULT_OBJECT_URL_TEMPLATE` | Absolute stored-result JSON URL template containing `{runId}` |
 | `SCREENSHOT_CAPABILITY_SECRET` | Mint short-lived screenshot capability tokens (#61) |
 
 ## Pages
@@ -60,12 +61,9 @@ is required because the app depends on the local packages through `file:` links.
 
 ## Remaining wiring
 
-- **CI `next build` job (#83):** add a separate workflow job with its own install inside
-  `apps/dashboard` so a Next build break is isolated from the core
-  `lint · typecheck · test` check.
-- **Result object signing (#64 go-live):** `src/lib/results.ts` already binds the tested
-  `@gate/dashboard` result loader. Production still needs the ops-owned signer/env wiring
-  that returns a short-lived GET URL for the engine-owned result object.
-## Remaining Wiring
+- **Result object URL provisioning (#64 go-live):** `src/lib/results.ts` binds the tested
+  `@gate/dashboard` result loader through `GATE_RESULT_OBJECT_URL_TEMPLATE`
+  (`createTemplateResultUrlSigner`). Production still needs the ops-owned object store
+  provisioned and the template (or a real short-lived signed-GET signer) configured.
 
-- **`signResultUrl` (`src/lib/results.ts`):** the full `GateReviewResult` lives in object storage (the `runs` table is metadata only). The tested core loader exists; go-live must bind this app-side signer to the provisioned R2/S3 store.
+(The isolated CI `next build` job from #83 is in place — `.github/workflows/ci.yml`.)

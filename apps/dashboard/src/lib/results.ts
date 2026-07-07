@@ -1,5 +1,10 @@
-import { createSignedUrlResultStorage, loadRunResult as loadRunResultCore } from "@gate/dashboard";
+import {
+  createSignedUrlResultStorage,
+  createTemplateResultUrlSigner,
+  loadRunResult as loadRunResultCore,
+} from "@gate/dashboard";
 import type { GateReviewResult } from "@gate/types";
+import { env } from "@/lib/env";
 
 /**
  * App-side binding of the core result loader (`@gate/dashboard`
@@ -9,24 +14,16 @@ import type { GateReviewResult } from "@gate/types";
  * it through the engine contract gate (#46) so a schema mismatch can never
  * render as a null-grade view.
  *
- * This module owns only the object-storage seam: minting the signed GET URL for
- * a run's result object. Until that store is provisioned (env-gated go-live,
- * #64), `signResultUrl` returns null and the page shows the "not available yet"
- * state. The page contract stays `GateReviewResult | null`: a contract mismatch
- * is logged server-side and surfaced as null (the safe state), never raw.
+ * This module owns only the object-storage seam: resolving the signed GET URL
+ * for a run's result object. If `GATE_RESULT_OBJECT_URL_TEMPLATE` is unset, the
+ * page shows the safe "not available yet" state. The page contract stays
+ * `GateReviewResult | null`: a contract mismatch is logged server-side and
+ * surfaced as null (the safe state), never raw.
  */
 
-/**
- * Mint a short-lived GET URL for a run's stored result object, or null when no
- * object store is configured / no object exists. Bind this to R2/S3 (key by run
- * id) at go-live.
- */
-async function signResultUrl(_runId: string): Promise<string | null> {
-  // TODO(go-live, #64): sign a GET URL for the result object (R2/S3) by run id.
-  return null;
-}
-
-const storage = createSignedUrlResultStorage({ signUrl: signResultUrl });
+const storage = createSignedUrlResultStorage({
+  signUrl: createTemplateResultUrlSigner(env.resultObjectUrlTemplate()),
+});
 
 export async function loadRunResult(runId: string): Promise<GateReviewResult | null> {
   const res = await loadRunResultCore(storage, runId);

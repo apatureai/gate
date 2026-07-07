@@ -177,17 +177,13 @@ Be honest about what's real:
   configurable readiness) are all implemented with the green CI gate.
 - **Dashboard core: built and tested.** The `@gate/dashboard` core (OAuth → run history
   → findings → stats → config → billing) is complete.
-- **`apps/dashboard` Next.js shell: built, standalone, and Next-build verified.** The app
-  shell consumes the tested core, has its own `package-lock.json`, and keeps React/Next
-  outside the root `pnpm lint · typecheck · test` harness. The tested core now includes
-  the object-storage result loader (`loadRunResult`); the app binds the runtime signed-URL
-  seam. The remaining CI hardening is an isolated dashboard `next build` job tracked in
-  issue **#83**.
 - **`apps/dashboard` Next.js shell: built and isolated.** The app shell consumes the
-  tested core, keeps React/Next outside the root pnpm workspace, and has its own
-  CI job that builds the root `@gate/*` packages before running `npm ci` +
-  `next build` in `apps/dashboard`. The object-storage result URL signer remains
-  a go-live provisioning seam under issue **#64**.
+  tested core, keeps React/Next outside the root pnpm workspace (own
+  `package-lock.json`), and has its own CI job (#83) that builds the root `@gate/*`
+  packages before running `npm ci` + `next build` in `apps/dashboard`. The finding
+  browser loads stored results through `GATE_RESULT_OBJECT_URL_TEMPLATE`
+  (`createTemplateResultUrlSigner`); provisioning the object store itself remains a
+  go-live seam under issue **#64**.
 - **Go-live: human/ops provisioning.** Cloud accounts, secrets, KMS, and branch protection
   are operator actions, not code. The **code seam** is done (a fail-fast boot check that
   refuses to serve if required env vars are missing). See [`docs/go-live.md`](docs/go-live.md)
