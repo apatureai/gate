@@ -30,6 +30,8 @@ export type {
 } from "./local-serve.js";
 export { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS } from "./resource-cap.js";
 export type { ResourceLimits } from "./resource-cap.js";
+export { setupFailureCheckRun, publishSetupFailureCheckRun } from "./setup-failure.js";
+export type { SetupFailurePublisher } from "./setup-failure.js";
 
 /**
  * Minimal GitHub token permissions the Action path requires.

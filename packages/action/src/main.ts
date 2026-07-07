@@ -5,6 +5,7 @@ import type { GateMode } from "@gate/types";
 import { createGitHubApi } from "./github.js";
 import { buildAllowlistedEnv, startLocalServer as runLocalServer, type LocalServerHandle } from "./local-serve.js";
 import { runAction } from "./run.js";
+import { publishSetupFailureCheckRun } from "./setup-failure.js";
 
 /**
  * Docker entrypoint for the GitHub Action (wiring only; orchestration lives in
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
   const token = input("github-token") || (process.env.GITHUB_TOKEN ?? "");
   const configPath = input("config-path") || ".designreview.yml";
   const gateModeInput = input("gate-mode");
+  const gh = createGitHubApi(token, { owner, repo, prNumber: pr.number, headSha: pr.head.sha });
 
   let configText: string | null = null;
   try {
@@ -46,14 +48,23 @@ async function main(): Promise<void> {
   } catch {
     configText = null; // optional file
   }
-  const config = loadDesignReviewConfig(configText);
+  let config;
+  try {
+    config = loadDesignReviewConfig(configText);
+  } catch (err) {
+    console.error("Apature Gate config/setup error:", err);
+    await publishSetupFailureCheckRun(err, {
+      headSha: pr.head.sha,
+      getCurrentHeadSha: gh.getCurrentHeadSha,
+      publishCheckRun: gh.publishCheckRun,
+    });
+    return;
+  }
   if (gateModeInput) config.rules.gate = gateModeInput as GateMode;
 
   const isFork =
     !!pr.head.repo?.full_name && !!pr.base.repo?.full_name &&
     pr.head.repo.full_name !== pr.base.repo.full_name;
-
-  const gh = createGitHubApi(token, { owner, repo, prNumber: pr.number, headSha: pr.head.sha });
 
   const engine = createJudgmentEngineClient(
     createHttpEngineTransport({
