@@ -22,6 +22,13 @@ npm run build                    # next build  ← the CI check for this app (se
 npm run dev                      # local dev
 ```
 
+## Dependency hygiene
+
+The app keeps its own `package-lock.json` and npm audit path. `package.json` pins a
+narrow npm `overrides.postcss = 8.5.10` entry because supported Next 15 releases still
+declare `postcss@8.4.31`, which is below the patched line for GHSA-qx2v-qp2m-jg93. Drop
+the override once Next depends on a patched PostCSS release directly and
+`npm audit --audit-level=moderate` remains clean.
 ## CI Wiring
 
 Root CI keeps the framework-free package gate (`pnpm lint`, `pnpm typecheck`,
