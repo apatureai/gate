@@ -1,0 +1,4 @@
+# PROGRESS.md is an append-only per-issue log; every PR adds lines to the same
+# region, which made 11 straight PRs conflict on it. Union merge keeps both
+# sides' appended lines instead of conflicting.
+PROGRESS.md merge=union
