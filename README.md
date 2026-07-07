@@ -81,7 +81,8 @@ and publishes. This is the managed, zero-config-runner experience and the billin
 ### 3. Dashboard — `@gate/dashboard` + `apps/dashboard`
 `@gate/dashboard` is the tested hosted-tier **core** (OAuth, sessions, run history, finding
 browser, feedback stats, config UI, billing). `apps/dashboard` is the **Next.js app-router
-shell** that renders that core. (See *Current status* — the shell is partial.)
+shell** that renders that core. The shell is standalone and built with its own Next.js
+toolchain.
 
 ---
 
@@ -161,6 +162,7 @@ Monorepo: pnpm workspace, TypeScript project references (`tsc -b`), Vitest, ESLi
 ### `apps/*`
 | App | What it is |
 |---|---|
+| `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with `next build`. |
 | `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with its own isolated `next build` CI job. |
 
 ---
@@ -175,6 +177,12 @@ Be honest about what's real:
   configurable readiness) are all implemented with the green CI gate.
 - **Dashboard core: built and tested.** The `@gate/dashboard` core (OAuth → run history
   → findings → stats → config → billing) is complete.
+- **`apps/dashboard` Next.js shell: built, standalone, and Next-build verified.** The app
+  shell consumes the tested core, has its own `package-lock.json`, and keeps React/Next
+  outside the root `pnpm lint · typecheck · test` harness. The tested core now includes
+  the object-storage result loader (`loadRunResult`); the app binds the runtime signed-URL
+  seam. The remaining CI hardening is an isolated dashboard `next build` job tracked in
+  issue **#83**.
 - **`apps/dashboard` Next.js shell: built and isolated.** The app shell consumes the
   tested core, keeps React/Next outside the root pnpm workspace, and has its own
   CI job that builds the root `@gate/*` packages before running `npm ci` +
@@ -197,6 +205,8 @@ pnpm install
 pnpm typecheck && pnpm test && pnpm lint   # the green gate; all three must pass
 ```
 
+> `apps/dashboard` is **not** part of this gate. Build it separately from
+> `apps/dashboard` with `npm ci && npm run build`; the isolated CI job is tracked in #83.
 > `apps/dashboard` is **not** part of this root gate. CI builds it in a separate job:
 > root `pnpm build`, then `npm ci && npm run build` from `apps/dashboard`.
 

@@ -58,6 +58,14 @@ is required because the app depends on the local packages through `file:` links.
 - `/[installationId]/config` — `validateConfig` + `buildProposeConfigUrl` (user opens the PR; Gate never writes, no `contents: write`).
 - `/[installationId]/billing` — plan/status + `computeMonthlyTotalCents`.
 
+## Remaining wiring
+
+- **CI `next build` job (#83):** add a separate workflow job with its own install inside
+  `apps/dashboard` so a Next build break is isolated from the core
+  `lint · typecheck · test` check.
+- **Result object signing (#64 go-live):** `src/lib/results.ts` already binds the tested
+  `@gate/dashboard` result loader. Production still needs the ops-owned signer/env wiring
+  that returns a short-lived GET URL for the engine-owned result object.
 ## Remaining Wiring
 
 - **`signResultUrl` (`src/lib/results.ts`):** the full `GateReviewResult` lives in object storage (the `runs` table is metadata only). The tested core loader exists; go-live must bind this app-side signer to the provisioned R2/S3 store.
