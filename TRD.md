@@ -166,7 +166,7 @@ Gate must be correct under rapid AI-generated push bursts.
 Definitions:
 
 - Supersession key: `repo#pr`.
-- Completed-review identity: `(pr, head_sha)`.
+- Durable completed-review identity: `(repo_owner, repo_name, pr_number, head_sha)`.
 
 Required behavior:
 
@@ -367,7 +367,7 @@ Hosting:
 
 State:
 
-- Postgres holds durable product records: `installations`, `runs` (keyed for the completed-review identity `(pr, head_sha)`), `feedback_events`, and `billing_customers`.
+- Postgres holds durable product records: `installations`, `runs` (keyed for the completed-review identity `(repo_owner, repo_name, pr_number, head_sha)`), `feedback_events`, and `billing_customers`.
 - Redis holds the orchestrator hot paths: `bull:` (BullMQ queue), `sha:` (`current_sha[repo#pr]` supersession), and `tb:` (per-installation token-bucket).
 - Screenshots, critique JSON, and annotations live in object storage owned by `judgment-engine`. Gate stores metadata and correctness state only; queue payloads carry IDs and URLs, never large artifacts.
 
@@ -437,7 +437,7 @@ Gate must not hold a connection open for a 90s+ review — the App path runs beh
 
 ### 15.4 Delivery exactly-once and GitHub reliability (amends §5, §7)
 
-- Webhooks are at-least-once: dedupe on `X-GitHub-Delivery` via a `webhook_log(delivery_id PRIMARY KEY)` insert before enqueue (duplicate -> 200 + skip). `runs` carries `UNIQUE(pr, head_sha)`.
+- Webhooks are at-least-once: dedupe on `X-GitHub-Delivery` via a `webhook_log(delivery_id PRIMARY KEY)` insert before enqueue (duplicate -> 200 + skip). `runs` carries `UNIQUE(repo_owner, repo_name, pr_number, head_sha)`.
 - The GitHub API client honors primary and secondary rate limits (`Retry-After`, `x-ratelimit-remaining`) with exponential backoff + jitter. Sticky issue-comment + Check Run remain the surface (the PR Reviews API is rejected: findings are about rendered UI, not source lines, and `REQUEST_CHANGES` is too aggressive for an advisory default). Deferred: transactional outbox + REST reconciliation sweep for missed webhooks.
 
 ### 15.5 Capture location and data residency (amends §2, §6, §8)

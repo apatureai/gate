@@ -7,7 +7,8 @@ fires.
 
 Hard invariants that hold across **every** migration below: Gate is
 judgment-only (no `contents: write`), the supersession identity (`repo#pr`) and
-completed-review identity `(pr, head_sha)`, the publish-time SHA guard, and
+durable completed-review identity `(repo_owner, repo_name, pr_number, head_sha)`,
+the publish-time SHA guard, and
 `stale_publish_rate = 0`.
 
 ## D1 — Engine invocation: completion-webhook callback (replaces polling)

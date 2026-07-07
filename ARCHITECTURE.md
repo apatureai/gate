@@ -41,7 +41,9 @@ flowchart TD
 Key rules:
 
 - Webhook delivery is at-least-once. Gate dedupes on `X-GitHub-Delivery` before enqueue (`webhook_log` table).
-- Queue supersession key is `repo#pr`. Completed-review identity is `(pr, head_sha)`, enforced by a `UNIQUE(pr, head_sha)` constraint on `runs`.
+- Queue supersession key is `repo#pr`. The durable completed-review identity is
+  `(repo_owner, repo_name, pr_number, head_sha)`, enforced by the matching
+  repository-scoped `runs` constraint.
 - The publish-time SHA guard is the correctness backstop and is independent of whether engine-side cancellation landed in time.
 
 ## 3. System Boundaries
@@ -212,10 +214,10 @@ Decisions from the 2026-06-15 review. Each is phased: ship the MVP form, migrate
 | D2 | Orchestration durability | BullMQ behind a `ReviewJobWorker` interface; publish-guard backstop | Inngest (singleton cancel mode) | Stale-publish rate non-zero for two consecutive weeks, or AbortSignal/eviction bugs |
 | D3 | Capture & data residency | Hosted engine + DPA template | Enterprise in-VPC via per-account `engineEndpoint` | Enterprise data-residency requirement |
 | D4 | Contract & auth | Zod parse + `x-schema-version` + HMAC + circuit breaker | Pact consumer-driven contracts + JWT/JWKS | Engine team deploys independently / multiple engine clients |
-| D5 | Delivery exactly-once | `webhook_log` dedup + `UNIQUE(pr, head_sha)` + secondary-rate-limit backoff | Transactional outbox + REST reconciliation sweep | Crash-window inconsistency observed in prod |
+| D5 | Delivery exactly-once | `webhook_log` dedup + `UNIQUE(repo_owner, repo_name, pr_number, head_sha)` + secondary-rate-limit backoff | Transactional outbox + REST reconciliation sweep | Crash-window inconsistency observed in prod |
 | D6 | Tenancy & secrets | Postgres RLS + tiered KMS (shared CMK free / per-tenant CMK paid / per-repo DEK) | Per-tenant CMK everywhere + crypto-shred offboarding + SOC2/EU-region | Enterprise/compliance contract |
 
-Hard invariants that survive every migration: no `contents: write`; Qwen3-VL default (never hard-code Claude); supersession key `repo#pr`; completed-review identity `(pr, head_sha)`; publish-time SHA guard; feedback never mutates on GET; `stale_publish_rate = 0` treated as a P1 invariant, not a tunable SLO.
+Hard invariants that survive every migration: no `contents: write`; Qwen3-VL default (never hard-code Claude); supersession key `repo#pr`; durable completed-review identity `(repo_owner, repo_name, pr_number, head_sha)`; publish-time SHA guard; feedback never mutates on GET; `stale_publish_rate = 0` treated as a P1 invariant, not a tunable SLO.
 
 ## 9. Architecture Poster
 

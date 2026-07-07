@@ -41,8 +41,8 @@ bookkeeping.
 - The `ReviewJobWorker` interface and all orchestration code that depends on it.
 - The **publish-time SHA guard remains queue-agnostic** and is retained under any
   adapter — it is the invariant backstop, not a BullMQ detail.
-- `ReviewJobPayload` (IDs/refs only) and the completed-review identity
-  `(pr, head_sha)`.
+- `ReviewJobPayload` (IDs/refs only) and the durable completed-review identity
+  `(repo_owner, repo_name, pr_number, head_sha)`.
 
 ## What changes
 

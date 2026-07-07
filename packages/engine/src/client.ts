@@ -79,7 +79,8 @@ const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => set
 /**
  * Create the judgment-engine client. Auth + request timeout live in the
  * transport; this adds bounded submit retry with backoff and is idempotent per
- * (pr, head_sha) — the idempotency key dedupes capture even across retries.
+ * engine job key `(pr, head_sha)` — distinct from the repository-scoped durable
+ * `runs` identity.
  */
 export function createJudgmentEngineClient(
   transport: EngineTransport,

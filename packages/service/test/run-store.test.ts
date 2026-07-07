@@ -41,7 +41,7 @@ describe("createSqlRunStore (#69)", () => {
     expect(rows[0]?.last_full_review_at).not.toBeNull();
   });
 
-  it("is idempotent on the completed-review identity (no duplicate row on retry)", async () => {
+  it("is idempotent on the repository-scoped completed-review identity", async () => {
     const store = createSqlRunStore(query);
     await store.recordCompletedRun(run({ grade: "needs_work", lastFullReviewAtMs: 1_000_000 }));
     await store.recordCompletedRun(run({ grade: "ship_with_nits", lastFullReviewAtMs: 2_000_000 }));

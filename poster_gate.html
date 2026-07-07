@@ -135,7 +135,7 @@
         <div class="eyebrow">Gate orchestration</div>
         <h2>Newest push wins, stale reviews never publish</h2>
         <ul>
-          <li>Queue supersession key is <code>repo#pr</code>; completed-review identity is <code>(pr, head_sha)</code>.</li>
+          <li>Queue supersession key is <code>repo#pr</code>; durable completed-review identity is <code>(repo, pr, head_sha)</code>.</li>
           <li>Set <code>current_sha[repo#pr]</code> on enqueue; cancel old active work when possible; re-check at every expensive boundary.</li>
           <li>Mandatory publish guard before editing the sticky comment or Check Run.</li>
         </ul>

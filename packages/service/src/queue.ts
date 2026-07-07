@@ -2,10 +2,11 @@ import type { ReviewDepth } from "@gate/types";
 
 /**
  * Review queue model (TRD §2, §3.2, §5). The supersession/dedup key is
- * `repo#pr` (at most one pending review per PR; newest push wins), and the
- * completed-review identity is `(pr, head_sha)`. Payloads carry IDs/refs only —
- * screenshots, critique JSON, and annotations flow through engine-owned object
- * storage, never the queue.
+ * `repo#pr` (at most one pending review per PR; newest push wins). Payloads
+ * carry IDs/refs only — screenshots, critique JSON, and annotations flow
+ * through engine-owned object storage, never the queue. The durable completed
+ * review identity lives in `runs` as `(repo_owner, repo_name, pr_number,
+ * head_sha)`.
  */
 export const REVIEW_QUEUE_NAME = "review";
 
@@ -29,7 +30,7 @@ export function reviewQueueKey(owner: string, name: string, prNumber: number): s
   return `${owner}/${name}#${prNumber}`;
 }
 
-/** Completed-review identity: `pr:head_sha`. */
+/** Engine job idempotency shape: `pr:head_sha` (not the durable runs identity). */
 export function completedReviewId(prNumber: number, headSha: string): string {
   return `${prNumber}:${headSha}`;
 }

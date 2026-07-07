@@ -90,7 +90,7 @@ Out of scope for MVP:
 Correctness rule:
 
 - Supersession key: `repo#pr`.
-- Completed-review identity: `(pr, head_sha)`.
+- Durable completed-review identity: `(repo_owner, repo_name, pr_number, head_sha)`.
 - Publish guard: never post a result whose SHA is no longer the PR head.
 
 ## 7. Finding Experience

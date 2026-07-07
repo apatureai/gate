@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS installations (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
--- Completed reviews. Identity is (pr, head_sha) per TRD §5.
+-- Completed reviews. 0003 replaces this initial global identity with the
+-- repository-scoped TRD §5 identity (repo_owner, repo_name, pr_number, head_sha).
 CREATE TABLE IF NOT EXISTS runs (
   id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   installation_id     bigint  NOT NULL REFERENCES installations(id) ON DELETE CASCADE,
