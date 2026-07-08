@@ -12,6 +12,9 @@ describe("production-readiness env check (#64)", () => {
     expect(PRODUCTION_ENV_VARS).toContain("GITHUB_APP_ID");
     expect(PRODUCTION_ENV_VARS).toContain("DATABASE_URL");
     expect(PRODUCTION_ENV_VARS).toContain("REDIS_URL");
+    expect(PRODUCTION_ENV_VARS).toContain("GATE_SCREENSHOT_OBJECT_URL_TEMPLATE");
+    expect(PRODUCTION_ENV_VARS).toContain("SCREENSHOT_CAPABILITY_SECRET");
+    expect(PRODUCTION_ENV_VARS).toContain("FEEDBACK_TOKEN_SECRET");
   });
 
   it("reports ALL missing vars at once (not just the first)", () => {

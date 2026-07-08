@@ -6,11 +6,15 @@ import { EnvSecretStore, type SecretStore } from "@gate/secrets";
 import { Pool } from "pg";
 import { createGitHubAppAuth, type GitHubAppAuth } from "./app-auth.js";
 import { createAppReviewClient, type AppReviewClient, type AppReviewTarget } from "./app-github.js";
+import { createFeedbackSink, createSqlFeedbackStore } from "./feedback-store.js";
+import { createSqlConsumedStore } from "./feedback-token.js";
+import type { FeedbackSink } from "./feedback-routes.js";
 import { createGitHubPullsClient, type GitHubPullsClient } from "./github-pulls.js";
 import { createProductionAppServer, type ProductionAppServerDeps } from "./production-server.js";
 import { assertProductionEnv } from "./production-readiness.js";
 import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
 import { createSqlRunStore, type CompletedRunRecord, type RunStore } from "./run-store.js";
+import { createSqlScreenshotRegistry, createTemplateSignedUrlProvider } from "./screenshots.js";
 import { createBullReviewWorker } from "./worker.js";
 import { createSqlWebhookDedupe } from "./webhook-dedup.js";
 import { createRedisSupersessionStore, type RedisLike, type RepoPr } from "./supersession.js";
@@ -87,6 +91,14 @@ function createTenantRunStore(tenant: TenantTxRunner): RunStore {
   };
 }
 
+function createTenantFeedbackSink(tenant: TenantTxRunner): FeedbackSink {
+  return createFeedbackSink({
+    async persist(event) {
+      await tenant.withTenant(event.installationId, (q: QueryFn) => createSqlFeedbackStore(q).persist(event));
+    },
+  });
+}
+
 export async function buildProductionDepsFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   factories: ProductionRuntimeFactories = {},
@@ -105,6 +117,11 @@ export async function buildProductionDepsFromEnv(
   const hostedEndpoint = await secretStore.get("engineEndpoint");
   const engineApiKey = await secretStore.get("engineApiKey");
   const engineHmacSecret = await secretStore.get("engineHmacSecret");
+  const screenshotRegistry = createSqlScreenshotRegistry(sql.query);
+  const screenshotObjectUrlTemplate = requiredEnv(env, "GATE_SCREENSHOT_OBJECT_URL_TEMPLATE");
+  const screenshotCapabilitySecret = requiredEnv(env, "SCREENSHOT_CAPABILITY_SECRET");
+  const feedbackTokenSecret = requiredEnv(env, "FEEDBACK_TOKEN_SECRET");
+  const feedback = createTenantFeedbackSink(sql.tenant);
   const githubPullsClient = factories.githubPullsClient ?? ((token: string) => createGitHubPullsClient(token));
   const appReviewClient =
     factories.appReviewClient ?? ((token: string, target: AppReviewTarget) => createAppReviewClient(token, target));
@@ -124,6 +141,17 @@ export async function buildProductionDepsFromEnv(
     worker: factories.reviewWorker?.(redisUrl) ?? createBullReviewWorker(redisUrl),
     windowStore: createTenantFullReviewWindow(sql.tenant),
     runStore: createTenantRunStore(sql.tenant),
+    screenshotRegistry,
+    screenshotRoute: {
+      signer: createTemplateSignedUrlProvider(screenshotObjectUrlTemplate),
+      capabilitySecret: screenshotCapabilitySecret,
+    },
+    feedback,
+    feedbackRoutes: {
+      secret: feedbackTokenSecret,
+      sink: feedback,
+      consumed: createSqlConsumedStore(sql.query),
+    },
     webhookDedupe: createSqlWebhookDedupe(sql.query),
     startup: { redis },
     env,

@@ -139,6 +139,7 @@ export {
   verifyScreenshotCapability,
   createInMemoryScreenshotRegistry,
   createSqlScreenshotRegistry,
+  createTemplateSignedUrlProvider,
 } from "./screenshots.js";
 export type {
   ScreenshotVisibility,

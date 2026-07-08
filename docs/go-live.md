@@ -18,8 +18,11 @@ Provisioning + secrets to take Gate live. These need real cloud accounts/credent
 | `STRIPE_WEBHOOK_SECRET` | Verify Stripe webhook signatures |
 | `DATABASE_URL` | Postgres (runs, findings, feedback, billing) |
 | `REDIS_URL` | Redis (supersession `sha:`, token-buckets, quotas) |
+| `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE` | Absolute screenshot object URL template containing `{objectKey}` for `/i/:artifactId.png` redirects |
+| `SCREENSHOT_CAPABILITY_SECRET` | Verify private screenshot capability tokens |
+| `FEEDBACK_TOKEN_SECRET` | Verify one-time feedback POST tokens |
 
-Per-repo / optional (not boot-required): Vercel `protection_bypass` (per-repo config), `OTEL_EXPORTER_OTLP_ENDPOINT` (observability), the feedback-token + screenshot-capability signing secrets (set if not derived from the above).
+Per-repo / optional (not boot-required): Vercel `protection_bypass` (per-repo config), `OTEL_EXPORTER_OTLP_ENDPOINT` (observability).
 
 ## Provisioning checklist
 
@@ -27,6 +30,7 @@ Per-repo / optional (not boot-required): Vercel `protection_bypass` (per-repo co
 - [ ] **Postgres** (Neon/Fly): provision; set `DATABASE_URL`; run migrations (Fly release command, #33); app connects as a **non-superuser without BYPASSRLS** so RLS (#50) holds.
 - [ ] **Redis** (Upstash/Fly): `maxmemory-policy=noeviction` (#34); set `REDIS_URL`. `runStartupChecks` fails fast otherwise.
 - [ ] **Fly app** `apature-gate`: configure deploy (#32); `fly secrets set` for every variable above + the per-repo/optional ones.
+- [ ] **Artifact routes**: set `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE` to the engine/object-store signed-read template, for example `https://objects.example.com/{objectKey}?signature=...`; Gate URL-encodes `{objectKey}` and redirects only after `/i` authorization.
 - [ ] **AWS KMS**: bind `SecretStore`/`KmsKeyProvider` (#35) to real KMS; per-tenant CMK for enterprise crypto-shredding (#52/#20).
 - [ ] **GitHub App**: create from the manifest (`buildAppManifest`, #21) with minimal scopes (never `contents: write`); webhook URL → deployed `/webhook`.
 - [ ] **Observability**: point OTLP at the collector; load `observability/alerts.yaml` + `observability/dashboard.json` (#36).

@@ -3,6 +3,7 @@ import type { JudgmentEngineClient } from "@gate/engine";
 import type { QueryFn, TenantTxRunner } from "@gate/db";
 import { describe, expect, it, vi } from "vitest";
 import type { GitHubAppAuth } from "../src/app-auth.js";
+import { buildFeedbackEvent } from "../src/feedback-store.js";
 import type { AppReviewClient, AppReviewTarget } from "../src/app-github.js";
 import type { GitHubPullsClient } from "../src/github-pulls.js";
 import { PRODUCTION_ENV_VARS } from "../src/production-readiness.js";
@@ -17,6 +18,9 @@ function fullEnv(): NodeJS.ProcessEnv {
     JUDGMENT_ENGINE_ENDPOINT: "https://engine.example",
     JUDGMENT_ENGINE_API_KEY: "engine-key",
     JUDGMENT_ENGINE_HMAC_SECRET: "hmac-secret",
+    GATE_SCREENSHOT_OBJECT_URL_TEMPLATE: "https://objects.example/{objectKey}?signed=1",
+    SCREENSHOT_CAPABILITY_SECRET: "cap-secret",
+    FEEDBACK_TOKEN_SECRET: "feedback-secret",
   };
 }
 
@@ -159,5 +163,66 @@ describe("buildProductionDepsFromEnv", () => {
     });
     expect(clients.comments).toBeDefined();
     expect(clients.engine).toBeDefined();
+  });
+
+  it("wires production screenshot and feedback routes to SQL-backed stores", async () => {
+    const consumed = new Set<string>();
+    const seenSql: string[] = [];
+    const tenantIds: string[] = [];
+    const query: QueryFn = vi.fn(async (sql, params) => {
+      seenSql.push(sql);
+      if (sql.includes("feedback_consumed_tokens")) {
+        const jti = String(params?.[0]);
+        if (consumed.has(jti)) return { rows: [] };
+        consumed.add(jti);
+        return { rows: [{ jti }] };
+      }
+      return { rows: [] };
+    });
+    const tenant: TenantTxRunner = {
+      withTenant: vi.fn(async (installationId, fn) => {
+        tenantIds.push(String(installationId));
+        return fn(query);
+      }),
+    };
+
+    const deps = await buildProductionDepsFromEnv(fullEnv(), baseFactories({ sql: () => ({ query, tenant }) }));
+
+    expect(deps.screenshotRegistry).toBeDefined();
+    expect(deps.screenshotRoute).toBeDefined();
+    await expect(deps.screenshotRoute?.signer.sign("jobs/1/shot.png")).resolves.toBe(
+      "https://objects.example/jobs%2F1%2Fshot.png?signed=1",
+    );
+    expect(deps.screenshotRoute?.capabilitySecret).toBe("cap-secret");
+
+    expect(deps.feedback).toBeDefined();
+    expect(deps.feedbackRoutes).toBeDefined();
+    expect(await deps.feedbackRoutes?.consumed?.consume("jti-1")).toBe(true);
+    expect(await deps.feedbackRoutes?.consumed?.consume("jti-1")).toBe(false);
+
+    await deps.feedbackRoutes?.sink.record(
+      buildFeedbackEvent(
+        "reaction",
+        {
+          installationId: "77",
+          owner: "acme",
+          name: "web",
+          prNumber: 42,
+          headSha: "sha",
+          findingId: "f_001",
+          source: "reaction",
+        },
+        1_000,
+      ),
+    );
+
+    expect(tenantIds).toEqual(["77"]);
+    expect(seenSql.some((sql) => sql.includes("feedback_events"))).toBe(true);
+  });
+
+  it("fails clearly when production screenshot route env is missing", async () => {
+    const env = fullEnv();
+    delete env.GATE_SCREENSHOT_OBJECT_URL_TEMPLATE;
+    await expect(buildProductionDepsFromEnv(env, baseFactories())).rejects.toThrow(/GATE_SCREENSHOT_OBJECT_URL_TEMPLATE/);
   });
 });

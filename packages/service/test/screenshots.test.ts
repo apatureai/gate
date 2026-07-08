@@ -6,6 +6,7 @@ import {
   buildRunUrl,
   buildScreenshotRecords,
   capabilityScreenshotUrl,
+  createTemplateSignedUrlProvider,
   deriveArtifactId,
   mintScreenshotCapability,
   registerScreenshotRoute,
@@ -160,6 +161,15 @@ describe("URL + record helpers", () => {
         runId: "run_9",
       }),
     ).toBe("https://gate.app/1/findings/run_9?owner=acme&name=web+app");
+  });
+
+  it("builds signed screenshot object URLs from an explicit env template", async () => {
+    const signer = createTemplateSignedUrlProvider("https://objects.example/{objectKey}?sig=fresh");
+    await expect(signer.sign("jobs/1/shot.png")).resolves.toBe("https://objects.example/jobs%2F1%2Fshot.png?sig=fresh");
+  });
+
+  it("rejects a screenshot object URL template without the object key placeholder", () => {
+    expect(() => createTemplateSignedUrlProvider("https://objects.example/static.png")).toThrow(/{objectKey}/);
   });
 
   it("stamps collision-safe artifact ids + retention + ownership on records", () => {

@@ -64,6 +64,34 @@ export interface SignedUrlProvider {
   sign(objectKey: string): Promise<string>;
 }
 
+/**
+ * Env-template binding for engine-owned screenshot objects. The template must
+ * include `{objectKey}` so a static URL cannot accidentally serve the wrong
+ * artifact. The object key is URL-encoded before substitution.
+ */
+export function createTemplateSignedUrlProvider(template: string): SignedUrlProvider {
+  const trimmed = template.trim();
+  if (!trimmed) throw new Error("GATE_SCREENSHOT_OBJECT_URL_TEMPLATE is required");
+  if (!trimmed.includes("{objectKey}")) {
+    throw new Error("GATE_SCREENSHOT_OBJECT_URL_TEMPLATE must include an {objectKey} placeholder");
+  }
+  return {
+    async sign(objectKey) {
+      const candidate = trimmed.split("{objectKey}").join(encodeURIComponent(objectKey));
+      let url: URL;
+      try {
+        url = new URL(candidate);
+      } catch {
+        throw new Error("GATE_SCREENSHOT_OBJECT_URL_TEMPLATE must expand to a valid absolute URL");
+      }
+      if (url.protocol !== "https:" && url.protocol !== "http:") {
+        throw new Error("GATE_SCREENSHOT_OBJECT_URL_TEMPLATE must expand to an http(s) URL");
+      }
+      return url.toString();
+    },
+  };
+}
+
 /** Authorizes a request against a private record (e.g. via a dashboard session). */
 export interface ScreenshotAuthorizer {
   authorize(request: FastifyRequest, record: ScreenshotRecord): boolean | Promise<boolean>;
