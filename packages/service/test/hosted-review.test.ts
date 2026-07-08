@@ -89,7 +89,7 @@ describe("runHostedReview", () => {
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("superseded");
     expect(d._published).toHaveLength(0);
-    expect(d.engine.cancel).toHaveBeenCalledWith("job_super"); // DELETE /jobs/:id on supersession
+    expect(d.engine.cancel).toHaveBeenCalledWith("job_super", "1"); // DELETE /jobs/:id on supersession
   });
 
   it("posts a neutral Check Run (never crashes the worker) when the engine throws", async () => {

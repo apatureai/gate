@@ -45,8 +45,8 @@ export interface SubmitResponse {
 export interface EngineTransport {
   submit(submission: JobSubmission, signal?: AbortSignal): Promise<SubmitResponse>;
   /** `signal` aborts the in-flight request on supersession (§15.3). */
-  poll(jobId: string, signal?: AbortSignal, installationId?: string): Promise<JobStatus>;
-  cancel(jobId: string, installationId?: string): Promise<void>;
+  poll(jobId: string, installationId: string, signal?: AbortSignal): Promise<JobStatus>;
+  cancel(jobId: string, installationId: string): Promise<void>;
 }
 
 export class EngineJobError extends Error {
@@ -138,13 +138,16 @@ export async function pollUntilDone(
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? defaultSleep;
   const start = now();
+  if (options.signal?.aborted) throw new EngineAbortedError(jobId);
+  const installationId = options.installationId;
+  if (!installationId) throw new EngineJobError(`job ${jobId} poll requires installationId`);
 
   for (let attempt = 0; ; attempt++) {
     // Stage-boundary supersession check (#4): stop before doing more work.
     if (options.signal?.aborted) throw new EngineAbortedError(jobId);
     let status: JobStatus;
     try {
-      status = await transport.poll(jobId, options.signal, options.installationId);
+      status = await transport.poll(jobId, installationId, options.signal);
     } catch (err) {
       // A request aborted by supersession surfaces as the typed abort error.
       if (options.signal?.aborted) throw new EngineAbortedError(jobId);
@@ -191,13 +194,20 @@ export async function runEngineJob(
   }
   if (options.signal?.aborted) throw new EngineAbortedError(response.jobId);
   // Both 202 and 409 yield a jobId to poll; 409 means capture is already running.
-  return pollUntilDone(transport, response.jobId, options);
+  return pollUntilDone(transport, response.jobId, {
+    ...options,
+    installationId: options.installationId ?? submission.request.installationId,
+  });
 }
 
 /** Best-effort cancellation on supersession; never throws. */
-export async function cancelEngineJob(transport: EngineTransport, jobId: string): Promise<void> {
+export async function cancelEngineJob(
+  transport: EngineTransport,
+  jobId: string,
+  installationId: string,
+): Promise<void> {
   try {
-    await transport.cancel(jobId);
+    await transport.cancel(jobId, installationId);
   } catch {
     // Cancellation is best-effort; the publish-time SHA guard is the backstop.
   }

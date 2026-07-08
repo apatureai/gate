@@ -35,19 +35,15 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
   const fetchImpl = options.fetchImpl ?? fetch;
   const base = options.baseUrl.replace(/\/$/, "");
   const timeout = options.requestTimeoutMs ?? 30_000;
-  const jobInstallations = new Map<string, string>();
 
-  const headers = (bodyForSignature?: string, installationId?: string): Record<string, string> => {
+  const headers = (bodyForSignature: string, installationId: string): Record<string, string> => {
     const h: Record<string, string> = { "content-type": "application/json" };
     if (options.apiKey) h["authorization"] = `Bearer ${options.apiKey}`;
     if (options.hmacSecret) {
-      if (!installationId) {
-        throw new EngineJobError("engine request signing failed: missing installationId for job request");
-      }
       Object.assign(
         h,
         signEngineRequest({
-          body: bodyForSignature ?? "",
+          body: bodyForSignature,
           installationId,
           secret: options.hmacSecret,
         }),
@@ -87,7 +83,6 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
       );
       if (res.status === 202 || res.status === 409) {
         const body = (await res.json()) as { jobId: string };
-        jobInstallations.set(body.jobId, submission.request.installationId);
         return { status: res.status, jobId: body.jobId };
       }
       if (res.status === 429 || res.status === 503) {
@@ -99,12 +94,11 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
       throw new EngineJobError(`engine submit failed: ${res.status}`);
     },
 
-    async poll(jobId: string, abortSignal?: AbortSignal, installationId?: string): Promise<JobStatus> {
-      const signedInstallationId = installationId ?? jobInstallations.get(jobId);
+    async poll(jobId: string, installationId: string, abortSignal?: AbortSignal): Promise<JobStatus> {
       const res = await withTimeout(
         (signal) =>
           fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
-            headers: headers("", signedInstallationId),
+            headers: headers("", installationId),
             signal,
           }),
         abortSignal,
@@ -122,16 +116,14 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
       return status;
     },
 
-    async cancel(jobId: string, installationId?: string): Promise<void> {
-      const signedInstallationId = installationId ?? jobInstallations.get(jobId);
+    async cancel(jobId: string, installationId: string): Promise<void> {
       await withTimeout((signal) =>
         fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
           method: "DELETE",
-          headers: headers("", signedInstallationId),
+          headers: headers("", installationId),
           signal,
         }),
       );
-      jobInstallations.delete(jobId);
     },
   };
 }

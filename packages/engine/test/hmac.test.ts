@@ -130,8 +130,8 @@ describe("http transport signs every job request when an hmac secret is set", ()
       request: { installationId: "inst_42" } as never,
     };
     await transport.submit(submission);
-    await transport.poll("job_1");
-    await transport.cancel("job_1");
+    await transport.poll("job_1", "inst_42");
+    await transport.cancel("job_1", "inst_42");
 
     expect(captured.map((r) => r.method)).toEqual(["POST", "GET", "DELETE"]);
 
@@ -145,6 +145,43 @@ describe("http transport signs every job request when an hmac secret is set", ()
         secret: SECRET,
       });
       expect(verify.ok).toBe(true);
+    }
+  });
+
+  it("signs poll and cancel from a fresh transport when installationId is explicit", async () => {
+    const captured: Array<{ method: string; body: string; headers: Record<string, string> }> = [];
+    const fetchImpl = (async (_url: string, init: RequestInit = {}) => {
+      const method = init.method ?? "GET";
+      captured.push({
+        method,
+        body: typeof init.body === "string" ? init.body : "",
+        headers: init.headers as Record<string, string>,
+      });
+      if (method === "DELETE") return new Response(null, { status: 204 });
+      return new Response(JSON.stringify({ jobId: "job_elsewhere", state: "running" }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const transport = createHttpEngineTransport({
+      baseUrl: "https://engine.internal",
+      hmacSecret: SECRET,
+      fetchImpl,
+    });
+
+    await transport.poll("job_elsewhere", "inst_99");
+    await transport.cancel("job_elsewhere", "inst_99");
+
+    expect(captured.map((r) => r.method)).toEqual(["GET", "DELETE"]);
+    for (const request of captured) {
+      expect(request.headers[INSTALLATION_HEADER]).toBe("inst_99");
+      expect(
+        verifyEngineRequest({
+          body: request.body,
+          installationId: request.headers[INSTALLATION_HEADER]!,
+          timestamp: request.headers[TIMESTAMP_HEADER]!,
+          signature: request.headers[SIGNATURE_HEADER]!,
+          secret: SECRET,
+        }).ok,
+      ).toBe(true);
     }
   });
 });

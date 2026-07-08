@@ -55,7 +55,7 @@ describe("engine poll loop honors the supersession signal", () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      pollUntilDone(transport, "j", { depth: "deep", signal: controller.signal }),
+      pollUntilDone(transport, "j", { depth: "deep", installationId: "inst_1", signal: controller.signal }),
     ).rejects.toBeInstanceOf(EngineAbortedError);
   });
 
@@ -72,7 +72,7 @@ describe("engine poll loop honors the supersession signal", () => {
     };
     const clock = { now: () => 0, sleep: async () => {} };
     await expect(
-      pollUntilDone(t, "j", { depth: "deep", signal: controller.signal, ...clock }),
+      pollUntilDone(t, "j", { depth: "deep", installationId: "inst_1", signal: controller.signal, ...clock }),
     ).rejects.toBeInstanceOf(EngineAbortedError);
   });
 });

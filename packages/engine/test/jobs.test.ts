@@ -19,7 +19,7 @@ const goldenResult = loadGoldenReviewResult();
 const submission: JobSubmission = {
   idempotencyKey: idempotencyKey(42, "abc123"),
   depth: "deep",
-  request: {} as never, // request shape is exercised by #37; the protocol is under test here
+  request: { installationId: "inst_1" } as never, // full request shape is exercised by #37
 };
 
 /** Virtual clock so backoff/deadline logic is deterministic. */
@@ -156,7 +156,7 @@ describe("cancelEngineJob", () => {
     const cancel = vi.fn(async () => {
       throw new Error("network");
     });
-    await expect(cancelEngineJob(transport({ cancel }), "job_1")).resolves.toBeUndefined();
-    expect(cancel).toHaveBeenCalledWith("job_1");
+    await expect(cancelEngineJob(transport({ cancel }), "job_1", "inst_1")).resolves.toBeUndefined();
+    expect(cancel).toHaveBeenCalledWith("job_1", "inst_1");
   });
 });

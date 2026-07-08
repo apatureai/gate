@@ -106,22 +106,21 @@ describe("createJudgmentEngineClient.review", () => {
       poll: async () => ({ jobId: "j", state: "running" }),
       cancel,
     });
-    await client.cancel("job_9");
-    expect(cancel).toHaveBeenCalledWith("job_9", undefined);
+    await client.cancel("job_9", "inst_9");
+    expect(cancel).toHaveBeenCalledWith("job_9", "inst_9");
   });
 
-  it("remembers the submitted job installation for later cancellation signing", async () => {
-    const cancel = vi.fn(async () => {});
+  it("polls with the review installationId instead of relying on transport-local state", async () => {
+    const poll = vi.fn(async () => ({ jobId: "job_1", state: "completed" as const, result: goldenResult }));
     const client = createJudgmentEngineClient(
       {
         submit: async () => ({ status: 202, jobId: "job_1" }),
-        poll: async () => ({ jobId: "job_1", state: "completed", result: goldenResult }),
-        cancel,
+        poll,
+        cancel: async () => {},
       },
       { ...clock() },
     );
     await client.review(ctx);
-    await client.cancel("job_1");
-    expect(cancel).toHaveBeenCalledWith("job_1", "inst_1");
+    expect(poll).toHaveBeenCalledWith("job_1", "inst_1", undefined);
   });
 });

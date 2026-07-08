@@ -71,7 +71,7 @@ export interface JudgmentEngineClientOptions {
 
 export interface JudgmentEngineClient {
   review(ctx: ReviewRequestContext, pollOverrides?: Omit<PollOptions, "depth">): Promise<PollOutcome>;
-  cancel(jobId: string): Promise<void>;
+  cancel(jobId: string, installationId: string): Promise<void>;
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -89,7 +89,6 @@ export function createJudgmentEngineClient(
   const retries = options.submitRetries ?? 2;
   const backoffMs = options.submitBackoffMs ?? 500;
   const sleep = options.sleep ?? defaultSleep;
-  const jobInstallations = new Map<string, string>();
 
   async function submitWithRetry(
     submission: JobSubmission,
@@ -120,13 +119,11 @@ export function createJudgmentEngineClient(
       };
       const mergedPoll = { depth: ctx.depth, ...options.poll, ...pollOverrides };
       const response = await submitWithRetry(submission, mergedPoll.signal);
-      jobInstallations.set(response.jobId, ctx.installationId);
-      mergedPoll.installationId ??= ctx.installationId;
-      return pollUntilDone(transport, response.jobId, mergedPoll);
+      return pollUntilDone(transport, response.jobId, { ...mergedPoll, installationId: ctx.installationId });
     },
 
-    async cancel(jobId) {
-      await transport.cancel(jobId, jobInstallations.get(jobId));
+    async cancel(jobId, installationId) {
+      await transport.cancel(jobId, installationId);
     },
   };
 }

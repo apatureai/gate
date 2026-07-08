@@ -138,7 +138,7 @@ export async function runHostedReview(
   } catch (err) {
     if (err instanceof EngineAbortedError) {
       // Best-effort DELETE /jobs/:id so the engine stops the superseded job (§15.1).
-      await deps.engine.cancel(err.jobId).catch(() => undefined);
+      await deps.engine.cancel(err.jobId, ctx.installationId).catch(() => undefined);
       return { status: "superseded" }; // newer push won
     }
     // Engine unavailable / contract violation: neutral Check Run, never crash the

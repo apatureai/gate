@@ -29,6 +29,7 @@ describe("HTTP transport threads the supersession signal into fetch", () => {
     await expect(
       pollUntilDone(transport, "job_1", {
         depth: "deep",
+        installationId: "inst_1",
         signal: controller.signal,
         now: () => 0,
         sleep: async () => {},
