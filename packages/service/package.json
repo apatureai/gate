@@ -30,13 +30,13 @@
     "@gate/types": "workspace:*",
     "@octokit/app": "^15.1.0",
     "@octokit/webhooks": "^13.4.1",
-    "bullmq": "^5.34.0",
-    "fastify": "^5.1.0",
-    "pg": "^8.13.1"
+    "bullmq": "^5.79.3",
+    "fastify": "^5.10.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.2.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@types/pg": "^8.11.10",
-    "@opentelemetry/sdk-trace-base": "^2.8.0"
+    "@opentelemetry/sdk-trace-base": "^2.9.0"
   }
 }

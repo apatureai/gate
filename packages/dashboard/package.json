@@ -17,7 +17,7 @@
     "yaml": "^2.6.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.2.0",
+    "@electric-sql/pglite": "^0.5.4",
     "@gate/db": "workspace:*"
   }
 }
