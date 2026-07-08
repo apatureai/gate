@@ -4,15 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Apature Gate - judgment-only design review for GitHub PRs",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.34.3",
   "engines": {
     "node": ">=20"
-  },
-  "pnpm": {
-    "overrides": {
-      "vite": "6.4.3",
-      "ioredis": "^5.11.1"
-    }
   },
   "scripts": {
     "build": "tsc -b",
