@@ -79,3 +79,13 @@ mix format --check-formatted
 Deliberately outside the root pnpm workspace and CI (gate's harness is
 untouched); the spike is evidence for an architecture decision, not a shipped
 component.
+
+## Known divergence from the TS mirror (reviewer finding, non-blocking)
+
+`worker.ts` aborts the in-flight job **unconditionally** on enqueue — a same-sha
+re-push aborts and restarts the run. This spike only signals abort when the new
+sha **differs** (pinned in the "same-sha re-push does not abort" test). The
+spike's behavior is arguably the refinement (an identical head needs no
+restart), but it is a deliberate divergence from the production semantics, not
+an oversight — flagged here so nobody ports the model back assuming an exact
+mirror.
