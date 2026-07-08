@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Next.js (app-router) shell rendering the @gate/dashboard hosted-tier core (#63). Standalone — NOT part of the monorepo tsc -b/vitest/eslint harness; built with `next build`.",
+  "description": "Next.js (app-router) shell rendering the @gate/dashboard hosted-tier core (#63). Standalone \u2014 NOT part of the monorepo tsc -b/vitest/eslint harness; built with `next build`.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -29,6 +29,6 @@
     "@types/pg": "^8.11.10",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
-    "typescript": "^5.7.2"
+    "typescript": "^6.0.3"
   }
 }
