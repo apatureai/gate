@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
-import type { JudgmentEngineClient } from "@gate/engine";
+import type { JudgmentEngineClient, ReadinessOptions } from "@gate/engine";
 import { loadGoldenReviewResult } from "@gate/types";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,12 +9,13 @@ import { createProductionAppServer, type InstallationClients } from "../src/prod
 import { createInMemoryFullReviewWindow } from "../src/review-window.js";
 import { mintFeedbackToken } from "../src/feedback-token.js";
 import { createInMemoryScreenshotRegistry, type ScreenshotRecord } from "../src/screenshots.js";
-import { createInMemorySupersessionStore } from "../src/supersession.js";
+import { createInMemorySupersessionStore, recordEnqueue } from "../src/supersession.js";
 import { createInMemoryReviewWorker } from "../src/worker.js";
 
 const SECRET = "webhook-secret";
 const sign = (body: string) => `sha256=${createHmac("sha256", SECRET).update(body).digest("hex")}`;
 const golden = loadGoldenReviewResult();
+const ready = async () => ({ ready: true as const, elapsedMs: 0 });
 
 let app: FastifyInstance | undefined;
 afterEach(async () => {
@@ -51,6 +52,7 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
       windowStore: createInMemoryFullReviewWindow(),
       resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
       installationClients,
+      previewReadiness: ready,
     });
     app = prod.server;
 
@@ -110,6 +112,7 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
         publishCheckRun: vi.fn(async () => {}),
         engine,
       }),
+      previewReadiness: ready,
     });
     app = prod.server;
 
@@ -171,6 +174,7 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
         publishCheckRun: async (run) => void published.push(run),
         engine,
       }),
+      previewReadiness: ready,
     });
     app = prod.server;
 
@@ -200,6 +204,161 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(published[0]?.summary).toContain("rules.gate");
     expect(engine.review).not.toHaveBeenCalled();
     expect(comments.createComment).not.toHaveBeenCalled();
+  });
+
+  it("publishes a neutral Check Run and does not call the engine when preview readiness times out", async () => {
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const comments: GitHubCommentsApi = {
+      listComments: vi.fn(async () => []),
+      createComment: vi.fn(async (body) => ({ id: 1, nodeId: "n1", body })),
+      updateComment: vi.fn(async () => ({ updated: true })),
+    };
+    const published: CheckRun[] = [];
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments,
+        publishCheckRun: async (r) => void published.push(r),
+        engine,
+      }),
+      previewReadiness: async () => ({ ready: false, reason: "ceiling_exceeded" }),
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+
+    await vi.waitFor(() => expect(published).toHaveLength(1));
+    expect(published[0]).toMatchObject({
+      name: "Apature Gate",
+      conclusion: "neutral",
+      title: "Preview not ready",
+    });
+    expect(published[0]?.summary).toContain("Preview did not respond with HTTP 200");
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(comments.createComment).not.toHaveBeenCalled();
+  });
+
+  it("passes wait_seconds and the worker AbortSignal into the readiness poll", async () => {
+    const seen: ReadinessOptions[] = [];
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: { listComments: async () => [], createComment: vi.fn(), updateComment: vi.fn() } as unknown as GitHubCommentsApi,
+        publishCheckRun: vi.fn(),
+        engine: { review: vi.fn(async () => ({ status: "failed", error: "unused", jobId: "j" })), cancel: vi.fn() },
+      }),
+      loadConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: { ...DEFAULT_CONFIG.preview, waitSeconds: 7 },
+      }),
+      previewReadiness: async (options) => {
+        seen.push(options);
+        return { ready: false, reason: "aborted" };
+      },
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]?.url).toBe("https://acme.vercel.app/");
+    expect(seen[0]?.waitSeconds).toBe(7);
+    expect(seen[0]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("does not publish a not-ready Check Run after a newer push supersedes the job", async () => {
+    const supersession = createInMemorySupersessionStore();
+    const published: CheckRun[] = [];
+    let resolveReadiness: ((value: { ready: false; reason: "ceiling_exceeded" }) => void) | undefined;
+    const readinessStarted = vi.fn();
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession,
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: { listComments: async () => [], createComment: vi.fn(), updateComment: vi.fn() } as unknown as GitHubCommentsApi,
+        publishCheckRun: async (r) => void published.push(r),
+        engine: { review: vi.fn(async () => ({ status: "failed", error: "unused", jobId: "j" })), cancel: vi.fn() },
+      }),
+      previewReadiness: async () => {
+        readinessStarted();
+        return new Promise((resolve) => {
+          resolveReadiness = resolve;
+        });
+      },
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+    await vi.waitFor(() => expect(readinessStarted).toHaveBeenCalledOnce());
+    await recordEnqueue(supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
+    resolveReadiness?.({ ready: false, reason: "ceiling_exceeded" });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await supersession.getCurrentSha("sha:acme/web#42")).toBe("newer");
+    expect(published).toHaveLength(0);
   });
 
   it("runs startup checks before listening and fails fast when an invariant is violated", async () => {

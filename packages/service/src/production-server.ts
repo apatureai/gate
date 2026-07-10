@@ -12,6 +12,8 @@ import {
 import { type DeploymentHandlerDeps, runHostedReview } from "./hosted-review.js";
 import { hydrateReviewContext, type PullRequestFetcher } from "./hydrate.js";
 import type { ReviewJobPayload } from "./queue.js";
+import { READINESS_CEILING_MS, waitForReadiness } from "./readiness.js";
+import type { ReadinessOptions, ReadinessResult } from "@gate/engine";
 import type { FullReviewWindowStore } from "./review-window.js";
 import type { RunStore } from "./run-store.js";
 import {
@@ -22,8 +24,7 @@ import {
 } from "./screenshots.js";
 import { runStartupChecks, type StartupCheckDeps } from "./startup.js";
 import { assertProductionEnv } from "./production-readiness.js";
-import type { SupersessionStore } from "./supersession.js";
-import { currentShaKey, guardPublish } from "./supersession.js";
+import { currentShaKey, guardPublish, type SupersessionStore } from "./supersession.js";
 import type { WebhookDedupeStore } from "./webhook-dedup.js";
 import type { ReviewJobWorker } from "./worker.js";
 
@@ -70,6 +71,8 @@ export interface ProductionAppServerDeps {
   installationClients(job: ReviewJobPayload): InstallationClients | Promise<InstallationClients>;
   /** Per-repo `.designreview.yml` (#27); defaults to `DEFAULT_CONFIG`. */
   loadConfig?(job: ReviewJobPayload): NormalizedDesignReviewConfig | Promise<NormalizedDesignReviewConfig>;
+  /** Preview readiness gate before engine handoff (#149); defaults to shared waitForReadiness. */
+  previewReadiness?(options: ReadinessOptions): Promise<ReadinessResult>;
   feedback?: FeedbackSink;
   /** Route deps for /feedback/confirm and POST /feedback. */
   feedbackRoutes?: FeedbackRouteOptions;
@@ -119,6 +122,23 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       }
       return;
     }
+    const readiness = await (deps.previewReadiness ?? waitForReadiness)({
+      url: job.previewUrl,
+      waitSeconds: config.preview.waitSeconds,
+      signal: ctx.signal,
+    });
+    if (!readiness.ready) {
+      if (readiness.reason === "aborted") return;
+      const key = currentShaKey({ owner: job.owner, name: job.name, prNumber: job.prNumber });
+      if (!(await guardPublish(deps.supersession, key, job.headSha))) return;
+      await clients.publishCheckRun({
+        name: "Apature Gate",
+        conclusion: "neutral",
+        title: "Preview not ready",
+        summary: readinessFailureSummary(job.previewUrl, readiness),
+      });
+      return;
+    }
     await runHostedReview(config, reviewCtx, {
       supersession: deps.supersession,
       windowStore: deps.windowStore,
@@ -166,4 +186,16 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       await server.listen({ host, port });
     },
   };
+}
+
+function readinessFailureSummary(
+  url: string,
+  result: Extract<ReadinessResult, { ready: false }>,
+): string {
+  if (result.reason === "child_exited") {
+    return "The preview process exited before the hosted review could start. Not reviewed.";
+  }
+  return `Preview did not respond with HTTP 200 at ${url} within ${Math.round(
+    READINESS_CEILING_MS / 1000,
+  )}s. Not reviewed.`;
 }
