@@ -26,6 +26,22 @@ describe("renderStickyComment", () => {
     expect(body).toContain("Nits (");
   });
 
+  it("links annotated screenshot evidence from collapsed finding rows", () => {
+    expect(body).toContain(
+      `[Evidence](${golden.artifacts.annotatedScreenshots[0]!.url})`,
+    );
+    expect(body).toContain(
+      `[Evidence](${golden.artifacts.annotatedScreenshots[1]!.url})`,
+    );
+  });
+
+  it("does not render a broken evidence placeholder for findings without screenshots", () => {
+    const out = renderStickyComment(golden, { headSha: "abc1234" });
+    expect(out).toContain("Inconsistent vertical rhythm");
+    expect(out).not.toContain("f_003");
+    expect(out).not.toContain("[Evidence]()");
+  });
+
   it("renders the not-reviewed section (never silently dropped)", () => {
     expect(body).toContain("### Not reviewed");
     expect(body).toContain(golden.notReviewed[0]!);
@@ -44,7 +60,9 @@ describe("renderStickyComment", () => {
     };
     const out = renderStickyComment(withBlocker, { headSha: "abc1234" });
     expect(out).toContain("### ⛔ Blockers");
+    expect(out).toContain("| Finding | Route | Viewport | Suggestion | Evidence |");
     expect(out).toContain("Contrast fails WCAG");
+    expect(out).toContain(`[Evidence](${golden.artifacts.annotatedScreenshots[0]!.url})`);
   });
 
   it("surfaces a capture caveat when provided", () => {
@@ -58,6 +76,7 @@ describe("renderStickyComment", () => {
     expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept (in Should fix)
     expect(out).toContain("Should fix (1)"); // the major finding still lives here
     expect(out).not.toContain("Pricing card grid overflows"); // minor — omitted
+    expect(out).not.toContain(golden.artifacts.annotatedScreenshots[1]!.url); // omitted finding's evidence
     expect(out).not.toContain("Inconsistent vertical rhythm"); // nit — omitted
     expect(out).not.toContain("Nits ("); // nits section empties out
   });
@@ -83,6 +102,7 @@ describe("renderStickyComment", () => {
     });
     expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept
     expect(out).not.toContain("Pricing card grid overflows"); // suppressed by element
+    expect(out).not.toContain(golden.artifacts.annotatedScreenshots[1]!.url); // suppressed evidence omitted
     expect(out).not.toContain("Inconsistent vertical rhythm"); // suppressed by id
     expect(out).not.toContain("Nits ("); // nits section empties out
   });

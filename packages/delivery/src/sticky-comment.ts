@@ -65,26 +65,45 @@ export interface StickyCommentContext {
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
 
-function blockersTable(findings: Finding[]): string {
+function screenshotLinks(result: GateReviewResult): Map<string, string> {
+  return new Map(result.artifacts.annotatedScreenshots.map((shot) => [shot.findingId, shot.url]));
+}
+
+function evidenceLink(finding: Finding, screenshots: Map<string, string>): string {
+  const url = screenshots.get(finding.id);
+  return url ? `[Evidence](${url})` : "—";
+}
+
+function findingSummary(finding: Finding, screenshots: Map<string, string>): string {
+  const evidence = screenshots.get(finding.id);
+  return (
+    `**${finding.title}** (\`${finding.route}\`, ${finding.viewport})` +
+    `${finding.suggestion ? ` — ${finding.suggestion}` : ""}` +
+    `${evidence ? ` · [Evidence](${evidence})` : ""}`
+  );
+}
+
+function blockersTable(findings: Finding[], screenshots: Map<string, string>): string {
   const rows = findings
-    .map((f) => `| ${f.title} | \`${f.route}\` | ${f.viewport} | ${f.suggestion ?? "—"} |`)
+    .map((f) => `| ${f.title} | \`${f.route}\` | ${f.viewport} | ${f.suggestion ?? "—"} | ${evidenceLink(f, screenshots)} |`)
     .join("\n");
-  return `### ⛔ Blockers\n\n| Finding | Route | Viewport | Suggestion |\n| --- | --- | --- | --- |\n${rows}`;
+  return `### ⛔ Blockers\n\n| Finding | Route | Viewport | Suggestion | Evidence |\n| --- | --- | --- | --- | --- |\n${rows}`;
 }
 
-function findingList(findings: Finding[]): string {
+function findingList(findings: Finding[], screenshots: Map<string, string>): string {
   return findings
-    .map((f) => `- **${f.title}** (\`${f.route}\`, ${f.viewport})${f.suggestion ? ` — ${f.suggestion}` : ""}`)
+    .map((f) => `- ${findingSummary(f, screenshots)}`)
     .join("\n");
 }
 
-function detailsSection(title: string, findings: Finding[]): string | null {
+function detailsSection(title: string, findings: Finding[], screenshots: Map<string, string>): string | null {
   if (findings.length === 0) return null;
-  return `<details>\n<summary>${title} (${findings.length})</summary>\n\n${findingList(findings)}\n\n</details>`;
+  return `<details>\n<summary>${title} (${findings.length})</summary>\n\n${findingList(findings, screenshots)}\n\n</details>`;
 }
 
 /** Render the sticky comment markdown (pure). */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
+  const screenshots = screenshotLinks(result);
   const findings = findingsAtOrAbove(
     suppressFindings(result.findings, ctx.suppress),
     ctx.minSeverityToComment,
@@ -100,10 +119,10 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
     result.overall,
   ];
 
-  if (blockers.length > 0) parts.push(blockersTable(blockers));
-  const sf = detailsSection("Should fix", shouldFix);
+  if (blockers.length > 0) parts.push(blockersTable(blockers, screenshots));
+  const sf = detailsSection("Should fix", shouldFix, screenshots);
   if (sf) parts.push(sf);
-  const nt = detailsSection("Nits", nits);
+  const nt = detailsSection("Nits", nits, screenshots);
   if (nt) parts.push(nt);
 
   // Always render "not reviewed" when anything was skipped — never silently drop.
