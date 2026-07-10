@@ -1,5 +1,5 @@
 import { DEFAULT_CONFIG } from "@gate/config";
-import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
+import { setupFailureCheckRun, type CheckRun, type GitHubCommentsApi } from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { FastifyInstance } from "fastify";
@@ -23,6 +23,7 @@ import {
 import { runStartupChecks, type StartupCheckDeps } from "./startup.js";
 import { assertProductionEnv } from "./production-readiness.js";
 import type { SupersessionStore } from "./supersession.js";
+import { currentShaKey, guardPublish } from "./supersession.js";
 import type { WebhookDedupeStore } from "./webhook-dedup.js";
 import type { ReviewJobWorker } from "./worker.js";
 
@@ -108,7 +109,16 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     const details = await clients.fetchPullRequest(job.owner, job.name, job.prNumber);
     if (!details) return; // PR closed / head gone — nothing to review
     const reviewCtx = hydrateReviewContext(job, details);
-    const config = (await deps.loadConfig?.(job)) ?? DEFAULT_CONFIG;
+    let config: NormalizedDesignReviewConfig;
+    try {
+      config = (await deps.loadConfig?.(job)) ?? DEFAULT_CONFIG;
+    } catch (err) {
+      const key = currentShaKey({ owner: job.owner, name: job.name, prNumber: job.prNumber });
+      if (await guardPublish(deps.supersession, key, job.headSha)) {
+        await clients.publishCheckRun(setupFailureCheckRun(err, "App"));
+      }
+      return;
+    }
     await runHostedReview(config, reviewCtx, {
       supersession: deps.supersession,
       windowStore: deps.windowStore,

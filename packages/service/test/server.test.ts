@@ -7,6 +7,7 @@ import { buildFeedbackEvent } from "../src/feedback-store.js";
 import type { AppReviewClient, AppReviewTarget } from "../src/app-github.js";
 import type { GitHubPullsClient } from "../src/github-pulls.js";
 import { PRODUCTION_ENV_VARS } from "../src/production-readiness.js";
+import type { RepoConfigClient } from "../src/repo-config.js";
 import { buildProductionDepsFromEnv, type ProductionRuntimeFactories } from "../src/server.js";
 
 function fullEnv(): NodeJS.ProcessEnv {
@@ -63,6 +64,30 @@ function baseFactories(overrides: Partial<ProductionRuntimeFactories> = {}): Pro
           isFork: false,
         })),
         resolvePullRequest: vi.fn(async () => ({ number: 42, headSha: "sha", baseSha: "base" })),
+      }),
+    ),
+    repoConfigClient: vi.fn(
+      (token): RepoConfigClient => ({
+        loadConfig: vi.fn(async () => ({
+          preview: {
+            source: "auto",
+            environment: "Preview",
+            urlTemplate: null,
+            waitSeconds: 0,
+            readySelector: null,
+            readyPath: null,
+            readyStatus: null,
+            protectionBypassSecretName: null,
+            authStateSecretName: null,
+            forkPreview: false,
+          },
+          routes: { always: ["/"], maxPerPr: 5, map: {} },
+          viewports: ["mobile", "desktop"],
+          darkMode: false,
+          brand: `loaded by ${token}`,
+          rules: { gate: "none", minSeverityToComment: "nit", suppress: [] },
+          tokens: { source: null, values: {} },
+        })),
       }),
     ),
     appReviewClient: vi.fn(
@@ -128,8 +153,12 @@ describe("buildProductionDepsFromEnv", () => {
       }),
     );
     const githubPullsClient = vi.fn(baseFactories().githubPullsClient);
+    const repoConfigClient = vi.fn(baseFactories().repoConfigClient);
     const appReviewClient = vi.fn(baseFactories().appReviewClient);
-    const deps = await buildProductionDepsFromEnv(fullEnv(), baseFactories({ engineClient, githubPullsClient, appReviewClient }));
+    const deps = await buildProductionDepsFromEnv(
+      fullEnv(),
+      baseFactories({ engineClient, githubPullsClient, repoConfigClient, appReviewClient }),
+    );
 
     await expect(deps.resolvePullRequest("acme", "web", "sha", 77)).resolves.toEqual({
       number: 42,
@@ -148,8 +177,22 @@ describe("buildProductionDepsFromEnv", () => {
       previewSource: "deployment_status",
       depth: "deep",
     });
+    const config = await deps.loadConfig?.({
+      installationId: "77",
+      owner: "acme",
+      name: "web",
+      prNumber: 42,
+      headSha: "sha",
+      baseSha: "base",
+      previewUrl: "https://acme.vercel.app",
+      previewProvider: "vercel",
+      previewSource: "deployment_status",
+      depth: "deep",
+    });
 
     expect(githubPullsClient).toHaveBeenCalledWith("token-77");
+    expect(repoConfigClient).toHaveBeenCalledWith("token-77");
+    expect(config?.brand).toBe("loaded by token-77");
     expect(appReviewClient).toHaveBeenCalledWith("token-77", {
       owner: "acme",
       name: "web",

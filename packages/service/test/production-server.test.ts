@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import { loadGoldenReviewResult } from "@gate/types";
@@ -77,6 +78,128 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(engine.review).toHaveBeenCalledOnce();
     expect(comments.createComment).toHaveBeenCalledOnce();
     expect(published[0]?.name).toBe("Apature Gate");
+  });
+
+  it("uses the injected per-repo config loader for hosted reviews", async () => {
+    const comments: GitHubCommentsApi = {
+      listComments: vi.fn(async () => []),
+      createComment: vi.fn(async (body) => ({ id: 1, nodeId: "n1", body })),
+      updateComment: vi.fn(async () => ({ updated: true })),
+    };
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const config = {
+      ...DEFAULT_CONFIG,
+      rules: { ...DEFAULT_CONFIG.rules, gate: "blockers" as const },
+      brand: "Hosted checkout UX",
+    };
+    const worker = createInMemoryReviewWorker();
+
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker,
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: vi.fn(async () => config),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments,
+        publishCheckRun: vi.fn(async () => {}),
+        engine,
+      }),
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(engine.review).toHaveBeenCalledOnce());
+    expect(engine.review).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({ brand: "Hosted checkout UX" }),
+        publishMode: "blocking",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("publishes a neutral Check Run and skips the engine when hosted config is invalid", async () => {
+    const published: CheckRun[] = [];
+    const comments: GitHubCommentsApi = {
+      listComments: vi.fn(async () => []),
+      createComment: vi.fn(async (body) => ({ id: 1, nodeId: "n1", body })),
+      updateComment: vi.fn(async () => ({ updated: true })),
+    };
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const worker = createInMemoryReviewWorker();
+
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker,
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: vi.fn(async () => {
+        const err = new Error("Invalid .designreview.yml");
+        err.name = "ConfigValidationError";
+        (err as Error & { issues: string[] }).issues = ["rules.gate: Invalid enum value"];
+        throw err;
+      }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments,
+        publishCheckRun: async (run) => void published.push(run),
+        engine,
+      }),
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(published).toHaveLength(1));
+    expect(published[0]).toMatchObject({
+      name: "Apature Gate",
+      conclusion: "neutral",
+      title: "Config invalid",
+    });
+    expect(published[0]?.summary).toContain("rules.gate");
+    expect(engine.review).not.toHaveBeenCalled();
+    expect(comments.createComment).not.toHaveBeenCalled();
   });
 
   it("runs startup checks before listening and fails fast when an invariant is violated", async () => {

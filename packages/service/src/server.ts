@@ -12,6 +12,7 @@ import type { FeedbackSink } from "./feedback-routes.js";
 import { createGitHubPullsClient, type GitHubPullsClient } from "./github-pulls.js";
 import { createProductionAppServer, type ProductionAppServerDeps } from "./production-server.js";
 import { assertProductionEnv } from "./production-readiness.js";
+import { createGitHubRepoConfigClient, type RepoConfigClient } from "./repo-config.js";
 import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
 import { createSqlRunStore, type CompletedRunRecord, type RunStore } from "./run-store.js";
 import { createSqlScreenshotRegistry, createTemplateSignedUrlProvider } from "./screenshots.js";
@@ -46,6 +47,7 @@ export interface ProductionRuntimeFactories {
   reviewWorker?(redisUrl: string): ProductionAppServerDeps["worker"];
   githubAuth?(opts: { appId: string; privateKey: string }): GitHubAppAuth;
   githubPullsClient?(token: string): GitHubPullsClient;
+  repoConfigClient?(token: string): RepoConfigClient;
   appReviewClient?(token: string, target: AppReviewTarget): AppReviewClient;
   engineClient?(opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }): JudgmentEngineClient;
 }
@@ -123,6 +125,7 @@ export async function buildProductionDepsFromEnv(
   const feedbackTokenSecret = requiredEnv(env, "FEEDBACK_TOKEN_SECRET");
   const feedback = createTenantFeedbackSink(sql.tenant);
   const githubPullsClient = factories.githubPullsClient ?? ((token: string) => createGitHubPullsClient(token));
+  const repoConfigClient = factories.repoConfigClient ?? ((token: string) => createGitHubRepoConfigClient(token));
   const appReviewClient =
     factories.appReviewClient ?? ((token: string, target: AppReviewTarget) => createAppReviewClient(token, target));
   const engineClient =
@@ -158,6 +161,10 @@ export async function buildProductionDepsFromEnv(
     resolvePullRequest: async (owner, name, sha, installationId) => {
       const token = await auth.getInstallationToken(installationId);
       return githubPullsClient(token).resolvePullRequest(owner, name, sha);
+    },
+    loadConfig: async (job) => {
+      const token = await auth.getInstallationToken(Number(job.installationId));
+      return repoConfigClient(token).loadConfig(job.owner, job.name, job.headSha);
     },
     installationClients: async (job) => {
       const token = await auth.getInstallationToken(Number(job.installationId));

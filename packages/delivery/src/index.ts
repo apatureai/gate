@@ -13,6 +13,7 @@ export type {
 } from "./sticky-comment.js";
 export { mapCheckRunConclusion, buildCheckRun } from "./check-run.js";
 export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.js";
+export { setupFailureCheckRun } from "./setup-failure.js";
 export { validateFindings, decideDelivery, decideDeliveryForError } from "./degradation.js";
 export type { DegradationReason, DeliveryDecision, DegradationContext, FindingValidation } from "./degradation.js";
 export { buildAnnotationSvg, annotateScreenshot } from "./annotate.js";
