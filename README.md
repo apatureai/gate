@@ -162,7 +162,6 @@ Monorepo: pnpm workspace, TypeScript project references (`tsc -b`), Vitest, ESLi
 ### `apps/*`
 | App | What it is |
 |---|---|
-| `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with `next build`. |
 | `dashboard` | Next.js (app-router) shell rendering the `@gate/dashboard` core. **Standalone** — deliberately outside the `tsc -b`/Vitest/ESLint harness, built with its own isolated `next build` CI job. |
 
 ---
@@ -201,10 +200,14 @@ pnpm install
 pnpm typecheck && pnpm test && pnpm lint   # the green gate; all three must pass
 ```
 
-> `apps/dashboard` is **not** part of this gate. Build it separately from
-> `apps/dashboard` with `npm ci && npm run build`; the isolated CI job is tracked in #83.
-> `apps/dashboard` is **not** part of this root gate. CI builds it in a separate job:
-> root `pnpm build`, then `npm ci && npm run build` from `apps/dashboard`.
+`apps/dashboard` is **not** part of this root gate. CI builds it in a separate job:
+
+```bash
+pnpm build
+cd apps/dashboard
+npm ci
+npm run build
+```
 
 **Test rules:** there is **no live model and no live network in tests** — the engine is
 always **mocked**, and capture/preview runs in a sandbox. Keep it that way.

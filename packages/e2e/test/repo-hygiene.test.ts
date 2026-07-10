@@ -21,4 +21,15 @@ describe("repository dependency hygiene", () => {
     expect(workspace).toContain("esbuild: true");
     expect(workspace).toContain("msgpackr-extract: true");
   });
+
+  it("keeps root README dashboard guidance single-sourced", () => {
+    const readme = readFileSync(root("README.md"), "utf8");
+    const dashboardRows = readme.match(/^\| `dashboard` \| Next\.js \(app-router\) shell/gm) ?? [];
+    const rootGateNotes = readme.match(/`apps\/dashboard` is \*\*not\*\* part of this root gate/g) ?? [];
+
+    expect(dashboardRows).toHaveLength(1);
+    expect(rootGateNotes).toHaveLength(1);
+    expect(readme).toContain("built with its own isolated `next build` CI job");
+    expect(readme).toContain("pnpm build\ncd apps/dashboard\nnpm ci\nnpm run build");
+  });
 });
