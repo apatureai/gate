@@ -27,6 +27,14 @@ Enforcement:
 - The golden fixture `fixtures/gate-review-result.golden.json` is the shared
   contract artifact: Gate's mock/e2e and the engine's serializer test (cross-repo)
   both consume it, so the mock cannot drift from the live contract.
+- Gate pins the fixture's Judgment Engine Git blob in the fixture test. Updating
+  the cross-repo contract requires copying the authoritative engine fixture byte
+  for byte and deliberately updating that pin.
+
+Result-level and per-finding `confidence` are optional only for historical
+results. Judgment Engine owns calibration and aggregation; Gate preserves valid
+values in `[0, 1]` and never computes a fallback. Current PR rendering omits the
+number, while storage/dashboard loaders retain it for audit and future trust UX.
 
 The Zod schema deliberately strips unknown fields (no `.strict()`), so an older
 Gate tolerates new additive fields from a newer engine.

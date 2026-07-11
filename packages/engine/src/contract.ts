@@ -14,6 +14,7 @@ import { z } from "zod";
  * are tolerated (stripped) by an older Gate.
  */
 export const SCHEMA_VERSION = "1";
+const confidenceSchema = z.number().finite().min(0).max(1);
 
 const findingSchema = z.object({
   id: z.string(),
@@ -25,11 +26,13 @@ const findingSchema = z.object({
   element: z.string().nullable(),
   screenshotId: z.string().nullable(),
   suggestion: z.string().nullable(),
+  confidence: confidenceSchema.optional(),
 });
 
 export const GateReviewResultSchema = z.object({
   grade: z.enum(["ship", "ship_with_nits", "needs_work", "blocked"]),
   overall: z.string(),
+  confidence: confidenceSchema.optional(),
   findings: z.array(findingSchema),
   notReviewed: z.array(z.string()),
   artifacts: z.object({

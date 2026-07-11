@@ -32,6 +32,11 @@ export type Finding = {
   screenshotId: string | null;
   /** Suggested remediation, or null. */
   suggestion: string | null;
+  /**
+   * Engine-produced calibrated confidence in [0, 1]. Optional only for results
+   * stored before judgment-engine#150; Gate preserves but never synthesizes it.
+   */
+  confidence?: number;
 };
 
 /**
@@ -75,6 +80,11 @@ export type GateReviewRequest = {
 export type GateReviewResult = {
   grade: ReviewGrade;
   overall: string;
+  /**
+   * Engine-owned aggregate confidence in [0, 1]. Gate currently keeps this out
+   * of PR rendering, but preserves it for audit, feedback, and dashboard use.
+   */
+  confidence?: number;
   findings: Finding[];
   /** Routes/viewports/previews skipped; surfaced in the sticky comment (TRD §7). */
   notReviewed: string[];

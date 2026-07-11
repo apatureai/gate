@@ -27,6 +27,53 @@ describe("GateReviewResult contract", () => {
     expect(out.ok).toBe(true);
   });
 
+  it("preserves distinct engine-produced result and finding confidence values", () => {
+    const out = parseEngineResult(
+      {
+        ...golden,
+        confidence: 0.91,
+        findings: golden.findings.map((finding, index) => ({
+          ...finding,
+          confidence: index === 0 ? 0.88 : finding.confidence,
+        })),
+      },
+      SCHEMA_VERSION,
+    );
+
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.result.confidence).toBe(0.91);
+      expect(out.result.findings[0]?.confidence).toBe(0.88);
+    }
+  });
+
+  it("accepts confidence boundaries and rejects non-finite or out-of-range values", () => {
+    expect(parseEngineResult({ ...golden, confidence: 0 }, SCHEMA_VERSION).ok).toBe(true);
+    expect(parseEngineResult({ ...golden, confidence: 1 }, SCHEMA_VERSION).ok).toBe(true);
+    for (const confidence of [-0.01, 1.01, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(parseEngineResult({ ...golden, confidence }, SCHEMA_VERSION)).toMatchObject({
+        ok: false,
+        reason: "schema_parse_error",
+      });
+    }
+  });
+
+  it("keeps confidence unavailable when a legacy result omits it", () => {
+    const { confidence: _resultConfidence, ...legacy } = golden;
+    const out = parseEngineResult(
+      {
+        ...legacy,
+        findings: legacy.findings.map(({ confidence: _findingConfidence, ...finding }) => finding),
+      },
+      SCHEMA_VERSION,
+    );
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.result.confidence).toBeUndefined();
+      expect(out.result.findings.every((finding) => finding.confidence === undefined)).toBe(true);
+    }
+  });
+
   it("tolerates additive unknown fields (additive-only evolution)", () => {
     const withExtra = { ...golden, futureField: "ignored" };
     const out = parseEngineResult(withExtra, SCHEMA_VERSION);

@@ -27,7 +27,13 @@ describe("loadRunResult", () => {
   it("validates and returns the stored result on a matching schema version", async () => {
     const res = await loadRunResult(storageOf({ body: golden, schemaVersion: SCHEMA_VERSION }), "run_1");
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.result.grade).toBe(golden.grade);
+    if (res.ok) {
+      expect(res.result.grade).toBe(golden.grade);
+      expect(res.result.confidence).toBe(golden.confidence);
+      expect(res.result.findings.map((finding) => finding.confidence)).toEqual(
+        golden.findings.map((finding) => finding.confidence),
+      );
+    }
   });
 
   it("returns not_found when the object does not exist yet", async () => {

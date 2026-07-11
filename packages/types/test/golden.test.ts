@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { loadGoldenReviewResult } from "../src/index.js";
+import { goldenReviewResultPath, loadGoldenReviewResult } from "../src/index.js";
 import type {
   Finding,
   GateReviewResult,
@@ -9,6 +11,7 @@ import type {
 
 const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"];
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
+const JUDGMENT_ENGINE_GOLDEN_BLOB = "94e408383e5b2eefd492a457a901a53a786e7803";
 
 describe("golden GateReviewResult fixture", () => {
   // Compile-time guarantee: the loader's return type IS GateReviewResult.
@@ -23,6 +26,15 @@ describe("golden GateReviewResult fixture", () => {
     expect(golden.overall.length).toBeGreaterThan(0);
   });
 
+  it("is byte-identical to the pinned Judgment Engine golden fixture", () => {
+    const bytes = readFileSync(goldenReviewResultPath());
+    const oid = createHash("sha1")
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    expect(oid).toBe(JUDGMENT_ENGINE_GOLDEN_BLOB);
+  });
+
   it("has structurally valid findings", () => {
     expect(Array.isArray(golden.findings)).toBe(true);
     for (const f of golden.findings as Finding[]) {
@@ -35,6 +47,7 @@ describe("golden GateReviewResult fixture", () => {
       expect(f.element === null || typeof f.element === "string").toBe(true);
       expect(f.screenshotId === null || typeof f.screenshotId === "string").toBe(true);
       expect(f.suggestion === null || typeof f.suggestion === "string").toBe(true);
+      expect(f.confidence === undefined || (f.confidence >= 0 && f.confidence <= 1)).toBe(true);
     }
   });
 
@@ -71,5 +84,10 @@ describe("golden GateReviewResult fixture", () => {
     const serialized = JSON.stringify(golden).toLowerCase();
     expect(serialized).not.toContain("claude");
     expect(serialized).not.toContain("anthropic");
+  });
+
+  it("carries calibrated confidence without a Gate-owned fallback", () => {
+    expect(golden.confidence).toBe(0.7);
+    expect(golden.findings.map((finding) => finding.confidence)).toEqual([0.92, 0.85, 0.7]);
   });
 });
