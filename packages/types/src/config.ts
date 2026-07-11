@@ -37,9 +37,9 @@ export type NormalizedPreviewConfig = {
   waitSeconds: number;
   /** CSS selector signaling the page is ready, or null. */
   readySelector: string | null;
-  /** Local-serve (#70/#80): path to poll for readiness instead of the base URL, or null. */
+  /** Path to poll for readiness instead of the base URL, or null (Action and App paths). */
   readyPath: string | null;
-  /** Local-serve (#70/#80): explicit acceptable readiness status codes, or null for the default set. */
+  /** Explicit acceptable readiness status codes, or null for the path-specific default. */
   readyStatus: number[] | null;
   /** Name of the secret holding a Vercel protection-bypass token; never the secret itself. */
   protectionBypassSecretName: string | null;

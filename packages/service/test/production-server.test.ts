@@ -206,6 +206,63 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(comments.createComment).not.toHaveBeenCalled();
   });
 
+  it("rejects a cross-origin ready_path before the hosted readiness probe", async () => {
+    const published: CheckRun[] = [];
+    const previewReadiness = vi.fn(async () => ({ ready: true as const, elapsedMs: 0 }));
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: {
+          ...DEFAULT_CONFIG.preview,
+          readyPath: "https://169.254.169.254/latest/meta-data",
+        },
+      }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: { listComments: async () => [], createComment: vi.fn(), updateComment: vi.fn() } as unknown as GitHubCommentsApi,
+        publishCheckRun: async (run) => void published.push(run),
+        engine,
+      }),
+      previewReadiness,
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(published).toHaveLength(1));
+    expect(published[0]).toMatchObject({
+      conclusion: "neutral",
+      title: "Config invalid",
+    });
+    expect(published[0]?.summary).toContain("preview.ready_path");
+    expect(previewReadiness).not.toHaveBeenCalled();
+    expect(engine.review).not.toHaveBeenCalled();
+  });
+
   it("publishes a neutral Check Run and does not call the engine when preview readiness times out", async () => {
     const engine: JudgmentEngineClient = {
       review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
@@ -223,6 +280,14 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
       worker: createInMemoryReviewWorker(),
       windowStore: createInMemoryFullReviewWindow(),
       resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: {
+          ...DEFAULT_CONFIG.preview,
+          readyPath: "/healthz",
+          readyStatus: [204],
+        },
+      }),
       installationClients: () => ({
         fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
         comments,
@@ -257,7 +322,9 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
       conclusion: "neutral",
       title: "Preview not ready",
     });
-    expect(published[0]?.summary).toContain("Preview did not respond with HTTP 200");
+    expect(published[0]?.summary).toBe(
+      "Preview did not respond with an accepted HTTP status (204) at https://acme.vercel.app/healthz within 120s. Not reviewed.",
+    );
     expect(engine.review).not.toHaveBeenCalled();
     expect(comments.createComment).not.toHaveBeenCalled();
   });
@@ -308,6 +375,117 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(seen[0]?.url).toBe("https://acme.vercel.app/");
     expect(seen[0]?.waitSeconds).toBe(7);
     expect(seen[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(seen[0]?.acceptStatus).toBeUndefined();
+  });
+
+  it("probes the configured ready_path instead of the deployment root", async () => {
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const seenUrls: string[] = [];
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: { ...DEFAULT_CONFIG.preview, readyPath: "/healthz" },
+      }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: { listComments: async () => [], createComment: vi.fn(), updateComment: vi.fn() } as unknown as GitHubCommentsApi,
+        publishCheckRun: vi.fn(),
+        engine,
+      }),
+      previewReadiness: async (options) => {
+        seenUrls.push(options.url);
+        return options.url.endsWith("/healthz")
+          ? { ready: true, elapsedMs: 0 }
+          : { ready: false, reason: "ceiling_exceeded" };
+      },
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(engine.review).toHaveBeenCalledOnce());
+    expect(seenUrls).toEqual(["https://acme.vercel.app/healthz"]);
+  });
+
+  it("uses the configured ready_status set instead of the hosted strict-200 default", async () => {
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const acceptedStatuses: Array<[number, boolean]> = [];
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      loadConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: { ...DEFAULT_CONFIG.preview, readyStatus: [204, 503] },
+      }),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: { listComments: async () => [], createComment: vi.fn(), updateComment: vi.fn() } as unknown as GitHubCommentsApi,
+        publishCheckRun: vi.fn(),
+        engine,
+      }),
+      previewReadiness: async (options) => {
+        const acceptStatus = options.acceptStatus;
+        if (!acceptStatus) return { ready: false, reason: "ceiling_exceeded" };
+        acceptedStatuses.push([200, acceptStatus(200)], [204, acceptStatus(204)], [503, acceptStatus(503)]);
+        return acceptStatus(503)
+          ? { ready: true, elapsedMs: 0 }
+          : { ready: false, reason: "ceiling_exceeded" };
+      },
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha: "abc123", environment: "Preview" },
+    });
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+
+    await vi.waitFor(() => expect(engine.review).toHaveBeenCalledOnce());
+    expect(acceptedStatuses).toEqual([
+      [200, false],
+      [204, true],
+      [503, true],
+    ]);
   });
 
   it("does not publish a not-ready Check Run after a newer push supersedes the job", async () => {

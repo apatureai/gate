@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG } from "@gate/config";
+import { ConfigValidationError, DEFAULT_CONFIG } from "@gate/config";
 import { setupFailureCheckRun, type CheckRun, type GitHubCommentsApi } from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
@@ -113,8 +113,10 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     if (!details) return; // PR closed / head gone — nothing to review
     const reviewCtx = hydrateReviewContext(job, details);
     let config: NormalizedDesignReviewConfig;
+    let readinessUrl: string;
     try {
       config = (await deps.loadConfig?.(job)) ?? DEFAULT_CONFIG;
+      readinessUrl = resolveReadinessUrl(job.previewUrl, config.preview.readyPath);
     } catch (err) {
       const key = currentShaKey({ owner: job.owner, name: job.name, prNumber: job.prNumber });
       if (await guardPublish(deps.supersession, key, job.headSha)) {
@@ -122,10 +124,12 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       }
       return;
     }
+    const acceptStatus = configuredStatusPredicate(config.preview.readyStatus);
     const readiness = await (deps.previewReadiness ?? waitForReadiness)({
-      url: job.previewUrl,
+      url: readinessUrl,
       waitSeconds: config.preview.waitSeconds,
       signal: ctx.signal,
+      ...(acceptStatus ? { acceptStatus } : {}),
     });
     if (!readiness.ready) {
       if (readiness.reason === "aborted") return;
@@ -135,7 +139,7 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
         name: "Apature Gate",
         conclusion: "neutral",
         title: "Preview not ready",
-        summary: readinessFailureSummary(job.previewUrl, readiness),
+        summary: readinessFailureSummary(readinessUrl, readiness, config.preview.readyStatus),
       });
       return;
     }
@@ -188,14 +192,38 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
   };
 }
 
+function resolveReadinessUrl(previewUrl: string, readyPath: string | null): string {
+  if (!readyPath) return previewUrl;
+  const preview = new URL(previewUrl);
+  const readiness = new URL(readyPath, preview);
+  if (readiness.origin !== preview.origin) {
+    throw new ConfigValidationError([
+      "preview.ready_path: must resolve on the configured preview origin",
+    ]);
+  }
+  return readiness.toString();
+}
+
+function configuredStatusPredicate(
+  readyStatus: number[] | null,
+): ((status: number) => boolean) | undefined {
+  if (readyStatus === null) return undefined;
+  const accepted = new Set(readyStatus);
+  return (status) => accepted.has(status);
+}
+
 function readinessFailureSummary(
   url: string,
   result: Extract<ReadinessResult, { ready: false }>,
+  readyStatus: number[] | null,
 ): string {
   if (result.reason === "child_exited") {
     return "The preview process exited before the hosted review could start. Not reviewed.";
   }
-  return `Preview did not respond with HTTP 200 at ${url} within ${Math.round(
+  const expectedStatus = readyStatus === null
+    ? "HTTP 200"
+    : `an accepted HTTP status (${readyStatus.join(", ") || "none configured"})`;
+  return `Preview did not respond with ${expectedStatus} at ${url} within ${Math.round(
     READINESS_CEILING_MS / 1000,
   )}s. Not reviewed.`;
 }
