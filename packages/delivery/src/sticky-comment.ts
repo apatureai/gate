@@ -1,4 +1,5 @@
 import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
+import { sanitizeDisplayText } from "./sanitize.js";
 
 /** Severity ladder, lowest to highest (mirrors the `.designreview.yml` enum). */
 const SEVERITY_RANK: Record<Severity, number> = { nit: 0, minor: 1, major: 2, blocker: 3 };
@@ -132,7 +133,15 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
 
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);
 
-  // Page-health footnote: lineage stamp so every finding is traceable.
+  // Capture-health caveat: the engine's page-health footnote (JE #20), rendered
+  // as informational untrusted display text. It never changes grade, severity,
+  // or the Check Run conclusion — those stay the engine's holistic verdict.
+  const health = result.artifacts.pageHealthFootnote;
+  if (health !== undefined && health.trim().length > 0) {
+    parts.push(`> 🩺 **Capture health:** ${sanitizeDisplayText(health)}`);
+  }
+
+  // Version-lineage footer: engine/model/capture/dna stamps so every finding is traceable.
   const foot = [
     `engine ${result.metadata.engineVersion}`,
     `model ${result.metadata.model}`,

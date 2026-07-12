@@ -38,6 +38,9 @@ export const GateReviewResultSchema = z.object({
   artifacts: z.object({
     annotatedScreenshots: z.array(z.object({ findingId: z.string(), url: z.string() })),
     engineDebugUrl: z.string().optional(),
+    // Additive engine field (Judgment Engine #20). Preserved through parsing;
+    // rendered as an informational capture-health caveat, never a finding.
+    pageHealthFootnote: z.string().optional(),
   }),
   screenshotRetentionSeconds: z.number(),
   metadata: z.object({

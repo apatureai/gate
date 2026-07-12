@@ -95,6 +95,14 @@ export type GateReviewResult = {
      * from the `runs` record so the PR comment never depends on engine URLs.
      */
     engineDebugUrl?: string;
+    /**
+     * Engine-owned capture-health footnote (Judgment Engine #20): fixed aggregate
+     * prose about console errors, failed requests, blocked/substituted fonts, or
+     * visual instability during capture. INFORMATIONAL ONLY — Gate renders it as a
+     * caveat and never lets it change grade, severity, or the Check Run
+     * conclusion. Treated as untrusted display text before GitHub publication.
+     */
+    pageHealthFootnote?: string;
   };
   /**
    * Retention window for screenshots (§15.2). After
