@@ -11,7 +11,8 @@ import type {
 
 const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"];
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
-const JUDGMENT_ENGINE_GOLDEN_BLOB = "94e408383e5b2eefd492a457a901a53a786e7803";
+// Re-pinned when Judgment Engine added the additive `dimension` field (#159).
+const JUDGMENT_ENGINE_GOLDEN_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
 
 describe("golden GateReviewResult fixture", () => {
   // Compile-time guarantee: the loader's return type IS GateReviewResult.

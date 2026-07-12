@@ -18,6 +18,11 @@ const confidenceSchema = z.number().finite().min(0).max(1);
 
 const findingSchema = z.object({
   id: z.string(),
+  // Additive engine field (judgment-engine#159): preserved through parsing so
+  // downstream consumers keep the rubric dimension; Gate never synthesizes it.
+  dimension: z
+    .enum(["visual_hierarchy", "spacing", "color_contrast", "typography", "consistency", "responsiveness", "accessibility", "brand"])
+    .optional(),
   severity: z.enum(["nit", "minor", "major", "blocker"]),
   title: z.string(),
   description: z.string(),

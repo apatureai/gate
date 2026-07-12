@@ -17,10 +17,28 @@ export type ReviewGrade = "ship" | "ship_with_nits" | "needs_work" | "blocked";
 export type PublishMode = "advisory" | "blocking";
 
 /** A single design-review finding produced by the engine. */
+/** The engine's eight-value design rubric (judgment-engine#159), preserved verbatim. */
+export type Dimension =
+  | "visual_hierarchy"
+  | "spacing"
+  | "color_contrast"
+  | "typography"
+  | "consistency"
+  | "responsiveness"
+  | "accessibility"
+  | "brand";
+
 export type Finding = {
   /** Stable id within a run; used to key annotated screenshots and feedback. */
   id: string;
   severity: Severity;
+  /**
+   * The engine's rubric dimension (judgment-engine#159). Gate PRESERVES this
+   * additive field through the contract even though the current renderer does
+   * not display it; Gate never synthesizes it. Optional only so results stored
+   * before the field existed still type-check.
+   */
+  dimension?: Dimension;
   title: string;
   description: string;
   /** Route the finding was observed on. */

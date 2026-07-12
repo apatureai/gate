@@ -5,6 +5,7 @@
   "findings": [
     {
       "id": "f_001",
+      "dimension": "color_contrast",
       "severity": "major",
       "title": "Primary CTA uses an off-brand color on mobile",
       "description": "On the mobile viewport the primary 'Start free trial' button renders with the default blue instead of the brand accent token, breaking visual hierarchy and brand consistency.",
@@ -17,6 +18,7 @@
     },
     {
       "id": "f_002",
+      "dimension": "color_contrast",
       "severity": "minor",
       "title": "Pricing card grid overflows the mobile viewport",
       "description": "The three-column pricing grid does not collapse below 640px, causing horizontal scrolling on the mobile viewport.",
@@ -29,6 +31,7 @@
     },
     {
       "id": "f_003",
+      "dimension": "color_contrast",
       "severity": "nit",
       "title": "Inconsistent vertical rhythm between feature rows",
       "description": "Feature rows alternate between 24px and 32px vertical spacing on desktop.",
