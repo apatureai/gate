@@ -1,6 +1,6 @@
 # Gate App/orchestrator service image. Secrets are injected at runtime from the
 # Fly secret store (fly secrets set ...), never baked into the image.
-FROM node:20-slim AS base
+FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable

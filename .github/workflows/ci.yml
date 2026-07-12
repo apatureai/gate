@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies
@@ -57,7 +57,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install root dependencies
@@ -69,7 +69,7 @@ jobs:
       - name: Setup dashboard npm cache
         uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: apps/dashboard/package-lock.json
 

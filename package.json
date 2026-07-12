@@ -6,7 +6,7 @@
   "description": "Apature Gate - judgment-only design review for GitHub PRs",
   "packageManager": "pnpm@10.34.3",
   "engines": {
-    "node": ">=20"
+    "node": ">=24 <25"
   },
   "scripts": {
     "build": "tsc -b",
