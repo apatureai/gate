@@ -179,7 +179,7 @@ Queue payloads carry IDs, URLs, and the `jobId`, never large artifacts. Screensh
 | No preview URL found | Neutral Check Run with setup guidance; do not fail the PR |
 | Unverified preview source | Report "not reviewed (unverified preview source)"; never forward to engine |
 | Preview returns auth wall | Report not reviewed; link to bypass/auth setup |
-| Engine poll timeout (10 min) | Neutral Check Run, reason `review_timed_out`; do not retry |
+| Engine poll timeout (10 min) | Best-effort installation-bound `DELETE`, then neutral Check Run, reason `review_timed_out`; do not retry or change delivery if cleanup fails |
 | Engine 409 on submit (duplicate idempotency key) | Poll the existing job; do not re-run capture |
 | Engine 429/503 | Honor `Retry-After` via delayed retry; if circuit open, neutral Check Run "engine temporarily unavailable, retrying" |
 | Malformed engine result (schema/version mismatch) | Zod-parse fails -> do not publish; alert; never post a null-grade review |

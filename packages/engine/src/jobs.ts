@@ -125,6 +125,31 @@ export interface PollOptions {
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+const timedOutOutcome = (jobId: string): PollOutcome => ({
+  status: "timed_out",
+  reason: "review_timed_out",
+  jobId,
+});
+
+/**
+ * Abandoning the customer-visible poll must also signal intent cancellation to
+ * the engine. The DELETE is bounded by the transport request timeout. Its
+ * failure is deliberately reduced to one low-cardinality diagnostic: cleanup
+ * cannot turn the existing neutral timeout into an engine error or retry.
+ */
+async function cancelTimedOutJob(
+  transport: EngineTransport,
+  jobId: string,
+  installationId: string,
+): Promise<PollOutcome> {
+  try {
+    await transport.cancel(jobId, installationId);
+  } catch {
+    console.warn("[gate] timed-out engine job cancellation failed");
+  }
+  return timedOutOutcome(jobId);
+}
+
 /**
  * Poll a job with depth-aware backoff until it completes, fails, or the deadline
  * passes. On deadline, returns `timed_out` with no further retries.
@@ -164,13 +189,13 @@ export async function pollUntilDone(
     const elapsed = now() - start;
     const remaining = deadlineMs - elapsed;
     if (remaining <= 0) {
-      return { status: "timed_out", reason: "review_timed_out", jobId };
+      return cancelTimedOutJob(transport, jobId, installationId);
     }
     const delay = Math.min(nextPollDelayMs(options.depth, attempt), remaining);
     await sleep(delay);
     if (options.signal?.aborted) throw new EngineAbortedError(jobId);
     if (now() - start >= deadlineMs) {
-      return { status: "timed_out", reason: "review_timed_out", jobId };
+      return cancelTimedOutJob(transport, jobId, installationId);
     }
   }
 }

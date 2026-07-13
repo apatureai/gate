@@ -130,11 +130,13 @@ describe("runEngineJob", () => {
 
   it("times out at the deadline with review_timed_out and stops (no retry)", async () => {
     let polls = 0;
+    const cancel = vi.fn(async () => {});
     const t = transport({
       poll: async () => {
         polls += 1;
         return { jobId: "job_1", state: "running" };
       },
+      cancel,
     });
     const clock = virtualClock();
     const outcome = await runEngineJob(t, submission, { depth: "deep", ...clock });
@@ -142,6 +144,64 @@ describe("runEngineJob", () => {
     // Bounded by the 10-min deadline with 30s+ deep backoff — far fewer than, say, 100 polls.
     expect(polls).toBeLessThan(20);
     expect(clock.now()).toBeGreaterThanOrEqual(REVIEW_DEADLINE_MS - 60_000);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith("job_1", "inst_1");
+  });
+
+  it.each([202, 409] as const)(
+    "best-effort cancels a timed-out %i job without changing the neutral outcome",
+    async (status) => {
+      const cancel = vi.fn(async () => {
+        throw new Error("engine unavailable");
+      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const t = transport({
+        submit: async () => ({ status, jobId: "job_timeout" }),
+        poll: async () => ({ jobId: "job_timeout", state: "running" }),
+        cancel,
+      });
+
+      const outcome = await runEngineJob(t, submission, {
+        depth: "triage",
+        deadlineMs: 0,
+        ...virtualClock(),
+      });
+
+      expect(outcome).toEqual({
+        status: "timed_out",
+        reason: "review_timed_out",
+        jobId: "job_timeout",
+      });
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(cancel).toHaveBeenCalledWith("job_timeout", "inst_1");
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith("[gate] timed-out engine job cancellation failed");
+      warn.mockRestore();
+    },
+  );
+
+  it("does not cancel completed or failed jobs", async () => {
+    const cancel = vi.fn(async () => {});
+    const completed = await runEngineJob(
+      transport({
+        poll: async () => ({ jobId: "job_1", state: "completed", result: goldenResult }),
+        cancel,
+      }),
+      submission,
+      { depth: "triage", deadlineMs: 0, ...virtualClock() },
+    );
+    const failed = await runEngineJob(
+      transport({
+        poll: async () => ({ jobId: "job_1", state: "failed", error: "capture failed" }),
+        cancel,
+      }),
+      submission,
+      { depth: "triage", deadlineMs: 0, ...virtualClock() },
+    );
+
+    expect(completed.status).toBe("completed");
+    expect(failed.status).toBe("failed");
+    expect(cancel).not.toHaveBeenCalled();
   });
 
   it("surfaces engine failure", async () => {

@@ -117,13 +117,17 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
     },
 
     async cancel(jobId: string, installationId: string): Promise<void> {
-      await withTimeout((signal) =>
+      const res = await withTimeout((signal) =>
         fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
           method: "DELETE",
           headers: headers("", installationId),
           signal,
         }),
       );
+      // Judgment Engine returns 200 even when the job became terminal before
+      // DELETE; that completion-vs-timeout race is an intentional no-op. Other
+      // non-2xx responses are real cleanup failures and must reach diagnostics.
+      if (!res.ok) throw new EngineJobError(`engine cancel failed: ${res.status}`);
     },
   };
 }

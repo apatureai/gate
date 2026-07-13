@@ -184,4 +184,21 @@ describe("http transport signs every job request when an hmac secret is set", ()
       ).toBe(true);
     }
   });
+
+  it("accepts a terminal-race DELETE and surfaces a failed cancellation", async () => {
+    const terminalRace = createHttpEngineTransport({
+      baseUrl: "https://engine.internal",
+      fetchImpl: (async () =>
+        new Response(JSON.stringify({ jobId: "job_1", cancelling: false }), { status: 200 })) as typeof fetch,
+    });
+    await expect(terminalRace.cancel("job_1", "inst_1")).resolves.toBeUndefined();
+
+    const unavailable = createHttpEngineTransport({
+      baseUrl: "https://engine.internal",
+      fetchImpl: (async () => new Response(null, { status: 503 })) as typeof fetch,
+    });
+    await expect(unavailable.cancel("job_1", "inst_1")).rejects.toThrow(
+      "engine cancel failed: 503",
+    );
+  });
 });

@@ -419,9 +419,11 @@ Gate must not hold a connection open for a 90s+ review — the App path runs beh
 
 - `POST /jobs` -> `202 { jobId }`, body carries `idempotencyKey = "${prNumber}:${headSha}"` and `depth: "triage" | "deep"`.
 - `GET /jobs/:jobId` polled with depth-aware exponential backoff (triage first poll ~10s, deep ~30s, +10s), capped at the §5 10-minute deadline.
-- `DELETE /jobs/:jobId` on supersession (best-effort engine cancellation).
+- `DELETE /jobs/:jobId` on supersession or when Gate abandons polling at the
+  deadline (best-effort engine cancellation, signed with the verified
+  installation identity).
 
-`GateReviewRequest` gains `depth`. On a 409 (duplicate idempotency key) Gate polls the existing job rather than re-running capture. Poll timeout posts a neutral Check Run, reason `review_timed_out`. Deferred to scale: a completion-webhook callback replacing polling.
+`GateReviewRequest` gains `depth`. On a 409 (duplicate idempotency key) Gate polls the existing job rather than re-running capture. Poll timeout first sends one bounded cancellation request, then posts a neutral Check Run, reason `review_timed_out`, even if cancellation fails. A terminal response racing with the DELETE is a no-op. Deferred to scale: a completion-webhook callback replacing polling.
 
 ### 15.2 Contract safety and service-to-service auth (amends §6, §7, §8, §14)
 
