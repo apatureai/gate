@@ -16,6 +16,28 @@ export type ReviewGrade = "ship" | "ship_with_nits" | "needs_work" | "blocked";
 /** How Gate intends to publish the result on the PR. */
 export type PublishMode = "advisory" | "blocking";
 
+export type ConfidenceSource =
+  | "raw_verbalized"
+  | "post_hoc_isotonic"
+  | "post_hoc_histogram"
+  | "hidden_state_probe"
+  | "ensemble";
+
+/** Exact promoted report that authorizes display confidence. */
+export type ConfidenceCalibrationReference = {
+  reportId: string;
+  reportHash: `sha256:${string}`;
+  calibrationVersion: string;
+  confidenceSource: ConfidenceSource;
+};
+
+export type ConfidenceUnavailableReason =
+  | "missing_calibration_report"
+  | "invalid_calibration_report"
+  | "mismatched_calibration_report"
+  | "insufficient_evidence"
+  | "unattested_calibration_report";
+
 /** A single design-review finding produced by the engine. */
 /** The engine's eight-value design rubric (judgment-engine#159), preserved verbatim. */
 export type Dimension =
@@ -103,6 +125,12 @@ export type GateReviewResult = {
    * of PR rendering, but preserves it for audit, feedback, and dashboard use.
    */
   confidence?: number;
+  /** Exact promoted calibration artifact for every numeric confidence. */
+  calibration?: ConfidenceCalibrationReference;
+  /** Explicit engine promotion mode; Gate never derives this from a score. */
+  blockingEnabled?: boolean;
+  /** Why confidence was withheld on a current fail-closed result. */
+  confidenceUnavailableReason?: ConfidenceUnavailableReason;
   findings: Finding[];
   /** Routes/viewports/previews skipped; surfaced in the sticky comment (TRD §7). */
   notReviewed: string[];
@@ -133,7 +161,58 @@ export type GateReviewResult = {
     model: string;
     promptVersion: string;
     captureVersion: string;
+    /** Closed design-rubric identity used by the calibration report. */
+    rubricVersion?: string;
     /** Version of the repo's UI DNA the critique was grounded in, or null. */
     uiDnaVersion: string | null;
   };
 };
+
+const CONFIDENCE_SOURCES: readonly ConfidenceSource[] = [
+  "raw_verbalized",
+  "post_hoc_isotonic",
+  "post_hoc_histogram",
+  "hidden_state_probe",
+  "ensemble",
+];
+
+/**
+ * The only safe confidence-display guard. Legacy numbers remain parseable but
+ * are unavailable without exact, well-formed report provenance.
+ */
+export function hasDisplayableConfidence(
+  result: GateReviewResult,
+): result is GateReviewResult & {
+  confidence: number;
+  calibration: ConfidenceCalibrationReference;
+  findings: Array<Finding & { confidence: number }>;
+} {
+  const calibration = result.calibration;
+  return (
+    calibration != null &&
+    typeof calibration.reportId === "string" &&
+    calibration.reportId.length > 0 &&
+    typeof calibration.reportHash === "string" &&
+    /^sha256:[0-9a-f]{64}$/.test(calibration.reportHash) &&
+    typeof calibration.calibrationVersion === "string" &&
+    calibration.calibrationVersion.length > 0 &&
+    typeof calibration.confidenceSource === "string" &&
+    (CONFIDENCE_SOURCES as readonly string[]).includes(calibration.confidenceSource) &&
+    result.confidenceUnavailableReason === undefined &&
+    Array.isArray(result.findings) &&
+    result.findings.length > 0 &&
+    typeof result.confidence === "number" &&
+    Number.isFinite(result.confidence) &&
+    result.confidence >= 0 &&
+    result.confidence <= 1 &&
+    result.findings.every(
+      (finding) =>
+        finding !== null &&
+        typeof finding === "object" &&
+        typeof finding.confidence === "number" &&
+        Number.isFinite(finding.confidence) &&
+        finding.confidence >= 0 &&
+        finding.confidence <= 1,
+    )
+  );
+}

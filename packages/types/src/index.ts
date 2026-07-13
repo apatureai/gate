@@ -16,14 +16,23 @@ export type {
   Finding,
   GateReviewRequest,
   GateReviewResult,
+  ConfidenceSource,
+  ConfidenceCalibrationReference,
+  ConfidenceUnavailableReason,
   PreviewBuildFact,
   PreviewBuildFactKind,
 } from "./review.js";
+export { hasDisplayableConfidence } from "./review.js";
 export type {
   FeedbackEventType,
   FeedbackActor,
   FeedbackEvent,
 } from "./feedback.js";
-export { goldenReviewResultPath, loadGoldenReviewResult } from "./golden.js";
+export {
+  goldenReviewResultPath,
+  preCalibrationReviewResultPath,
+  loadGoldenReviewResult,
+  loadPreCalibrationReviewResult,
+} from "./golden.js";
 export { deriveArtifactId } from "./artifact-id.js";
 export type { ArtifactScope } from "./artifact-id.js";

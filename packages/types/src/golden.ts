@@ -21,10 +21,20 @@ export function goldenReviewResultPath(): string {
   return fileURLToPath(new URL("../fixtures/gate-review-result.golden.json", import.meta.url));
 }
 
+/** Historical payload with numeric confidence but no report provenance. */
+export function preCalibrationReviewResultPath(): string {
+  return fileURLToPath(new URL("../fixtures/gate-review-result.pre-calibration.json", import.meta.url));
+}
+
 /**
  * Load the golden `GateReviewResult`. Until the Zod runtime parser lands (#46),
  * callers get the typed shape directly; #46 will validate it on the way through.
  */
 export function loadGoldenReviewResult(): GateReviewResult {
   return JSON.parse(readFileSync(goldenReviewResultPath(), "utf8")) as GateReviewResult;
+}
+
+/** Load the shared deploy-skew/legacy counterexample. */
+export function loadPreCalibrationReviewResult(): GateReviewResult {
+  return JSON.parse(readFileSync(preCalibrationReviewResultPath(), "utf8")) as GateReviewResult;
 }

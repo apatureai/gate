@@ -1,4 +1,8 @@
-import { loadGoldenReviewResult } from "@gate/types";
+import {
+  hasDisplayableConfidence,
+  loadGoldenReviewResult,
+  loadPreCalibrationReviewResult,
+} from "@gate/types";
 import type { GateReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
 import {
@@ -72,6 +76,30 @@ describe("GateReviewResult contract", () => {
       expect(out.result.confidence).toBeUndefined();
       expect(out.result.findings.every((finding) => finding.confidence === undefined)).toBe(true);
     }
+  });
+
+  it("parses historical numeric fields but refuses to authorize them without provenance", () => {
+    const out = parseEngineResult(loadPreCalibrationReviewResult(), SCHEMA_VERSION);
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(typeof out.result.confidence).toBe("number");
+      expect(hasDisplayableConfidence(out.result)).toBe(false);
+    }
+  });
+
+  it("rejects malformed report provenance and withholds partial confidence", () => {
+    expect(parseEngineResult({
+      ...golden,
+      calibration: { ...golden.calibration, reportHash: "sha256:not-a-digest" },
+    }, SCHEMA_VERSION)).toMatchObject({ ok: false, reason: "schema_parse_error" });
+
+    const out = parseEngineResult({
+      ...golden,
+      findings: golden.findings.map((finding, index) =>
+        index === 0 ? { ...finding, confidence: undefined } : finding),
+    }, SCHEMA_VERSION);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(hasDisplayableConfidence(out.result)).toBe(false);
   });
 
   it("tolerates additive unknown fields (additive-only evolution)", () => {

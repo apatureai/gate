@@ -15,6 +15,21 @@ import { z } from "zod";
  */
 export const SCHEMA_VERSION = "1";
 const confidenceSchema = z.number().finite().min(0).max(1);
+const calibrationSchema = z.object({
+  reportId: z.string().min(1),
+  reportHash: z
+    .string()
+    .regex(/^sha256:[0-9a-f]{64}$/)
+    .transform((hash) => hash as `sha256:${string}`),
+  calibrationVersion: z.string().min(1),
+  confidenceSource: z.enum([
+    "raw_verbalized",
+    "post_hoc_isotonic",
+    "post_hoc_histogram",
+    "hidden_state_probe",
+    "ensemble",
+  ]),
+});
 
 const findingSchema = z.object({
   id: z.string(),
@@ -38,6 +53,17 @@ export const GateReviewResultSchema = z.object({
   grade: z.enum(["ship", "ship_with_nits", "needs_work", "blocked"]),
   overall: z.string(),
   confidence: confidenceSchema.optional(),
+  calibration: calibrationSchema.optional(),
+  blockingEnabled: z.boolean().optional(),
+  confidenceUnavailableReason: z
+    .enum([
+      "missing_calibration_report",
+      "invalid_calibration_report",
+      "mismatched_calibration_report",
+      "insufficient_evidence",
+      "unattested_calibration_report",
+    ])
+    .optional(),
   findings: z.array(findingSchema),
   notReviewed: z.array(z.string()),
   artifacts: z.object({
@@ -53,6 +79,7 @@ export const GateReviewResultSchema = z.object({
     model: z.string(),
     promptVersion: z.string(),
     captureVersion: z.string(),
+    rubricVersion: z.string().optional(),
     uiDnaVersion: z.string().nullable(),
   }),
 });

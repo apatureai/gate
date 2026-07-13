@@ -1,7 +1,13 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { goldenReviewResultPath, loadGoldenReviewResult } from "../src/index.js";
+import {
+  goldenReviewResultPath,
+  hasDisplayableConfidence,
+  loadGoldenReviewResult,
+  loadPreCalibrationReviewResult,
+  preCalibrationReviewResultPath,
+} from "../src/index.js";
 import type {
   Finding,
   GateReviewResult,
@@ -11,8 +17,9 @@ import type {
 
 const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"];
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
-// Re-pinned when Judgment Engine added the additive `dimension` field (#159).
-const JUDGMENT_ENGINE_GOLDEN_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
+// Re-pinned for the CalibrationReportV1 provenance contract (#166 / JE #160).
+const JUDGMENT_ENGINE_GOLDEN_BLOB = "54a7add15f3431964f092f9795af2a72800d33a0";
+const JUDGMENT_ENGINE_PRE_CALIBRATION_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
 
 describe("golden GateReviewResult fixture", () => {
   // Compile-time guarantee: the loader's return type IS GateReviewResult.
@@ -34,6 +41,19 @@ describe("golden GateReviewResult fixture", () => {
       .update(bytes)
       .digest("hex");
     expect(oid).toBe(JUDGMENT_ENGINE_GOLDEN_BLOB);
+  });
+
+  it("pins the exact historical pre-report counterexample", () => {
+    const bytes = readFileSync(preCalibrationReviewResultPath());
+    const oid = createHash("sha1")
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    expect(oid).toBe(JUDGMENT_ENGINE_PRE_CALIBRATION_BLOB);
+    const historical = loadPreCalibrationReviewResult();
+    expect(typeof historical.confidence).toBe("number");
+    expect(historical.calibration).toBeUndefined();
+    expect(hasDisplayableConfidence(historical)).toBe(false);
   });
 
   it("has structurally valid findings", () => {
@@ -87,8 +107,16 @@ describe("golden GateReviewResult fixture", () => {
     expect(serialized).not.toContain("anthropic");
   });
 
-  it("carries calibrated confidence without a Gate-owned fallback", () => {
+  it("carries calibrated confidence with exact report provenance and no Gate-owned fallback", () => {
     expect(golden.confidence).toBe(0.7);
     expect(golden.findings.map((finding) => finding.confidence)).toEqual([0.92, 0.85, 0.7]);
+    expect(golden.calibration).toMatchObject({
+      reportId: "calibration_qwen3vl_2026_07",
+      calibrationVersion: "isotonic@1",
+      confidenceSource: "post_hoc_isotonic",
+    });
+    expect(golden.calibration?.reportHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(golden.blockingEnabled).toBe(true);
+    expect(hasDisplayableConfidence(golden)).toBe(true);
   });
 });

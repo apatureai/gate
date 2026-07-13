@@ -31,10 +31,15 @@ Enforcement:
   the cross-repo contract requires copying the authoritative engine fixture byte
   for byte and deliberately updating that pin.
 
-Result-level and per-finding `confidence` are optional only for historical
-results. Judgment Engine owns calibration and aggregation; Gate preserves valid
-values in `[0, 1]` and never computes a fallback. Current PR rendering omits the
-number, while storage/dashboard loaders retain it for audit and future trust UX.
+Result-level and per-finding `confidence` are authoritative only when the result
+carries a valid content-addressed `calibration` reference. Judgment Engine owns
+calibration, aggregation, thresholds, and blocking promotion; Gate preserves
+those additive fields and never computes a fallback. Historical pre-report
+results (including ones with numeric fields) remain parseable for storage and
+audit, but `hasDisplayableConfidence` returns false, so consumers must hide the
+number and must not use it for gating. The authoritative golden and historical
+negative fixture are copied byte-for-byte from Judgment Engine and pinned by Git
+blob id to make deploy skew explicit.
 
 The Zod schema deliberately strips unknown fields (no `.strict()`), so an older
 Gate tolerates new additive fields from a newer engine.
