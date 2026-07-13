@@ -1,3 +1,4 @@
+import { injectTraceContext, SPAN_NAMES, withSpan } from "@gate/observability";
 import { parseEngineResult } from "./contract.js";
 import { signEngineRequest } from "./hmac.js";
 import {
@@ -49,6 +50,11 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
         }),
       );
     }
+    // Continue the active trace across the process boundary (gate#161). Injected
+    // LAST, from inside the engine-call span, so `traceparent` names that span as
+    // parent. `propagation.inject` emits a standards-valid carrier for a valid
+    // active context and nothing otherwise; it never overwrites auth/HMAC.
+    injectTraceContext(h);
     return h;
   };
 
@@ -69,65 +75,76 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
 
   return {
     async submit(submission: JobSubmission, abortSignal?: AbortSignal): Promise<SubmitResponse> {
-      const body = JSON.stringify(submission);
-      const requestHeaders = headers(body, submission.request.installationId);
-      const res = await withTimeout(
-        (signal) =>
-          fetchImpl(`${base}/jobs`, {
-            method: "POST",
-            headers: requestHeaders,
-            body,
-            signal,
-          }),
-        abortSignal,
-      );
-      if (res.status === 202 || res.status === 409) {
-        const body = (await res.json()) as { jobId: string };
-        return { status: res.status, jobId: body.jobId };
-      }
-      if (res.status === 429 || res.status === 503) {
-        throw new RetryableEngineError(
-          `engine submit transient ${res.status}`,
-          parseRetryAfterMs(res.headers.get("retry-after")),
+      // Each network call runs in its own engine-call span, so `traceparent`
+      // names a fresh parent span id under the one review trace (gate#161).
+      return withSpan(SPAN_NAMES.engineCall, async (span) => {
+        span.setAttribute("engine.op", "submit");
+        const body = JSON.stringify(submission);
+        const requestHeaders = headers(body, submission.request.installationId);
+        const res = await withTimeout(
+          (signal) =>
+            fetchImpl(`${base}/jobs`, {
+              method: "POST",
+              headers: requestHeaders,
+              body,
+              signal,
+            }),
+          abortSignal,
         );
-      }
-      throw new EngineJobError(`engine submit failed: ${res.status}`);
+        if (res.status === 202 || res.status === 409) {
+          const responseBody = (await res.json()) as { jobId: string };
+          return { status: res.status, jobId: responseBody.jobId };
+        }
+        if (res.status === 429 || res.status === 503) {
+          throw new RetryableEngineError(
+            `engine submit transient ${res.status}`,
+            parseRetryAfterMs(res.headers.get("retry-after")),
+          );
+        }
+        throw new EngineJobError(`engine submit failed: ${res.status}`);
+      });
     },
 
     async poll(jobId: string, installationId: string, abortSignal?: AbortSignal): Promise<JobStatus> {
-      const res = await withTimeout(
-        (signal) =>
-          fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
-            headers: headers("", installationId),
-            signal,
-          }),
-        abortSignal,
-      );
-      if (!res.ok) throw new EngineJobError(`engine poll failed: ${res.status}`);
-      const status = (await res.json()) as JobStatus;
-      if (status.state === "completed") {
-        // Validate the contract before the result can ever reach publish (#46).
-        const parsed = parseEngineResult(status.result, res.headers.get("x-schema-version"));
-        if (!parsed.ok) {
-          throw new EngineJobError(`engine result contract violation: ${parsed.reason}`);
+      return withSpan(SPAN_NAMES.engineCall, async (span) => {
+        span.setAttribute("engine.op", "poll");
+        const res = await withTimeout(
+          (signal) =>
+            fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
+              headers: headers("", installationId),
+              signal,
+            }),
+          abortSignal,
+        );
+        if (!res.ok) throw new EngineJobError(`engine poll failed: ${res.status}`);
+        const status = (await res.json()) as JobStatus;
+        if (status.state === "completed") {
+          // Validate the contract before the result can ever reach publish (#46).
+          const parsed = parseEngineResult(status.result, res.headers.get("x-schema-version"));
+          if (!parsed.ok) {
+            throw new EngineJobError(`engine result contract violation: ${parsed.reason}`);
+          }
+          return { ...status, result: parsed.result };
         }
-        return { ...status, result: parsed.result };
-      }
-      return status;
+        return status;
+      });
     },
 
     async cancel(jobId: string, installationId: string): Promise<void> {
-      const res = await withTimeout((signal) =>
-        fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
-          method: "DELETE",
-          headers: headers("", installationId),
-          signal,
-        }),
-      );
-      // Judgment Engine returns 200 even when the job became terminal before
-      // DELETE; that completion-vs-timeout race is an intentional no-op. Other
-      // non-2xx responses are real cleanup failures and must reach diagnostics.
-      if (!res.ok) throw new EngineJobError(`engine cancel failed: ${res.status}`);
+      return withSpan(SPAN_NAMES.engineCall, async (span) => {
+        span.setAttribute("engine.op", "cancel");
+        const res = await withTimeout((signal) =>
+          fetchImpl(`${base}/jobs/${encodeURIComponent(jobId)}`, {
+            method: "DELETE",
+            headers: headers("", installationId),
+            signal,
+          }),
+        );
+        // Judgment Engine returns 200 even when the job became terminal before
+        // DELETE; that completion-vs-timeout race is an intentional no-op. Other
+        // non-2xx responses are real cleanup failures and must reach diagnostics.
+        if (!res.ok) throw new EngineJobError(`engine cancel failed: ${res.status}`);
+      });
     },
   };
 }

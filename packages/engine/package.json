@@ -10,11 +10,15 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@gate/observability": "workspace:*",
     "@gate/secrets": "workspace:*",
     "@gate/types": "workspace:*",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@gate/config": "workspace:*"
+    "@gate/config": "workspace:*",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-trace-base": "^2.9.0",
+    "@opentelemetry/sdk-trace-node": "^2.9.0"
   }
 }

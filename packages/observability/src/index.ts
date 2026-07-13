@@ -9,3 +9,4 @@ export type { Span } from "@opentelemetry/api";
 export { METER_NAME, METRIC_NAMES, GateMetrics } from "./metrics.js";
 export { initTelemetry } from "./telemetry.js";
 export type { Telemetry, TelemetryOptions } from "./telemetry.js";
+export { injectTraceContext, traceContextHeaders } from "./propagation.js";
