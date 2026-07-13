@@ -28,6 +28,8 @@ export interface ReviewJobWorker {
   enqueue(job: ReviewJobPayload): Promise<string>;
   cancel(key: string): Promise<void>;
   onJob(handler: ReviewJobHandler): void;
+  /** Stop accepting work, abort active jobs, and release queue resources. */
+  close?(): Promise<void>;
 }
 
 /**
@@ -60,6 +62,14 @@ export class CancellationRegistry {
   has(key: string): boolean {
     return this.controllers.has(key);
   }
+
+  /** Abort every active job during process shutdown. */
+  abortAll(): number {
+    const active = this.controllers.size;
+    for (const controller of this.controllers.values()) controller.abort();
+    this.controllers.clear();
+    return active;
+  }
 }
 
 /**
@@ -72,6 +82,7 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
   const queue: ReviewJobPayload[] = [];
   let handler: ReviewJobHandler | undefined;
   let running = false;
+  let closed = false;
 
   const keyOf = (job: ReviewJobPayload): string => reviewQueueKey(job.owner, job.name, job.prNumber);
   const dropPending = (key: string): void => {
@@ -104,6 +115,7 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
 
   return {
     async enqueue(job) {
+      if (closed) throw new Error("review worker is closed");
       const key = keyOf(job);
       dropPending(key); // newest push supersedes a pending one
       registry.abort(key); // and cooperatively cancels an in-flight older one
@@ -116,8 +128,14 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
       registry.abort(key);
     },
     onJob(h) {
+      if (closed) throw new Error("review worker is closed");
       handler = h;
       void pump();
+    },
+    async close() {
+      closed = true;
+      queue.length = 0;
+      registry.abortAll();
     },
   };
 }
@@ -127,18 +145,30 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
  * job and aborts an in-flight one's signal (cooperative — BullMQ can't preempt).
  */
 export function createBullReviewWorker(redisUrl: string): ReviewJobWorker {
-  const queue = new Queue(REVIEW_QUEUE_NAME, { connection: createRedisConnection(redisUrl), prefix: BULL_PREFIX });
+  // BullMQ treats injected ioredis clients as shared and therefore does not quit
+  // them from Queue/Worker.close(). Retain both clients so this owner can close
+  // every socket after BullMQ has drained its own resources.
+  const queueConnection = createRedisConnection(redisUrl);
+  const queue = new Queue(REVIEW_QUEUE_NAME, { connection: queueConnection, prefix: BULL_PREFIX });
   const reviewQueue = createReviewQueue(queue as unknown as QueueLike);
   const registry = new CancellationRegistry();
   let worker: Worker | undefined;
+  let workerConnection: ReturnType<typeof createRedisConnection> | undefined;
+  let closePromise: Promise<void> | undefined;
+  let closed = false;
 
   return {
-    enqueue: (job) => reviewQueue.enqueue(job),
+    enqueue(job) {
+      if (closed) return Promise.reject(new Error("review worker is closed"));
+      return reviewQueue.enqueue(job);
+    },
     async cancel(key) {
       await queue.remove(key).catch(() => undefined);
       registry.abort(key);
     },
     onJob(handler) {
+      if (closed) throw new Error("review worker is closed");
+      workerConnection = createRedisConnection(redisUrl);
       worker = new Worker(
         REVIEW_QUEUE_NAME,
         async (job) => {
@@ -151,9 +181,31 @@ export function createBullReviewWorker(redisUrl: string): ReviewJobWorker {
             registry.done(key, controller);
           }
         },
-        { connection: createRedisConnection(redisUrl), prefix: BULL_PREFIX },
+        { connection: workerConnection, prefix: BULL_PREFIX },
       );
-      void worker;
+    },
+    close() {
+      closePromise ??= (async () => {
+        closed = true;
+        registry.abortAll();
+        const errors: unknown[] = [];
+        const close = async (fn: (() => Promise<unknown>) | undefined): Promise<void> => {
+          if (!fn) return;
+          try {
+            await fn();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
+        const activeWorker = worker;
+        const activeWorkerConnection = workerConnection;
+        await close(activeWorker ? () => activeWorker.close() : undefined);
+        await close(() => queue.close());
+        await close(activeWorkerConnection ? () => activeWorkerConnection.quit() : undefined);
+        await close(() => queueConnection.quit());
+        if (errors.length > 0) throw new AggregateError(errors, "review worker shutdown failed");
+      })();
+      return closePromise;
     },
   };
 }

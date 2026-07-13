@@ -10,7 +10,11 @@ import { createFeedbackSink, createSqlFeedbackStore } from "./feedback-store.js"
 import { createSqlConsumedStore } from "./feedback-token.js";
 import type { FeedbackSink } from "./feedback-routes.js";
 import { createGitHubPullsClient, type GitHubPullsClient } from "./github-pulls.js";
-import { createProductionAppServer, type ProductionAppServerDeps } from "./production-server.js";
+import {
+  createProductionAppServer,
+  type ProductionAppServer,
+  type ProductionAppServerDeps,
+} from "./production-server.js";
 import { assertProductionEnv } from "./production-readiness.js";
 import { createGitHubRepoConfigClient, type RepoConfigClient } from "./repo-config.js";
 import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
@@ -36,9 +40,12 @@ import { createRedisSupersessionStore, type RedisLike, type RepoPr } from "./sup
 export interface SqlRuntime {
   query: SqlQuery;
   tenant: TenantTxRunner;
+  close?(): Promise<void>;
 }
 
-export interface RedisRuntime extends RedisLike, RedisConfigClient {}
+export interface RedisRuntime extends RedisLike, RedisConfigClient {
+  quit?(): Promise<unknown>;
+}
 
 export interface ProductionRuntimeFactories {
   secretStore?(env: NodeJS.ProcessEnv): SecretStore;
@@ -63,7 +70,11 @@ function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
 function createPgRuntime(databaseUrl: string): SqlRuntime {
   const pool = new Pool({ connectionString: databaseUrl });
   const exec = pgExecutor(pool);
-  return { query: exec.query, tenant: pgTenantRunner(pool) };
+  return {
+    query: exec.query,
+    tenant: pgTenantRunner(pool),
+    close: () => pool.end(),
+  };
 }
 
 function installationIdOf(repo: RepoPr): string {
@@ -157,6 +168,14 @@ export async function buildProductionDepsFromEnv(
     },
     webhookDedupe: createSqlWebhookDedupe(sql.query),
     startup: { redis },
+    shutdown: {
+      closeRedis: async () => {
+        await redis.quit?.();
+      },
+      closeSql: async () => {
+        await sql.close?.();
+      },
+    },
     env,
     resolvePullRequest: async (owner, name, sha, installationId) => {
       const token = await auth.getInstallationToken(installationId);
@@ -190,12 +209,65 @@ function isEntrypoint(): boolean {
   return !!entry && import.meta.url === pathToFileURL(entry).href;
 }
 
+type ShutdownSignal = "SIGTERM" | "SIGINT";
+
+export interface SignalSource {
+  exitCode?: string | number | null;
+  once(event: ShutdownSignal, listener: () => void): unknown;
+  off(event: ShutdownSignal, listener: () => void): unknown;
+}
+
+/**
+ * Bind both container shutdown signals to the composition-owned drain. The
+ * listener never calls process.exit(); setting exitCode lets Node leave only
+ * after Fastify, BullMQ, Redis, and Postgres have released their handles.
+ */
+export function installProductionSignalHandlers(
+  app: Pick<ProductionAppServer, "stop">,
+  signalSource: SignalSource = process,
+  onError: (error: unknown) => void = console.error,
+): () => void {
+  let registered = true;
+  const remove = (): void => {
+    if (!registered) return;
+    registered = false;
+    signalSource.off("SIGTERM", handleSignal);
+    signalSource.off("SIGINT", handleSignal);
+  };
+  const handleSignal = (): void => {
+    remove();
+    void app.stop().then(
+      () => {
+        if (signalSource.exitCode == null) signalSource.exitCode = 0;
+      },
+      (error: unknown) => {
+        signalSource.exitCode = 1;
+        onError(error);
+      },
+    );
+  };
+
+  signalSource.once("SIGTERM", handleSignal);
+  signalSource.once("SIGINT", handleSignal);
+  return remove;
+}
+
 if (isEntrypoint()) {
   const port = Number(process.env.PORT ?? 8080);
   buildProductionDepsFromEnv()
-    .then((deps) => createProductionAppServer(deps).start({ host: "0.0.0.0", port }))
-    .catch((err: unknown) => {
-      console.error(err);
-      process.exit(1);
+    .then(async (deps) => {
+      const app = createProductionAppServer(deps);
+      const removeSignalHandlers = installProductionSignalHandlers(app);
+      try {
+        await app.start({ host: "0.0.0.0", port });
+      } catch (error) {
+        removeSignalHandlers();
+        await app.stop().catch(() => undefined);
+        throw error;
+      }
+    })
+    .catch((error: unknown) => {
+      console.error(error);
+      process.exitCode = 1;
     });
 }

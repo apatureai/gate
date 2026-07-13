@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import type { QueryFn, TenantTxRunner } from "@gate/db";
@@ -8,7 +9,11 @@ import type { AppReviewClient, AppReviewTarget } from "../src/app-github.js";
 import type { GitHubPullsClient } from "../src/github-pulls.js";
 import { PRODUCTION_ENV_VARS } from "../src/production-readiness.js";
 import type { RepoConfigClient } from "../src/repo-config.js";
-import { buildProductionDepsFromEnv, type ProductionRuntimeFactories } from "../src/server.js";
+import {
+  buildProductionDepsFromEnv,
+  installProductionSignalHandlers,
+  type ProductionRuntimeFactories,
+} from "../src/server.js";
 
 function fullEnv(): NodeJS.ProcessEnv {
   return {
@@ -145,6 +150,33 @@ describe("buildProductionDepsFromEnv", () => {
     expect(tenantIds).toEqual(["99", "99"]);
   });
 
+  it("wires the owned Redis and SQL handles into the shutdown chain", async () => {
+    const closeSql = vi.fn(async () => undefined);
+    const quitRedis = vi.fn(async () => "OK");
+    const query: QueryFn = vi.fn(async () => ({ rows: [] }));
+    const tenant: TenantTxRunner = {
+      withTenant: vi.fn(async (_installationId, fn) => fn(query)),
+    };
+    const deps = await buildProductionDepsFromEnv(
+      fullEnv(),
+      baseFactories({
+        sql: () => ({ query, tenant, close: closeSql }),
+        redis: () => ({
+          set: vi.fn(async () => undefined),
+          get: vi.fn(async () => null),
+          config: vi.fn(async () => ["maxmemory-policy", "noeviction"]),
+          quit: quitRedis,
+        }),
+      }),
+    );
+
+    await deps.shutdown?.closeRedis?.();
+    await deps.shutdown?.closeSql?.();
+
+    expect(quitRedis).toHaveBeenCalledOnce();
+    expect(closeSql).toHaveBeenCalledOnce();
+  });
+
   it("builds per-installation GitHub clients and an HMAC-configured engine client", async () => {
     const engineClient = vi.fn(
       (): JudgmentEngineClient => ({
@@ -267,5 +299,40 @@ describe("buildProductionDepsFromEnv", () => {
     const env = fullEnv();
     delete env.GATE_SCREENSHOT_OBJECT_URL_TEMPLATE;
     await expect(buildProductionDepsFromEnv(env, baseFactories())).rejects.toThrow(/GATE_SCREENSHOT_OBJECT_URL_TEMPLATE/);
+  });
+});
+
+describe("installProductionSignalHandlers", () => {
+  it("drains once on SIGTERM/SIGINT and records a clean exit", async () => {
+    class TestSignalSource extends EventEmitter {
+      exitCode: number | undefined;
+    }
+    const signalSource = new TestSignalSource();
+    const stop = vi.fn(async () => undefined);
+    installProductionSignalHandlers({ stop }, signalSource);
+
+    signalSource.emit("SIGTERM");
+    signalSource.emit("SIGINT");
+
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(signalSource.exitCode).toBe(0));
+  });
+
+  it("records a failed exit when draining rejects", async () => {
+    class TestSignalSource extends EventEmitter {
+      exitCode: number | undefined;
+    }
+    const signalSource = new TestSignalSource();
+    const onError = vi.fn();
+    installProductionSignalHandlers(
+      { stop: vi.fn(async () => Promise.reject(new Error("close failed"))) },
+      signalSource,
+      onError,
+    );
+
+    signalSource.emit("SIGINT");
+
+    await vi.waitFor(() => expect(signalSource.exitCode).toBe(1));
+    expect(onError).toHaveBeenCalledOnce();
   });
 });

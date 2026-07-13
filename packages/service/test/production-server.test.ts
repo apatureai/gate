@@ -24,6 +24,39 @@ afterEach(async () => {
 });
 
 describe("createProductionAppServer (#62 live App-path composition root)", () => {
+  it("stops HTTP admission, worker, Redis, and SQL once in that order", async () => {
+    const closed: string[] = [];
+    const worker = {
+      enqueue: vi.fn(async () => "job"),
+      cancel: vi.fn(async () => undefined),
+      onJob: vi.fn(),
+      close: vi.fn(async () => void closed.push("worker")),
+    };
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker,
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async () => null,
+      installationClients: () => {
+        throw new Error("unused");
+      },
+      shutdown: {
+        closeRedis: vi.fn(async () => void closed.push("redis")),
+        closeSql: vi.fn(async () => void closed.push("sql")),
+      },
+    });
+    prod.server.addHook("onClose", async () => void closed.push("http"));
+    app = prod.server;
+    await prod.start({ host: "127.0.0.1", port: 0 });
+
+    await Promise.all([prod.stop(), prod.stop()]);
+    app = undefined;
+
+    expect(closed).toEqual(["http", "worker", "redis", "sql"]);
+    expect(worker.close).toHaveBeenCalledOnce();
+  });
+
   it("a signed deployment_status flows end-to-end: enqueue -> worker -> hydrate -> runHostedReview -> publish", async () => {
     const sha = "abc123";
     const comments: GitHubCommentsApi = {

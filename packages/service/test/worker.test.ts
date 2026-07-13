@@ -36,6 +36,17 @@ describe("CancellationRegistry", () => {
     expect(reg.has("k")).toBe(false);
     expect(reg.abort("missing")).toBe(false);
   });
+
+  it("abortAll signals and clears every active controller", () => {
+    const reg = new CancellationRegistry();
+    const first = reg.create("one");
+    const second = reg.create("two");
+    expect(reg.abortAll()).toBe(2);
+    expect(first.signal.aborted).toBe(true);
+    expect(second.signal.aborted).toBe(true);
+    expect(reg.has("one")).toBe(false);
+    expect(reg.has("two")).toBe(false);
+  });
 });
 
 describe("createInMemoryReviewWorker", () => {
@@ -95,5 +106,29 @@ describe("createInMemoryReviewWorker", () => {
     });
     await tick();
     expect(processed).toEqual(["new"]);
+  });
+
+  it("close aborts active work and rejects new jobs", async () => {
+    const worker = createInMemoryReviewWorker();
+    let observedAbort = false;
+    let started!: () => void;
+    const running = new Promise<void>((resolve) => (started = resolve));
+    worker.onJob(async (_job, ctx) => {
+      started();
+      await new Promise<void>((resolve) => {
+        ctx.signal.addEventListener("abort", () => {
+          observedAbort = true;
+          resolve();
+        });
+      });
+    });
+    await worker.enqueue(payload(42, "sha1"));
+    await running;
+
+    await worker.close?.();
+
+    await tick();
+    expect(observedAbort).toBe(true);
+    await expect(worker.enqueue(payload(42, "sha2"))).rejects.toThrow("worker is closed");
   });
 });

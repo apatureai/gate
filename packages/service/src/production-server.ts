@@ -84,6 +84,11 @@ export interface ProductionAppServerDeps {
   readiness?: () => boolean | Promise<boolean>;
   /** Boot invariant checks (Redis `noeviction`, #34); run before `listen`. */
   startup?: StartupCheckDeps;
+  /** Infra handles owned by the production composition root, in close order. */
+  shutdown?: {
+    closeRedis?(): Promise<void>;
+    closeSql?(): Promise<void>;
+  };
   /**
    * When set, fail fast at `start()` if any required production env var is missing
    * (#64). Pass `process.env` from the composition root to enforce; omit in
@@ -101,6 +106,8 @@ export interface ProductionAppServer {
   server: FastifyInstance;
   /** Run startup invariant checks, then begin listening. Failure exits non-zero. */
   start(opts: { host?: string; port: number }): Promise<void>;
+  /** Stop HTTP admission, drain the worker/queue, then close Redis and SQL. */
+  stop(): Promise<void>;
 }
 
 export function createProductionAppServer(deps: ProductionAppServerDeps): ProductionAppServer {
@@ -178,16 +185,54 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     registerFeedbackRoutes(server, deps.feedbackRoutes);
   }
 
+  let startPromise: Promise<void> | undefined;
+  let stopPromise: Promise<void> | undefined;
+
   return {
     server,
-    async start({ host = "0.0.0.0", port }) {
-      // Fail fast if a required production env var is missing (#64) — one
-      // aggregated error, before any connection is attempted.
-      if (deps.env) assertProductionEnv(deps.env, deps.requiredEnv);
-      // Fail fast if a boot invariant is violated (e.g. Redis eviction would let
-      // the publish-time SHA guard read nil and pass a stale SHA, §15.3).
-      if (deps.startup) await runStartupChecks(deps.startup);
-      await server.listen({ host, port });
+    start({ host = "0.0.0.0", port }) {
+      if (stopPromise) return Promise.reject(new Error("production server is stopping"));
+      startPromise ??= (async () => {
+        // Fail fast if a required production env var is missing (#64) — one
+        // aggregated error, before any connection is attempted.
+        if (deps.env) assertProductionEnv(deps.env, deps.requiredEnv);
+        // Fail fast if a boot invariant is violated (e.g. Redis eviction would let
+        // the publish-time SHA guard read nil and pass a stale SHA, §15.3).
+        if (deps.startup) await runStartupChecks(deps.startup);
+        // A signal may arrive while startup checks are running. In that case the
+        // stop path owns cleanup and the socket must never begin admitting work.
+        if (stopPromise) return;
+        await server.listen({ host, port });
+      })();
+      return startPromise;
+    },
+    stop() {
+      stopPromise ??= (async () => {
+        // If startup is in progress, let it either fail or observe stopPromise
+        // before closing resources. This prevents listen-after-stop races.
+        await startPromise?.catch(() => undefined);
+        const errors: unknown[] = [];
+        const close = async (fn: (() => Promise<void>) | undefined): Promise<void> => {
+          if (!fn) return;
+          try {
+            await fn();
+          } catch (error) {
+            errors.push(error);
+          }
+        };
+
+        // Order is load-bearing: stop HTTP admission first, then work, then the
+        // backing stores used by that work. Continue closing after any failure.
+        await close(() => server.close());
+        await close(deps.worker.close?.bind(deps.worker));
+        await close(deps.shutdown?.closeRedis?.bind(deps.shutdown));
+        await close(deps.shutdown?.closeSql?.bind(deps.shutdown));
+
+        if (errors.length > 0) {
+          throw new AggregateError(errors, "production server shutdown failed");
+        }
+      })();
+      return stopPromise;
     },
   };
 }

@@ -3,7 +3,9 @@
 FROM node:24-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+# The upstream Node 24 image's bundled npm carries Undici 6.26.0; npm 12.0.1
+# bundles the fixed 6.27.0 while retaining Node 24 support.
+RUN npm install --global npm@12.0.1 && corepack enable
 WORKDIR /app
 
 # --- build: install all deps and compile the workspace ---
@@ -15,7 +17,8 @@ RUN pnpm build
 
 # --- runtime: prune dev deps, keep compiled output ---
 FROM build AS prune
-RUN pnpm prune --prod
+RUN rm -rf node_modules packages/*/node_modules \
+  && pnpm install --prod --offline --frozen-lockfile
 
 FROM base AS runtime
 ENV NODE_ENV=production
