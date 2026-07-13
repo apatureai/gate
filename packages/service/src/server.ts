@@ -168,6 +168,17 @@ export async function buildProductionDepsFromEnv(
     },
     webhookDedupe: createSqlWebhookDedupe(sql.query),
     startup: { redis },
+    async readiness() {
+      try {
+        await Promise.all([
+          sql.query("SELECT 1"),
+          redis.get("__gate_readiness__"),
+        ]);
+        return true;
+      } catch {
+        return false;
+      }
+    },
     shutdown: {
       closeRedis: async () => {
         await redis.quit?.();

@@ -177,6 +177,32 @@ describe("buildProductionDepsFromEnv", () => {
     expect(closeSql).toHaveBeenCalledOnce();
   });
 
+  it("reports production readiness only when Postgres and Redis are reachable", async () => {
+    const query: QueryFn = vi.fn(async () => ({ rows: [] }));
+    const redisGet = vi.fn(async () => null as string | null);
+    const factories = baseFactories({
+      sql: vi.fn(() => ({
+        query,
+        tenant: {
+          withTenant: vi.fn(async (_installationId, fn) => fn(query)),
+        },
+      })),
+      redis: vi.fn(() => ({
+        set: vi.fn(async () => undefined),
+        get: redisGet,
+        config: vi.fn(async () => ["maxmemory-policy", "noeviction"]),
+      })),
+    });
+    const deps = await buildProductionDepsFromEnv(fullEnv(), factories);
+
+    await expect(deps.readiness?.()).resolves.toBe(true);
+    expect(query).toHaveBeenCalledWith("SELECT 1");
+    expect(redisGet).toHaveBeenCalledWith("__gate_readiness__");
+
+    redisGet.mockRejectedValueOnce(new Error("redis unavailable"));
+    await expect(deps.readiness?.()).resolves.toBe(false);
+  });
+
   it("builds per-installation GitHub clients and an HMAC-configured engine client", async () => {
     const engineClient = vi.fn(
       (): JudgmentEngineClient => ({

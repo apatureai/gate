@@ -1,11 +1,10 @@
 # Gate App/orchestrator service image. Secrets are injected at runtime from the
 # Fly secret store (fly secrets set ...), never baked into the image.
-FROM node:24-slim AS base
+FROM node:24-trixie-slim AS base
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
-# The upstream Node 24 image's bundled npm carries Undici 6.26.0; npm 12.0.1
-# bundles the fixed 6.27.0 while retaining Node 24 support.
-RUN npm install --global npm@12.0.1 && corepack enable
+# Pin a Node-24-compatible npm release whose bundled Undici is patched.
+RUN npm install --global npm@11.18.0 && corepack enable
 WORKDIR /app
 
 # --- build: install all deps and compile the workspace ---
@@ -23,6 +22,12 @@ RUN rm -rf node_modules packages/*/node_modules \
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PORT=8080
+# Keep the supported distro current and remove build-only package managers from
+# the App image. The Action image retains them for customer preview commands.
+RUN apt-get update && apt-get install -y --no-install-recommends liblzma5 \
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+  /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY --from=prune /app/node_modules ./node_modules
 COPY --from=prune /app/packages ./packages
 COPY --from=prune /app/package.json ./package.json

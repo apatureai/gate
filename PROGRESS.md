@@ -11,6 +11,8 @@ How the loop uses it:
 
 ## M0 · Foundation & runtime
 
+- [x] #162 - Security: verify shipped images and graceful shutdown in CI -> done: the production App now drains Fastify, BullMQ and its owned ioredis connections, shared Redis, and Postgres on SIGTERM/SIGINT. Production readiness actively probes Postgres and Redis. CI builds both Node 24 images on supported Debian 13, verifies the Action PID-1 and package-manager contracts, boots the real App against ephemeral services, proves clean shutdown, retains SPDX/scan evidence, and blocks every fixable medium-or-higher vulnerability. The smoke uses no live GitHub, model, customer, or production secret.
+
 - [x] #30 - Infra: service + Action monorepo scaffold + shared types package -> done: pnpm workspace (types/service/action) + tsc -b project refs; @gate/types exports the engine boundary contracts (§6 + §15.2 amendments) and the shared golden fixture loader; service/action consume them; no contents:write; typecheck+test(12)+lint green
 - [x] #31 - Infra: lint + typecheck + test CI pipeline -> done: .github/workflows/ci.yml runs pnpm install --frozen-lockfile + lint + tsc -b + tests on every PR/push; lint is warnings-as-errors (eslint --max-warnings=0); typecheck covers all packages via project refs. NOTE: marking the check "required before merge" is a one-time branch-protection setting for a maintainer (needs admin; left for human).
 - [x] #66 - Infra: upgrade Vitest and Vite past audited vulnerabilities -> done: Vitest 3.2.6 with Vite pinned to the first patched 6.x release (6.4.3); workspace aliases and the full lint/typecheck/test/build pipeline remain green; high/critical audit findings cleared

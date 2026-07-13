@@ -120,14 +120,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          docker build --file Dockerfile --tag "$APP_IMAGE" .
-          docker build --file Dockerfile.action --tag "$ACTION_IMAGE" .
+          docker build --pull --file Dockerfile --tag "$APP_IMAGE" .
+          docker build --pull --file Dockerfile.action --tag "$ACTION_IMAGE" .
 
       - name: Assert Node 24 and the Action PID-1 contract
         run: |
           set -euo pipefail
           docker run --rm --entrypoint node "$APP_IMAGE" --version | grep -E '^v24\.'
           docker run --rm --entrypoint node "$ACTION_IMAGE" --version | grep -E '^v24\.'
+          for image in "$APP_IMAGE" "$ACTION_IMAGE"; do
+            docker run --rm --entrypoint /bin/sh "$image" -c \
+              '. /etc/os-release; test "$ID $VERSION_ID" = "debian 13"'
+            docker run --rm --entrypoint /bin/sh "$image" -c \
+              'dpkg --compare-versions "$(dpkg-query -W liblzma5 | cut -f2)" ge "5.8.1-1+deb13u1"'
+          done
+          docker run --rm --entrypoint /bin/sh "$APP_IMAGE" -c '! command -v npm && ! command -v corepack'
+          docker run --rm --entrypoint /bin/sh "$ACTION_IMAGE" -c \
+            'test "$(npm --version)" = "11.18.0" && command -v corepack && command -v pnpm && command -v yarn'
           docker run --rm --entrypoint /bin/sh "$ACTION_IMAGE" -c 'test -x /usr/bin/tini'
           docker image inspect "$ACTION_IMAGE" \
             --format '{{json .Config.Entrypoint}}' \
@@ -145,19 +154,19 @@ jobs:
           trivy image --format spdx-json --output artifacts/gate-app.spdx.json "$APP_IMAGE"
           trivy image --format spdx-json --output artifacts/gate-action.spdx.json "$ACTION_IMAGE"
 
-      - name: Record fixable high and critical vulnerabilities
+      - name: Record fixable medium, high, and critical vulnerabilities
         run: |
           set -euo pipefail
           trivy image \
             --scanners vuln \
-            --severity HIGH,CRITICAL \
+            --severity MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed \
             --format json \
             --output artifacts/gate-app.vulnerabilities.json \
             "$APP_IMAGE"
           trivy image \
             --scanners vuln \
-            --severity HIGH,CRITICAL \
+            --severity MEDIUM,HIGH,CRITICAL \
             --ignore-unfixed \
             --format json \
             --output artifacts/gate-action.vulnerabilities.json \
@@ -230,7 +239,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Enforce the fixable vulnerability gate
+      - name: Enforce the fixable medium-or-higher vulnerability gate
         run: |
           set -euo pipefail
           jq -e '[.Results[]?.Vulnerabilities[]?] | length == 0' \
