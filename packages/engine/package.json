@@ -13,7 +13,7 @@
     "@gate/observability": "workspace:*",
     "@gate/secrets": "workspace:*",
     "@gate/types": "workspace:*",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@gate/config": "workspace:*",

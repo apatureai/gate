@@ -40,16 +40,16 @@ const previewSchema = z
     fork_preview: z.boolean().default(false),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const routesSchema = z
   .object({
     always: z.array(z.string()).default(["/"]),
     max_per_pr: z.number().int().positive().default(5),
-    map: z.record(z.string()).default({}),
+    map: z.record(z.string(), z.string()).default({}),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const rulesSchema = z
   .object({
@@ -58,15 +58,15 @@ const rulesSchema = z
     suppress: z.array(z.string()).default([]),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 const tokensSchema = z
   .object({
     source: z.string().nullable().default(null),
-    values: z.record(z.string()).default({}),
+    values: z.record(z.string(), z.string()).default({}),
   })
   .strict()
-  .default({});
+  .prefault({});
 
 export const DesignReviewConfigSchema = z
   .object({
@@ -79,6 +79,6 @@ export const DesignReviewConfigSchema = z
     tokens: tokensSchema,
   })
   .strict()
-  .default({});
+  .prefault({});
 
 export type RawDesignReviewConfig = z.infer<typeof DesignReviewConfigSchema>;

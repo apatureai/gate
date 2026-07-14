@@ -12,6 +12,6 @@
   "dependencies": {
     "@gate/types": "workspace:*",
     "yaml": "^2.6.1",
-    "zod": "^3.23.8"
+    "zod": "^4.4.3"
   }
 }
