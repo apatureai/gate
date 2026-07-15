@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  completedReviewId,
   createReviewQueue,
   type QueueLike,
   type ReviewJobPayload,
@@ -24,9 +23,6 @@ const payload: ReviewJobPayload = {
 describe("queue keys", () => {
   it("supersession key is repo#pr", () => {
     expect(reviewQueueKey("acme", "web", 42)).toBe("acme/web#42");
-  });
-  it("engine job idempotency helper is pr:head_sha, distinct from the durable runs identity", () => {
-    expect(completedReviewId(42, "abc123")).toBe("42:abc123");
   });
 });
 

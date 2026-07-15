@@ -6,7 +6,7 @@ import {
   type GitHubCommentsApi,
   upsertStickyComment,
 } from "@gate/delivery";
-import { type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
+import { assertReviewOutcomeIdentity, type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
 import { scrubTail } from "@gate/secrets";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { PreviewBuildFact } from "@gate/types";
@@ -222,6 +222,7 @@ export async function runAction(
         depth: "deep",
         ...(previewBuildFacts ? { previewBuildFacts } : {}),
       });
+      assertReviewOutcomeIdentity(outcome, ctx);
     } catch {
       // Engine unavailable / contract violation: neutral Check Run, never fail the PR.
       if (!(await isCurrentHead(ctx, deps))) {

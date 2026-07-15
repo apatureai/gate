@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
-import type { JudgmentEngineClient, ReadinessOptions } from "@gate/engine";
+import { canonicalReviewIdentity, type JudgmentEngineClient, type ReadinessOptions } from "@gate/engine";
 import { loadGoldenReviewResult } from "@gate/types";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,7 +58,7 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
   });
 
   it("a signed deployment_status flows end-to-end: enqueue -> worker -> hydrate -> runHostedReview -> publish", async () => {
-    const sha = "abc123";
+    const sha = "0123456789abcdef0123456789abcdef01234567";
     const comments: GitHubCommentsApi = {
       listComments: vi.fn(async () => []),
       createComment: vi.fn(async (body) => ({ id: 1, nodeId: "n1", body })),
@@ -66,7 +66,12 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     };
     const published: CheckRun[] = [];
     const engine: JudgmentEngineClient = {
-      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      review: vi.fn(async (reviewCtx) => ({
+        status: "completed",
+        result: golden,
+        jobId: "j",
+        reviewIdentity: canonicalReviewIdentity(reviewCtx),
+      })),
       cancel: vi.fn(async () => {}),
     };
     const installationClients = vi.fn(

@@ -167,6 +167,9 @@ Definitions:
 
 - Supersession key: `repo#pr`.
 - Durable completed-review identity: `(repo_owner, repo_name, pr_number, head_sha)`.
+- Judgment Engine intent key: `gate-review-v2:sha256:<digest>`, where the digest
+  is SHA-256 over the canonical JSON tuple `[namespace, lowercase_owner,
+  lowercase_name, pr_number, lowercase_full_head_sha]`.
 
 Required behavior:
 
@@ -417,13 +420,21 @@ Six decisions from the architecture debate, benchmarked against enterprise pract
 
 Gate must not hold a connection open for a 90s+ review — the App path runs behind the Fly proxy, whose idle timeout would drop it. The seam is an async job API:
 
-- `POST /jobs` -> `202 { jobId }`, body carries `idempotencyKey = "${prNumber}:${headSha}"` and `depth: "triage" | "deep"`.
+- `POST /jobs` -> `202 { jobId }`, body carries the repository-scoped,
+  versioned `gate-review-v2` `idempotencyKey` defined in §5 and
+  `depth: "triage" | "deep"`.
 - `GET /jobs/:jobId` polled with depth-aware exponential backoff (triage first poll ~10s, deep ~30s, +10s), capped at the §5 10-minute deadline.
 - `DELETE /jobs/:jobId` on supersession or when Gate abandons polling at the
   deadline (best-effort engine cancellation, signed with the verified
   installation identity).
 
-`GateReviewRequest` gains `depth`. On a 409 (duplicate idempotency key) Gate polls the existing job rather than re-running capture. Poll timeout first sends one bounded cancellation request, then posts a neutral Check Run, reason `review_timed_out`, even if cancellation fails. A terminal response racing with the DELETE is a no-op. Deferred to scale: a completion-webhook callback replacing polling.
+`GateReviewRequest` gains `depth`. On a 409 (duplicate idempotency key) Gate polls
+the existing job rather than re-running capture. The client binds every outcome
+to the canonical review identity, and both Action and App paths assert that
+identity before publication. Poll timeout first sends one bounded cancellation
+request, then posts a neutral Check Run, reason `review_timed_out`, even if
+cancellation fails. A terminal response racing with the DELETE is a no-op.
+Deferred to scale: a completion-webhook callback replacing polling.
 
 ### 15.2 Contract safety and service-to-service auth (amends §6, §7, §8, §14)
 

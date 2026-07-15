@@ -3,8 +3,11 @@ export {
   EngineJobError,
   EngineAbortedError,
   RetryableEngineError,
+  GATE_REVIEW_INTENT_NAMESPACE,
   parseRetryAfterMs,
+  canonicalReviewIdentity,
   idempotencyKey,
+  sameReviewIdentity,
   nextPollDelayMs,
   pollUntilDone,
   runEngineJob,
@@ -18,6 +21,8 @@ export type {
   EngineTransport,
   PollOutcome,
   PollOptions,
+  ReviewIdentity,
+  ReviewIdentityInput,
 } from "./jobs.js";
 export { createHttpEngineTransport } from "./http.js";
 export type { HttpEngineTransportOptions } from "./http.js";
@@ -43,6 +48,7 @@ export type {
 } from "./endpoint-routing.js";
 export {
   buildGateReviewRequest,
+  assertReviewOutcomeIdentity,
   extractReviewMetadata,
   createJudgmentEngineClient,
 } from "./client.js";
@@ -51,6 +57,7 @@ export type {
   ReviewMetadata,
   JudgmentEngineClient,
   JudgmentEngineClientOptions,
+  ReviewOutcome,
 } from "./client.js";
 export { READINESS_CEILING_MS, waitForReadiness } from "./readiness.js";
 export type { ReadinessResult, ReadinessOptions } from "./readiness.js";

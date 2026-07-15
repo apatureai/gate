@@ -1,5 +1,10 @@
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
-import { EngineAbortedError, type JudgmentEngineClient } from "@gate/engine";
+import {
+  canonicalReviewIdentity,
+  EngineAbortedError,
+  type JudgmentEngineClient,
+  type PollOutcome,
+} from "@gate/engine";
 import { DEFAULT_CONFIG } from "@gate/config";
 import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
@@ -17,20 +22,21 @@ import { createInMemoryScreenshotRegistry } from "../src/screenshots.js";
 import { createInMemorySupersessionStore, recordEnqueue } from "../src/supersession.js";
 
 const golden = loadGoldenReviewResult();
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 
 const ctx: HostedReviewContext = {
   installationId: "1",
   repository: { owner: "acme", name: "web", defaultBranch: "main" },
-  pullRequest: { number: 42, headSha: "abc", baseSha: "def", title: "Redesign", body: null },
+  pullRequest: { number: 42, headSha: HEAD_SHA, baseSha: "def", title: "Redesign", body: null },
   isFork: false,
   preview: { url: "https://acme.vercel.app", provider: "vercel", source: "deployment_status" },
 };
 
-function engine(outcome: Awaited<ReturnType<JudgmentEngineClient["review"]>> | Error): JudgmentEngineClient {
+function engine(outcome: PollOutcome | Error): JudgmentEngineClient {
   return {
-    review: vi.fn(async () => {
+    review: vi.fn(async (reviewCtx) => {
       if (outcome instanceof Error) throw outcome;
-      return outcome;
+      return { ...outcome, reviewIdentity: canonicalReviewIdentity(reviewCtx) };
     }),
     cancel: vi.fn(async () => {}),
   };
@@ -61,7 +67,7 @@ function deps(engineClient: JudgmentEngineClient) {
 describe("runHostedReview", () => {
   it("publishes a completed review, records full review + feedback", async () => {
     const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
 
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("published");
@@ -73,7 +79,7 @@ describe("runHostedReview", () => {
 
   it("discards a stale result via the publish-time guard (newer push)", async () => {
     const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     // a newer push lands current_sha = "newer" before publish
     await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "newer");
 
@@ -85,7 +91,7 @@ describe("runHostedReview", () => {
 
   it("returns superseded and best-effort cancels the engine job when aborted", async () => {
     const d = deps(engine(new EngineAbortedError("job_super")));
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("superseded");
     expect(d._published).toHaveLength(0);
@@ -94,7 +100,7 @@ describe("runHostedReview", () => {
 
   it("posts a neutral Check Run (never crashes the worker) when the engine throws", async () => {
     const d = deps(engine(new Error("engine 503")));
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("engine_error");
     expect(d._published[0]?.conclusion).toBe("neutral");
@@ -109,9 +115,32 @@ describe("runHostedReview", () => {
     expect(d._published).toHaveLength(0);
   });
 
+  it("fails closed before publication when the engine outcome is bound to another repository", async () => {
+    const engineClient = engine({ status: "completed", result: golden, jobId: "j" });
+    (engineClient.review as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
+      status: "completed",
+      result: golden,
+      jobId: "j",
+      reviewIdentity: {
+        repositoryOwner: "acme",
+        repositoryName: "other",
+        prNumber: 42,
+        headSha: HEAD_SHA,
+      },
+    }));
+    const d = deps(engineClient);
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
+
+    const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
+
+    expect(out.status).toBe("engine_error");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+    expect(d._published[0]?.conclusion).toBe("neutral");
+  });
+
   it("posts a neutral Check Run when the preview is unverified", async () => {
     const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     const out = await runHostedReview(DEFAULT_CONFIG, { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } }, d);
     expect(out.status).toBe("unverified_preview");
     expect(d._published[0]?.conclusion).toBe("neutral");
@@ -141,7 +170,7 @@ describe("runHostedReview", () => {
         authStateSecretName: "AUTH_STATE_SECRET",
       },
     };
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
 
     await runHostedReview(config, { ...ctx, isFork: true }, d);
 
@@ -254,13 +283,13 @@ describe("runHostedReview durable run persistence (#69)", () => {
   it("persists a completed published review to the run store", async () => {
     const runStore = createInMemoryRunStore();
     const d = { ...deps(engine({ status: "completed", result: golden, jobId: "j" })), runStore };
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
 
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
     expect(out.status).toBe("published");
     expect(runStore.runs.size).toBe(1);
     const [stored] = [...runStore.runs.values()];
-    expect(stored).toMatchObject({ owner: "acme", name: "web", prNumber: 42, headSha: "abc", grade: golden.grade });
+    expect(stored).toMatchObject({ owner: "acme", name: "web", prNumber: 42, headSha: HEAD_SHA, grade: golden.grade });
     expect(stored?.lastFullReviewAtMs).toBeTypeOf("number"); // deep -> window recorded
   });
 
@@ -273,19 +302,19 @@ describe("runHostedReview durable run persistence (#69)", () => {
 
     // superseded (engine aborted)
     const sup = { ...deps(engine(new EngineAbortedError("j"))), runStore: createInMemoryRunStore() };
-    await recordEnqueue(sup.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(sup.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect((await runHostedReview(DEFAULT_CONFIG, ctx, sup)).status).toBe("superseded");
     expect(sup.runStore.runs.size).toBe(0);
 
     // engine error
     const err = { ...deps(engine(new Error("503"))), runStore: createInMemoryRunStore() };
-    await recordEnqueue(err.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(err.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect((await runHostedReview(DEFAULT_CONFIG, ctx, err)).status).toBe("engine_error");
     expect(err.runStore.runs.size).toBe(0);
 
     // unverified preview
     const unv = { ...deps(engine({ status: "completed", result: golden, jobId: "j" })), runStore: createInMemoryRunStore() };
-    await recordEnqueue(unv.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(unv.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     const out = await runHostedReview(
       DEFAULT_CONFIG,
       { ...ctx, preview: { url: "https://evil.example.com", provider: "vercel", source: "deployment_status" } },
@@ -304,7 +333,7 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
       screenshotRegistry,
       now: () => 1_700_000_000_000,
     };
-    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
 
     const out = await runHostedReview(DEFAULT_CONFIG, ctx, d);
 
@@ -315,7 +344,7 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
       installationId: "1",
       owner: "acme",
       name: "web",
-      headSha: "abc",
+      headSha: HEAD_SHA,
       visibility: "private",
     });
     expect(record?.expiresAt).toBe(1_700_000_000_000 + golden.screenshotRetentionSeconds * 1000);
@@ -336,7 +365,7 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
       ...deps(engine({ status: "failed", error: "engine failed", jobId: "j" })),
       screenshotRegistry: failedRegistry,
     };
-    await recordEnqueue(failed.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(failed.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect((await runHostedReview(DEFAULT_CONFIG, ctx, failed)).status).toBe("published");
     expect(failedRegistry.records.size).toBe(0);
 
@@ -345,13 +374,13 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
       ...deps(engine({ status: "timed_out", reason: "review_timed_out", jobId: "j" })),
       screenshotRegistry: timedOutRegistry,
     };
-    await recordEnqueue(timedOut.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(timedOut.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect((await runHostedReview(DEFAULT_CONFIG, ctx, timedOut)).status).toBe("published");
     expect(timedOutRegistry.records.size).toBe(0);
 
     const errorRegistry = createInMemoryScreenshotRegistry();
     const error = { ...deps(engine(new Error("503"))), screenshotRegistry: errorRegistry };
-    await recordEnqueue(error.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(error.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect((await runHostedReview(DEFAULT_CONFIG, ctx, error)).status).toBe("engine_error");
     expect(errorRegistry.records.size).toBe(0);
 
@@ -360,7 +389,7 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
       ...deps(engine({ status: "completed", result: golden, jobId: "j" })),
       screenshotRegistry: unverifiedRegistry,
     };
-    await recordEnqueue(unverified.supersession, { owner: "acme", name: "web", prNumber: 42 }, "abc");
+    await recordEnqueue(unverified.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
     expect(
       (
         await runHostedReview(

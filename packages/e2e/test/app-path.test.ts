@@ -22,6 +22,7 @@ import { describe, expect, it } from "vitest";
  * enqueue -> worker hydrates the IDs-only payload -> runHostedReview publishes.
  */
 const golden = loadGoldenReviewResult();
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 function mockEngine(result: GateReviewResult) {
@@ -98,11 +99,11 @@ describe("App path end-to-end (deployment_status -> worker -> runHostedReview)",
       installation: { id: 1 },
       repository: { name: "web", owner: { login: "acme" } },
       deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
-      deployment: { id: 7, sha: "abc", environment: "Preview" },
+      deployment: { id: 7, sha: HEAD_SHA, environment: "Preview" },
     });
     await tick();
 
-    expect(await supersession.getCurrentSha("sha:acme/web#42")).toBe("abc");
+    expect(await supersession.getCurrentSha("sha:acme/web#42")).toBe(HEAD_SHA);
     expect(gh.store).toHaveLength(1);
     expect(gh.store[0]?.body).toContain(golden.findings[0]!.title);
     expect(gh.checkRuns).toHaveLength(1);

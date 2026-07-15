@@ -8,8 +8,21 @@ fires.
 Hard invariants that hold across **every** migration below: Gate is
 judgment-only (no `contents: write`), the supersession identity (`repo#pr`) and
 durable completed-review identity `(repo_owner, repo_name, pr_number, head_sha)`,
-the publish-time SHA guard, and
+the versioned repository-scoped Judgment Engine intent key, the publish-time
+identity guard, the publish-time SHA guard, and
 `stale_publish_rate = 0`.
+
+## D0 — Engine idempotency conflict request-digest validation
+
+- **Today:** Gate #184 domain-separates its caller key as `gate-review-v2` over
+  the canonical repository/PR/head identity and refuses a mismatched
+  client-outcome identity before publication.
+- **Migration:** Judgment Engine [#178](https://github.com/apatureai/judgment-engine/issues/178)
+  persists its own canonical immutable-request digest and rejects a key conflict
+  when that digest differs, without returning the existing job id. The caller
+  intent hash stays opaque and tenant-bound.
+- **Trigger:** implement before accepting a second independently deployed
+  caller-key implementation or enabling blocking mode in production.
 
 ## D1 — Engine invocation: completion-webhook callback (replaces polling)
 

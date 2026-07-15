@@ -25,7 +25,7 @@ flowchart TD
   B2 --> E["Preview URL resolver + source verification"]
   E --> F["Enqueue review job keyed by repo#pr"]
   F --> G["Set current_sha[repo#pr] (atomic, before enqueue)"]
-  G --> H1["Submit job to engine: POST /jobs (idempotencyKey pr:head_sha, depth)"]
+  G --> H1["Submit job to engine: POST /jobs (gate-review-v2 hash of repo, PR, head SHA)"]
   H1 --> H2["Poll GET /jobs/:id with depth-aware backoff"]
   H2 --> SUP{"Newer push arrived?"}
   SUP -- "yes" --> H4["DELETE /jobs/:id (best-effort) + abort poll"] --> K["Discard"]
@@ -44,6 +44,9 @@ Key rules:
 - Queue supersession key is `repo#pr`. The durable completed-review identity is
   `(repo_owner, repo_name, pr_number, head_sha)`, enforced by the matching
   repository-scoped `runs` constraint.
+- Engine idempotency is separate: Gate sends a `gate-review-v2:sha256:<digest>`
+  key over the canonical repository owner/name, PR number, and full head SHA.
+  Both Action and App submissions use the same client derivation.
 - The publish-time SHA guard is the correctness backstop and is independent of whether engine-side cancellation landed in time.
 
 ## 3. System Boundaries
@@ -100,7 +103,7 @@ flowchart LR
 
 The seam is an asynchronous job API, not a blocking call:
 
-- `POST /jobs` (202 + `jobId`, `idempotencyKey = pr:head_sha`, `depth`), `GET /jobs/:id` (poll), `DELETE /jobs/:id` (cancel on supersession).
+- `POST /jobs` (202 + `jobId`, repository-scoped `gate-review-v2` idempotency key, `depth`), `GET /jobs/:id` (poll), `DELETE /jobs/:id` (cancel on supersession).
 - Service-to-service auth: Gate HMAC-SHA256 signs every request body, with `installationId` in the signed payload; the engine verifies and scopes all tenant storage to that `installationId`.
 - Schema safety: the engine returns an `x-schema-version` header; Gate validates it, then Zod-parses the body so a malformed result surfaces a typed error instead of a silent null-grade review. `packages/types` evolves additive-only.
 - `engineEndpoint` is resolved per account (default hosted; enterprise points at an in-VPC engine). It is Gate-internal routing, not a field in `GateReviewRequest`.
@@ -154,7 +157,7 @@ sequenceDiagram
   GH->>Gate: PR/deployment webhook
   Gate->>Gate: Dedupe X-GitHub-Delivery; resolve + verify preview URL
   Gate->>Queue: Enqueue repo#pr; set current_sha (atomic)
-  Queue->>Engine: POST /jobs (HMAC, idempotencyKey pr:head_sha, depth)
+  Queue->>Engine: POST /jobs (HMAC, gate-review-v2 repository-scoped key, depth)
   Engine-->>Queue: 202 { jobId }
   loop Poll with depth-aware backoff (cap 10 min)
     Queue->>Engine: GET /jobs/{jobId}

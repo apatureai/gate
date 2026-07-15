@@ -1,6 +1,7 @@
 import type { GateReviewRequest, GateReviewResult, NormalizedDesignReviewConfig, ReviewDepth } from "@gate/types";
 import {
   type EngineTransport,
+  canonicalReviewIdentity,
   idempotencyKey,
   type JobSubmission,
   type PollOptions,
@@ -8,6 +9,9 @@ import {
   pollUntilDone,
   RetryableEngineError,
   type SubmitResponse,
+  type ReviewIdentity,
+  type ReviewIdentityInput,
+  sameReviewIdentity,
 } from "./jobs.js";
 
 /**
@@ -70,17 +74,33 @@ export interface JudgmentEngineClientOptions {
 }
 
 export interface JudgmentEngineClient {
-  review(ctx: ReviewRequestContext, pollOverrides?: Omit<PollOptions, "depth">): Promise<PollOutcome>;
+  review(ctx: ReviewRequestContext, pollOverrides?: Omit<PollOptions, "depth">): Promise<ReviewOutcome>;
   cancel(jobId: string, installationId: string): Promise<void>;
+}
+
+/** Outcome bound to the canonical request identity Gate must publish against. */
+export type ReviewOutcome = PollOutcome & { reviewIdentity: ReviewIdentity };
+
+/**
+ * Fail closed before publication if orchestration ever associates an engine
+ * outcome with another repository/PR/head request.
+ */
+export function assertReviewOutcomeIdentity(
+  outcome: ReviewOutcome,
+  expected: ReviewIdentityInput,
+): void {
+  if (!sameReviewIdentity(outcome.reviewIdentity, expected)) {
+    throw new Error("engine outcome review identity does not match the publication target");
+  }
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Create the judgment-engine client. Auth + request timeout live in the
- * transport; this adds bounded submit retry with backoff and is idempotent per
- * engine job key `(pr, head_sha)` — distinct from the repository-scoped durable
- * `runs` identity.
+ * transport; this adds bounded submit retry with backoff and uses a versioned,
+ * repository-scoped engine intent key. That key remains distinct from both the
+ * `repo#pr` supersession key and the durable `runs` identity.
  */
 export function createJudgmentEngineClient(
   transport: EngineTransport,
@@ -112,14 +132,19 @@ export function createJudgmentEngineClient(
 
   return {
     async review(ctx, pollOverrides) {
+      const reviewIdentity = canonicalReviewIdentity(ctx);
       const submission: JobSubmission = {
-        idempotencyKey: idempotencyKey(ctx.pullRequest.number, ctx.pullRequest.headSha),
+        idempotencyKey: idempotencyKey(ctx),
         depth: ctx.depth,
         request: buildGateReviewRequest(ctx),
       };
       const mergedPoll = { depth: ctx.depth, ...options.poll, ...pollOverrides };
       const response = await submitWithRetry(submission, mergedPoll.signal);
-      return pollUntilDone(transport, response.jobId, { ...mergedPoll, installationId: ctx.installationId });
+      const outcome = await pollUntilDone(transport, response.jobId, {
+        ...mergedPoll,
+        installationId: ctx.installationId,
+      });
+      return { ...outcome, reviewIdentity };
     },
 
     async cancel(jobId, installationId) {

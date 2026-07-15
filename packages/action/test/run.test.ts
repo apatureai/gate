@@ -1,26 +1,33 @@
 import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
-import type { JudgmentEngineClient } from "@gate/engine";
+import { canonicalReviewIdentity, type JudgmentEngineClient, type PollOutcome } from "@gate/engine";
 import { loadGoldenReviewResult } from "@gate/types";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
 import { type ActionRunContext, runAction } from "../src/run.js";
 
 const golden = loadGoldenReviewResult();
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 
 function ctx(overrides: Partial<ActionRunContext> = {}): ActionRunContext {
   return {
     installationId: "acme/web",
     repository: { owner: "acme", name: "web", defaultBranch: "main" },
-    pullRequest: { number: 42, headSha: "abc123", baseSha: "def456", title: "Redesign", body: null },
+    pullRequest: { number: 42, headSha: HEAD_SHA, baseSha: "def456", title: "Redesign", body: null },
     isFork: false,
     previewComments: [],
     ...overrides,
   };
 }
 
-function engineReturning(outcome: Awaited<ReturnType<JudgmentEngineClient["review"]>>): JudgmentEngineClient {
-  return { review: vi.fn(async () => outcome), cancel: vi.fn(async () => {}) };
+function engineReturning(outcome: PollOutcome): JudgmentEngineClient {
+  return {
+    review: vi.fn(async (reviewCtx) => ({
+      ...outcome,
+      reviewIdentity: canonicalReviewIdentity(reviewCtx),
+    })),
+    cancel: vi.fn(async () => {}),
+  };
 }
 
 function deps(engine: JudgmentEngineClient) {
@@ -33,7 +40,7 @@ function deps(engine: JudgmentEngineClient) {
   return {
     engine,
     comments,
-    getCurrentHeadSha: vi.fn(async () => "abc123"),
+    getCurrentHeadSha: vi.fn(async () => HEAD_SHA),
     publishCheckRun: vi.fn(async (run: CheckRun) => void published.push(run)),
     runUrl: "https://gate.app/runs/run_1",
     _published: published,
@@ -133,6 +140,34 @@ describe("runAction", () => {
     expect(outcome.status).toBe("stale_discarded");
     expect(d.comments.createComment).not.toHaveBeenCalled();
     expect(d.publishCheckRun).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before publication when the engine outcome is bound to another repository", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    (engine.review as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => ({
+      status: "completed",
+      result: golden,
+      jobId: "j",
+      reviewIdentity: {
+        repositoryOwner: "acme",
+        repositoryName: "other",
+        prNumber: 42,
+        headSha: HEAD_SHA,
+      },
+    }));
+    const d = deps(engine);
+
+    const outcome = await runAction(
+      DEFAULT_CONFIG,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx(),
+      d,
+    );
+
+    expect(outcome.status).toBe("engine_error");
+    expect(outcome.conclusion).toBe("neutral");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+    expect(d._published[0]?.conclusion).toBe("neutral");
   });
 
   it("posts a neutral Check Run (never crashes) when the engine throws", async () => {

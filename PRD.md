@@ -91,6 +91,8 @@ Correctness rule:
 
 - Supersession key: `repo#pr`.
 - Durable completed-review identity: `(repo_owner, repo_name, pr_number, head_sha)`.
+- Engine idempotency: a versioned hash of canonical `(repo_owner, repo_name,
+  pr_number, full_head_sha)`; it never substitutes for either key above.
 - Publish guard: never post a result whose SHA is no longer the PR head.
 
 ## 7. Finding Experience

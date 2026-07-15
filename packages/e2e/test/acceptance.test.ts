@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
  * guard, and feedback GET-inert.
  */
 const golden = loadGoldenReviewResult();
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 
 /** Fake engine HTTP: POST /jobs -> 202, GET /jobs/:id -> completed + schema header. */
 function mockEngineFetch(result: GateReviewResult) {
@@ -67,7 +68,7 @@ function inMemoryGitHub() {
 const ctx: ActionRunContext = {
   installationId: "acme/web",
   repository: { owner: "acme", name: "web", defaultBranch: "main" },
-  pullRequest: { number: 42, headSha: "abc123", baseSha: "def456", title: "Redesign pricing", body: null },
+  pullRequest: { number: 42, headSha: HEAD_SHA, baseSha: "def456", title: "Redesign pricing", body: null },
   isFork: false,
   previewComments: [],
 };

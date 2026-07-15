@@ -30,11 +30,6 @@ export function reviewQueueKey(owner: string, name: string, prNumber: number): s
   return `${owner}/${name}#${prNumber}`;
 }
 
-/** Engine job idempotency shape: `pr:head_sha` (not the durable runs identity). */
-export function completedReviewId(prNumber: number, headSha: string): string {
-  return `${prNumber}:${headSha}`;
-}
-
 /** Minimal queue surface (satisfied by a BullMQ Queue). */
 export interface QueueLike {
   remove(jobId: string): Promise<unknown>;

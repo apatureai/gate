@@ -2,6 +2,7 @@ import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
 import {
   cancelEngineJob,
+  canonicalReviewIdentity,
   EngineAbortedError,
   type EngineTransport,
   idempotencyKey,
@@ -15,9 +16,14 @@ import {
 } from "../src/index.js";
 
 const goldenResult = loadGoldenReviewResult();
+const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
+const identity = {
+  repository: { owner: "Acme", name: "Web" },
+  pullRequest: { number: 42, headSha: HEAD_SHA },
+};
 
 const submission: JobSubmission = {
-  idempotencyKey: idempotencyKey(42, "abc123"),
+  idempotencyKey: idempotencyKey(identity),
   depth: "deep",
   request: { installationId: "inst_1" } as never, // full request shape is exercised by #37
 };
@@ -43,8 +49,59 @@ function transport(overrides: Partial<EngineTransport>): EngineTransport {
 }
 
 describe("idempotencyKey + backoff", () => {
-  it("is pr:headSha", () => {
-    expect(idempotencyKey(7, "deadbeef")).toBe("7:deadbeef");
+  it("hashes a canonical repository-scoped tuple under the v2 namespace", () => {
+    const key = idempotencyKey(identity);
+    expect(key).toBe(
+      "gate-review-v2:sha256:a14a2a84926a21784de26c45b71089c23bdfd8d0a17a282a2aa55135a501a2b9",
+    );
+    expect(key).not.toContain(HEAD_SHA);
+    expect(canonicalReviewIdentity(identity)).toEqual({
+      repositoryOwner: "acme",
+      repositoryName: "web",
+      prNumber: 42,
+      headSha: HEAD_SHA,
+    });
+  });
+
+  it("is stable across GitHub name/SHA casing and distinct across repositories", () => {
+    expect(
+      idempotencyKey({
+        repository: { owner: "acme", name: "web" },
+        pullRequest: { number: 42, headSha: HEAD_SHA.toUpperCase() },
+      }),
+    ).toBe(idempotencyKey(identity));
+    expect(
+      idempotencyKey({
+        repository: { owner: "acme", name: "other" },
+        pullRequest: { number: 42, headSha: HEAD_SHA },
+      }),
+    ).not.toBe(idempotencyKey(identity));
+    expect(
+      idempotencyKey({
+        repository: { owner: "ab", name: "c" },
+        pullRequest: { number: 42, headSha: HEAD_SHA },
+      }),
+    ).not.toBe(
+      idempotencyKey({
+        repository: { owner: "a", name: "bc" },
+        pullRequest: { number: 42, headSha: HEAD_SHA },
+      }),
+    );
+  });
+
+  it("fails closed on a partial SHA or ambiguous repository name", () => {
+    expect(() =>
+      idempotencyKey({
+        repository: { owner: "acme", name: "web" },
+        pullRequest: { number: 42, headSha: "deadbeef" },
+      }),
+    ).toThrow(/full 40-character/);
+    expect(() =>
+      idempotencyKey({
+        repository: { owner: "acme/other", name: "web" },
+        pullRequest: { number: 42, headSha: HEAD_SHA },
+      }),
+    ).toThrow(/repository owner/);
   });
 
   it("is depth-aware: triage 10s+, deep 30s+, then +10s", () => {

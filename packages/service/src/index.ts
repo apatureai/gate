@@ -32,7 +32,6 @@ export type {
 export {
   REVIEW_QUEUE_NAME,
   reviewQueueKey,
-  completedReviewId,
   createReviewQueue,
 } from "./queue.js";
 export type { ReviewJobPayload, QueueLike, ReviewQueue } from "./queue.js";

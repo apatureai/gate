@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
  */
 const REVIEW_BUDGET_MS = 90_000;
 const golden = loadGoldenReviewResult();
+const BREAK_SHA = "0123456789abcdef0123456789abcdef01234567";
+const FIXED_SHA = "89abcdef0123456789abcdef0123456789abcdef";
 
 function mockEngine(result: GateReviewResult) {
   const fetchImpl = (async (url: string, init: RequestInit = {}) => {
@@ -60,7 +62,7 @@ function inMemoryGitHub() {
 const ctx: ActionRunContext = {
   installationId: "acme/web",
   repository: { owner: "acme", name: "web", defaultBranch: "main" },
-  pullRequest: { number: 7, headSha: "break1", baseSha: "main0", title: "Tweak pricing", body: null },
+  pullRequest: { number: 7, headSha: BREAK_SHA, baseSha: "main0", title: "Tweak pricing", body: null },
   isFork: false,
   previewComments: [],
 };
@@ -97,11 +99,11 @@ describe("golden-path demo smoke test", () => {
     const outcome = await runAction(
       DEFAULT_CONFIG,
       { previewUrl: "https://acme-web-pr7.vercel.app", previewCommand: null },
-      { ...ctx, pullRequest: { ...ctx.pullRequest, headSha: "fixed1" } },
+      { ...ctx, pullRequest: { ...ctx.pullRequest, headSha: FIXED_SHA } },
       {
         engine: mockEngine(shipped),
         comments: gh.comments,
-        getCurrentHeadSha: () => gh.getCurrentHeadSha("fixed1"),
+        getCurrentHeadSha: () => gh.getCurrentHeadSha(FIXED_SHA),
         publishCheckRun: gh.publishCheckRun,
       },
     );

@@ -6,7 +6,12 @@ import {
   type GitHubCommentsApi,
   upsertStickyComment,
 } from "@gate/delivery";
-import { EngineAbortedError, type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
+import {
+  assertReviewOutcomeIdentity,
+  EngineAbortedError,
+  type JudgmentEngineClient,
+  verifyPreviewHandoff,
+} from "@gate/engine";
 import type { GateReviewRequest, NormalizedDesignReviewConfig } from "@gate/types";
 import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 import { buildFeedbackEvent } from "./feedback-store.js";
@@ -135,6 +140,7 @@ export async function runHostedReview(
       },
       { signal: deps.signal },
     );
+    assertReviewOutcomeIdentity(outcome, ctx);
   } catch (err) {
     if (err instanceof EngineAbortedError) {
       // Best-effort DELETE /jobs/:id so the engine stops the superseded job (§15.1).

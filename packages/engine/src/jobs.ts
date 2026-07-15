@@ -1,4 +1,5 @@
 import type { GateReviewRequest, GateReviewResult, ReviewDepth } from "@gate/types";
+import { createHash } from "node:crypto";
 
 /**
  * Async job protocol for the Gate -> judgment-engine seam (TRD §6, §15.1).
@@ -13,6 +14,29 @@ import type { GateReviewRequest, GateReviewResult, ReviewDepth } from "@gate/typ
 /** The §5 full-review deadline: at most one full review per PR per 10 minutes. */
 export const REVIEW_DEADLINE_MS = 10 * 60 * 1000;
 
+/**
+ * Versioned namespace for Gate's caller-owned Judgment Engine intent hash.
+ *
+ * Legacy keys used the ambiguous, repository-less `${prNumber}:${headSha}`
+ * shape. Keeping the namespace outside and inside the digest makes the new key
+ * visibly incompatible with those persisted keys and domain-separates future
+ * formats.
+ */
+export const GATE_REVIEW_INTENT_NAMESPACE = "gate-review-v2";
+
+export interface ReviewIdentityInput {
+  repository: { owner: string; name: string };
+  pullRequest: { number: number; headSha: string };
+}
+
+/** Canonical completed-review identity carried with a client outcome. */
+export interface ReviewIdentity {
+  repositoryOwner: string;
+  repositoryName: string;
+  prNumber: number;
+  headSha: string;
+}
+
 export type JobState = "pending" | "running" | "completed" | "failed";
 
 export interface JobStatus {
@@ -25,7 +49,7 @@ export interface JobStatus {
 }
 
 export interface JobSubmission {
-  /** `${prNumber}:${headSha}` — dedupes capture across retries/pushes. */
+  /** `gate-review-v2:sha256:<digest>` over canonical `(repo, pr, head_sha)`. */
   idempotencyKey: string;
   depth: ReviewDepth;
   request: GateReviewRequest;
@@ -86,9 +110,64 @@ export function parseRetryAfterMs(header: string | null, now: number = Date.now(
   return null;
 }
 
-/** Build the idempotency key for a PR review. */
-export function idempotencyKey(prNumber: number, headSha: string): string {
-  return `${prNumber}:${headSha}`;
+function canonicalRepositoryPart(label: string, value: string): string {
+  const canonical = value.normalize("NFKC").trim().toLowerCase();
+  const hasControlCharacter = [...canonical].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+  if (canonical.length === 0 || canonical.includes("/") || hasControlCharacter) {
+    throw new EngineJobError(`review identity has invalid ${label}`);
+  }
+  return canonical;
+}
+
+/**
+ * Canonicalize the repository-scoped completed-review identity. GitHub owner
+ * and repository names are case-insensitive; full commit SHAs are hexadecimal.
+ */
+export function canonicalReviewIdentity(input: ReviewIdentityInput): ReviewIdentity {
+  const prNumber = input.pullRequest.number;
+  if (!Number.isSafeInteger(prNumber) || prNumber < 1) {
+    throw new EngineJobError("review identity has invalid pull request number");
+  }
+  const headSha = input.pullRequest.headSha.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(headSha)) {
+    throw new EngineJobError("review identity requires a full 40-character head SHA");
+  }
+  return {
+    repositoryOwner: canonicalRepositoryPart("repository owner", input.repository.owner),
+    repositoryName: canonicalRepositoryPart("repository name", input.repository.name),
+    prNumber,
+    headSha,
+  };
+}
+
+/**
+ * Build Gate's opaque Judgment Engine intent key from an unambiguous canonical
+ * tuple. JSON array encoding preserves field boundaries before hashing.
+ */
+export function idempotencyKey(input: ReviewIdentityInput): string {
+  const identity = canonicalReviewIdentity(input);
+  const tuple = JSON.stringify([
+    GATE_REVIEW_INTENT_NAMESPACE,
+    identity.repositoryOwner,
+    identity.repositoryName,
+    identity.prNumber,
+    identity.headSha,
+  ]);
+  const digest = createHash("sha256").update(tuple, "utf8").digest("hex");
+  return `${GATE_REVIEW_INTENT_NAMESPACE}:sha256:${digest}`;
+}
+
+export function sameReviewIdentity(actual: ReviewIdentity, expected: ReviewIdentityInput): boolean {
+  const canonical = canonicalReviewIdentity(expected);
+  return (
+    actual.repositoryOwner === canonical.repositoryOwner &&
+    actual.repositoryName === canonical.repositoryName &&
+    actual.prNumber === canonical.prNumber &&
+    actual.headSha === canonical.headSha
+  );
 }
 
 function submitAbortId(submission: JobSubmission): string {
