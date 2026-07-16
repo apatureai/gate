@@ -5,7 +5,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # The root workspace has one shared pnpm lockfile. Keep exactly one update
+    # candidate in flight so independently green dependency PRs cannot carry
+    # competing lockfile edits into main.
+    open-pull-requests-limit: 1
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
