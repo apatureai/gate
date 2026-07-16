@@ -227,8 +227,8 @@ importers:
         specifier: ^14.2.0
         version: 14.2.0
       bullmq:
-        specifier: ^5.80.2
-        version: 5.80.2
+        specifier: ^5.80.4
+        version: 5.80.4
       fastify:
         specifier: ^5.10.0
         version: 5.10.0
@@ -1128,8 +1128,8 @@ packages:
     resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
     engines: {node: 18 || 20 || >=22}
 
-  bullmq@5.80.2:
-    resolution: {integrity: sha512-IobIZd0xFtpnw9W9RdqDX45nfdI2QSmq8rudMj99p3V5mIm9v4I3uPObqKj7i+6Xfd8Lzs3n1p+YNB7s6ykF4Q==}
+  bullmq@5.80.4:
+    resolution: {integrity: sha512-n8lYxE8YYZQ1ar1JyQ668yUx0HbaVrzUNuNf7hSDG6XKYE5F+I/LpgGYLIJ2Pi4UNouDf3PMEsGsapg6FpXlKg==}
     engines: {node: '>=12.22.0'}
     peerDependencies:
       redis: '>=5.0.0'
@@ -2550,7 +2550,7 @@ snapshots:
     dependencies:
       balanced-match: 4.0.4
 
-  bullmq@5.80.2:
+  bullmq@5.80.4:
     dependencies:
       cron-parser: 4.9.0
       ioredis: 5.11.1
