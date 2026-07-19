@@ -61,3 +61,4 @@ export type {
 } from "./client.js";
 export { READINESS_CEILING_MS, waitForReadiness } from "./readiness.js";
 export type { ReadinessResult, ReadinessOptions } from "./readiness.js";
+export { defaultSleep } from "./sleep.js";

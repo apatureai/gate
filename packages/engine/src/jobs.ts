@@ -1,5 +1,6 @@
 import type { GateReviewRequest, GateReviewResult, ReviewDepth } from "@gate/types";
 import { createHash } from "node:crypto";
+import { defaultSleep } from "./sleep.js";
 
 /**
  * Async job protocol for the Gate -> judgment-engine seam (TRD §6, §15.1).
@@ -202,7 +203,6 @@ export interface PollOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const timedOutOutcome = (jobId: string): PollOutcome => ({
   status: "timed_out",

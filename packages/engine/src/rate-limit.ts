@@ -1,4 +1,5 @@
 import { parseRetryAfterMs } from "./jobs.js";
+import { defaultSleep } from "./sleep.js";
 
 /**
  * Generic GitHub rate-limit handling (TRD §15.4) — lives in the shared engine
@@ -15,7 +16,6 @@ export interface RateLimitRetryOptions {
   rand?: () => number;
 }
 
-const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** A 429, or a 403 carrying a rate-limit signal (Retry-After or remaining 0). */
 export function isRateLimited(res: Response): boolean {

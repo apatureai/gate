@@ -13,6 +13,7 @@ import {
   type ReviewIdentityInput,
   sameReviewIdentity,
 } from "./jobs.js";
+import { defaultSleep } from "./sleep.js";
 
 /**
  * The single seam where Gate talks to judgment-engine (TRD §1, §6;
@@ -94,7 +95,6 @@ export function assertReviewOutcomeIdentity(
   }
 }
 
-const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Create the judgment-engine client. Auth + request timeout live in the

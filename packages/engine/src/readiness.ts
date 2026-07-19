@@ -11,6 +11,8 @@
  * the App path unchanged); the Action path passes the wider Playwright set and an
  * `abortOnChildExit` source so a dead preview process short-circuits the poll.
  */
+
+import { defaultSleep } from "./sleep.js";
 export const READINESS_CEILING_MS = 120_000;
 const DEFAULT_POLL_INTERVAL_MS = 2_000;
 
@@ -45,7 +47,6 @@ export interface ReadinessOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const defaultAccept = (status: number): boolean => status === 200;
 const FLOOR_CHECK_INTERVAL_MS = 100;
 
