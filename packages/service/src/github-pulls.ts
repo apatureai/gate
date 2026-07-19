@@ -1,5 +1,6 @@
 import { withRateLimitRetry } from "@gate/engine";
 import type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
+import { GITHUB_API_ROOT } from "./github-api.js";
 
 /**
  * Concrete App-path GitHub PR adapter (#2 installation token). The orchestration
@@ -8,7 +9,6 @@ import type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
  * production implementation, honoring rate limits and never requesting
  * contents:write.
  */
-const API_ROOT = "https://api.github.com";
 
 export interface GitHubPullsClient extends PullRequestFetcher {
   /** Find the open PR whose head is `sha` in this repo (for deployment_status). */
@@ -46,7 +46,7 @@ export function createGitHubPullsClient(token: string, fetchImpl: typeof fetch =
 
   return {
     async fetchPullRequest(owner, name, prNumber): Promise<PullRequestDetails | null> {
-      const res = await send(`${API_ROOT}/repos/${owner}/${name}/pulls/${prNumber}`);
+      const res = await send(`${GITHUB_API_ROOT}/repos/${owner}/${name}/pulls/${prNumber}`);
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`fetch pull #${prNumber} failed: ${res.status}`);
       const pr = (await res.json()) as RawPull;
@@ -60,7 +60,7 @@ export function createGitHubPullsClient(token: string, fetchImpl: typeof fetch =
 
     async resolvePullRequest(owner, name, sha) {
       // List PRs associated with the commit; take the open one whose head is sha.
-      const res = await send(`${API_ROOT}/repos/${owner}/${name}/commits/${sha}/pulls`);
+      const res = await send(`${GITHUB_API_ROOT}/repos/${owner}/${name}/commits/${sha}/pulls`);
       if (!res.ok) throw new Error(`resolve pull for ${sha} failed: ${res.status}`);
       const pulls = (await res.json()) as RawPull[];
       const pr = pulls.find((p) => p.state === "open" && p.head.sha === sha) ?? pulls.find((p) => p.head.sha === sha);

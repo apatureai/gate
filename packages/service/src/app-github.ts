@@ -1,5 +1,6 @@
 import type { CheckRun, GitHubCommentsApi, IssueComment } from "@gate/delivery";
 import { withRateLimitRetry } from "@gate/engine";
+import { GITHUB_API_ROOT } from "./github-api.js";
 
 /**
  * App-path GitHub REST client (installation token): the comment + check-run
@@ -10,7 +11,6 @@ import { withRateLimitRetry } from "@gate/engine";
  * and writes issue comments + check runs — **never `contents: write`**. All calls
  * honor GitHub primary/secondary rate limits (#49).
  */
-const API_ROOT = "https://api.github.com";
 
 export interface AppReviewTarget {
   owner: string;
@@ -43,7 +43,7 @@ export function createAppReviewClient(
     "x-github-api-version": "2022-11-28",
     "user-agent": "apature-gate",
   };
-  const base = `${API_ROOT}/repos/${target.owner}/${target.name}`;
+  const base = `${GITHUB_API_ROOT}/repos/${target.owner}/${target.name}`;
   const send = (url: string, init?: RequestInit): Promise<Response> =>
     withRateLimitRetry(() => fetchImpl(url, init));
 

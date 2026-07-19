@@ -155,3 +155,4 @@ export type {
   ScreenshotOwnership,
   DashboardRunUrlScope,
 } from "./screenshots.js";
+export { GITHUB_API_ROOT } from "./github-api.js";
