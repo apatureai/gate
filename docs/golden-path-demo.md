@@ -1,4 +1,4 @@
-# YC golden-path demo repo + <90s smoke test
+# Golden-path demo repo + <90s smoke test
 
 The demo-as-test (TRD §14): a golden-path repo that proves the core promise on a
 schedule — an annotated review in under 90s, and a green Check Run after the fix.
@@ -7,13 +7,12 @@ schedule — an annotated review in under 90s, and a green Check Run after the f
 
 - A clean design system (8px spacing scale, brand tokens incl. `--color-accent`,
   a `btn-primary`) with a working Vercel `Preview` deploy.
-- Lives at the org's `gate-golden-path` repo (the live target for the scheduled
-  smoke test).
+- A dedicated demo repo is the live target for the scheduled smoke test.
 
 ## The scripted path
 
-1. A scripted PR introduces a subtle break (off-scale spacing / hard-coded purple
-   / misaligned CTA / mobile overflow — see docs/launch-demo.md).
+1. A scripted PR introduces a subtle break: off-scale spacing, a hard-coded
+   purple outside the palette, a misaligned CTA, or a mobile-viewport overflow.
 2. Gate posts an annotated PR review in **under 90 seconds** with **at least one
    screenshot-grounded finding**.
 3. The fix is applied; a re-run flips the Check Run to **passing**.

@@ -1,8 +1,8 @@
 # elixir-supersession (BEAM spike)
 
-Founder-directed language spike executing the Elixir revisit gate that core
-ADR-0001 and pointer's ADRs left as prose: model gate's supersession queue as OTP
-processes and report honestly what the BEAM buys and costs.
+A language spike answering an open architecture question the ADRs left as
+prose: model gate's supersession queue as OTP processes and report honestly what
+the BEAM buys and costs.
 
 ## What it models (mirroring `packages/service/src/{queue,supersession}.ts` exactly)
 
@@ -59,14 +59,14 @@ Why that still doesn't justify adoption:
 - The TS publish-time guard is already the queue-agnostic backstop, is
   property-tested semantics-equivalent here, and survives process crashes because
   it lives in Redis, not process state.
-- Polyglot ops cost (deploy image, observability, on-call literacy) lands on the
-  revenue surface — the worst place for it, pre-go-live (#64).
+- Polyglot ops cost (deploy image, observability, on-call literacy) is a real
+  cost that the queue's current correctness properties do not justify.
 
 **When to re-open:** if gate ever needs *stateful per-session live processes* —
-pointer's interactive sidecar shape (long-lived per-user sessions, presence,
-fan-in of browser events) is the workload where Registry-per-key stops being a
-modeling trick and becomes the architecture. That is pointer's documented Elixir
-revisit gate, and this spike is the executable half of that argument.
+an interactive sidecar shape (long-lived per-user sessions, presence, fan-in of
+browser events) is the workload where Registry-per-key stops being a modeling
+trick and becomes the architecture. This spike is the executable half of that
+argument.
 
 ## Running
 

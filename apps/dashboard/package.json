@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Next.js (app-router) shell rendering the @gate/dashboard hosted-tier core (#63). Standalone \u2014 NOT part of the monorepo tsc -b/vitest/eslint harness; built with `next build`.",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

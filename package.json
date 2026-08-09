@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Apature Gate - judgment-only design review for GitHub PRs",
+  "license": "MIT",
+  "author": "Aditya Prathapa",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apatureai/gate.git"
+  },
   "packageManager": "pnpm@10.34.3",
   "engines": {
     "node": ">=24 <25"

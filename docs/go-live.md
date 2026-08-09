@@ -1,6 +1,6 @@
-# Go-live runbook (#64)
+# Go-live runbook
 
-Provisioning + secrets to take Gate live. These need real cloud accounts/credentials and are **operator actions**, not build-loop code. The app enforces the env half of this at boot: pass `process.env` as `env` to the production server and `start()` throws one aggregated error listing every missing required variable (`assertProductionEnv` / `PRODUCTION_ENV_VARS`, `@gate/service`). Set everything below, then deploy.
+Provisioning + secrets to take Gate live. These need real cloud accounts/credentials and are **operator actions**, not something the code can do for you. The app enforces the env half of this at boot: pass `process.env` as `env` to the production server and `start()` throws one aggregated error listing every missing required variable (`assertProductionEnv` / `PRODUCTION_ENV_VARS`, `@gate/service`). Set everything below, then deploy.
 
 ## Required environment variables (fail-fast checked)
 
@@ -34,7 +34,7 @@ Per-repo / optional (not boot-required): Vercel `protection_bypass` (per-repo co
 - [ ] **AWS KMS**: bind `SecretStore`/`KmsKeyProvider` (#35) to real KMS; per-tenant CMK for enterprise crypto-shredding (#52/#20).
 - [ ] **GitHub App**: create from the manifest (`buildAppManifest`, #21) with minimal scopes (never `contents: write`); webhook URL → deployed `/webhook`.
 - [ ] **Observability**: point OTLP at the collector; load `observability/alerts.yaml` + `observability/dashboard.json` (#36).
-- [ ] **Marketplace + demo** (GTM): publisher verification, listing assets, demo recording, scheduled live smoke test.
+- [ ] **Scheduled live smoke test**: wire the cron run of the golden-path flow.
 
 ## Verifying the env half locally
 

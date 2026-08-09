@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createAccountEngineTransport, resolveEngineRoute } from "../src/endpoint-routing.js";
 
-const HOSTED = "https://engine.apature.dev";
+const HOSTED = "https://engine.example.com";
 
 describe("resolveEngineRoute", () => {
   it("defaults to the hosted engine", () => {

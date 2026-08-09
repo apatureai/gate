@@ -1,8 +1,7 @@
 # Apature Gate - Product Requirements Document
 
 Created: 2026-06-15
-Status: MVP specification for YC-facing product wedge
-Canonical company context: `apatureai/core`
+Status: MVP specification (archived — the product was wound down in 2026)
 Shared technical substrate: `apatureai/judgment-engine`
 
 ## 1. One-Line Pitch
@@ -72,9 +71,9 @@ Out of scope for MVP:
 - Functional testing and E2E assertions.
 - Pixel-diff regression as the primary product.
 - Code edits, auto-commits, autofix PRs, or bundled code generation.
-- Live browser overlay and pointer sessions. That belongs to `apatureai/pointer`.
+- Live browser overlay and pointer sessions.
 - Agent request/response MCP tools. That belongs to `apatureai/mcp-review`.
-- Autonomous interaction exploration. That belongs to `apatureai/interactive-review`.
+- Autonomous interaction exploration.
 
 ## 6. Core User Flow
 
@@ -116,7 +115,7 @@ The PR comment should show the trust budget:
 - Nits collapsed by default.
 - Permanent app routes for annotated screenshots, not expiring object URLs.
 
-## 8. Demo Path For YC
+## 8. Demo Path
 
 The canonical demo:
 
@@ -146,7 +145,7 @@ Enterprise:
 - Enterprise data residency via the self-hosted / in-VPC `judgment-engine` path, when a customer requires screenshots to stay in their cloud.
 - DPA, retention controls, SSO, and design-system reporting.
 
-MCP and Pointer usage may be metered later, but CI Gate is the first revenue surface.
+MCP usage may be metered later, but CI Gate is the first revenue surface.
 
 ## 10. Success Metrics
 
@@ -187,7 +186,7 @@ Build order:
 3. Hosted GitHub App path.
 4. Feedback memory and dashboard.
 5. Baseline comparison.
-6. MCP Review and Pointer expansion only after Gate proves trust.
+6. MCP Review expansion only after Gate proves trust.
 
 Gate must not wait for every future Apature surface. It only needs to make one PR review feel indispensable.
 
@@ -221,7 +220,7 @@ This repo owns:
 - PR sticky comment and Check Run UX.
 - Gate-specific configuration and onboarding.
 - Gate dashboard and billing surfaces.
-- Gate product docs, GTM docs, and demo path.
+- Gate product docs and demo path.
 
 This repo does not own:
 
@@ -230,7 +229,7 @@ This repo does not own:
 - Qwen3-VL model calls.
 - Evaluation harness.
 - Preference dataset implementation.
-- MCP or live pointer product surfaces.
+- MCP product surfaces.
 
 Those belong to the other Apature repos referenced in `ARCHITECTURE.md`.
 
@@ -242,7 +241,7 @@ The Gate backlog is tracked as GitHub milestones M0 through M4. The build is end
 - **M1 - Action path.** The zero-infra Action: preview resolution (explicit and local-serve), the `judgment-engine` client, engine failure and degradation handling, gate-side preview-source verification, sticky comment, Check Run, config schema, and the end-to-end acceptance harness.
 - **M2 - App path.** Hosted GitHub App: webhook auth, deployment-status discovery, queue, supersession and publish guard, multi-provider previews, minimal permissions, and the feedback event model forwarded to the shared store.
 - **M3 - Hosted tier.** Dashboard shell, run history, finding browser, config UI, feedback stats, and Stripe billing with free-tier limits, SSO, and the enterprise in-VPC residency option.
-- **M4 - Trust polish.** Baseline comparison, permanent annotated image routes, Marketplace listing, the YC demo golden-path repo as an automated smoke test, and public launch artifacts.
+- **M4 - Trust polish.** Baseline comparison, permanent annotated image routes, Marketplace listing, the golden-path demo repo as an automated smoke test, and public launch artifacts.
 
 The single most important seam is the `judgment-engine` client (`GateReviewRequest -> GateReviewResult`): Gate owns when to call and how to publish, the engine owns capture, context, model, and validation. Gate-side security covers preview-source provenance and gate-held secret custody; deep SSRF, DNS-rebind, egress, screenshot encryption, and prompt-injection controls remain owned by `judgment-engine`.
 
@@ -271,8 +270,6 @@ The cutting-edge part is not "we call a vision model." The cutting-edge part is 
 
 This keeps the company out of the crowded generic-agent lane and inside the more defensible judgment-data lane.
 
-Primary sources and competitor notes are maintained in `RESEARCH.md`.
-
 ## 16. Ecosystem Placement
 
 Added: 2026-06-16
@@ -281,18 +278,13 @@ Gate is the first product surface in a broader Apature ecosystem.
 
 Its place:
 
-- Gate is the YC wedge, first demo, and first revenue surface.
+- Gate is the wedge, first demo, and first revenue surface.
 - `judgment-engine` is the substrate Gate calls; Gate should not absorb capture, model, eval, or shared feedback ownership.
 - `ui-dna` is the canonical design standard Gate judges against. Early Gate can use `.designreview.yml`, but the company gets more defensible as UI DNA becomes signed off and versioned.
 - `ui-graph` is a later perception/compression layer that can make Gate cheaper and more grounded; it is not a Gate M1 blocker.
-- `mcp-review` and `pointer` are in-loop/live siblings that reuse the same engine and DNA after Gate proves trust.
-- `interactive-review` is the v2 metered tier for UI states static screenshots miss.
-- `source-of-truth` pushes approved UI DNA upstream to agents before they generate UI.
+- `mcp-review` is the in-loop sibling that reuses the same engine and DNA after Gate proves trust.
 - `entropy-engine` handles whole-codebase design drift; Gate remains PR-level judgment.
-- `dna-consultant` packages the enterprise carry-forward workflow over UI DNA, Gate, Source Of Truth, and Entropy Engine.
 
 Rule:
 
 Gate makes the ecosystem legible, but Gate must not become the ecosystem. Its job is to make one PR review feel indispensable, then feed the data and trust loops that make the later products possible.
-
-The fuller map lives in `ECOSYSTEM.md`.

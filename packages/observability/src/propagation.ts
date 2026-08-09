@@ -1,7 +1,7 @@
 import { context, propagation } from "@opentelemetry/api";
 
 /**
- * W3C trace-context propagation (gate#161; core #105 §6).
+ * W3C trace-context propagation (gate#161).
  *
  * Inject the ACTIVE OpenTelemetry context into an outbound carrier via the
  * globally-configured propagator, so a Gate span continues into the Judgment

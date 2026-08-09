@@ -10,7 +10,7 @@
  *      output can be re-scrubbed safely anywhere in the pipeline.
  *   3. scrubTail bounds its output and cannot resurrect a secret at any cap.
  *
- * Follows the fast-check precedent set in interactive-review's policy package.
+ * Property-based coverage for the text scrubber.
  */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";

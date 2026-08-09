@@ -9,7 +9,7 @@ import type { GateReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
 
 /**
- * YC golden-path demo-as-test (#42, TRD §14): the full Action path against the
+ * Golden-path demo-as-test (#42, TRD §14): the full Action path against the
  * MOCK engine — break -> annotated review under the 90s budget -> fix flips the
  * Check Run green. The scheduled live-pipeline run is an ops wiring step.
  */

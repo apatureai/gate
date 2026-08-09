@@ -247,7 +247,7 @@ Current model assumption:
 
 UI-DNA grounding (what makes the judgment repo-specific, not generic taste):
 
-- The engine grounds each critique in the repo's UI DNA — the versioned design genome owned by `ui-dna`, served by `source-of-truth`, and represented compactly by `ui-graph` (see ECOSYSTEM.md §8).
+- The engine grounds each critique in the repo's UI DNA — the versioned design genome owned by `ui-dna` and represented compactly by `ui-graph`.
 - Gate does not extract or store UI DNA. It passes repo identity so the engine resolves the right genome, and it version-stamps the returned `uiDnaVersion` on the run so every published finding is traceable to the genome it was judged against. `null` is valid when the repo has no extracted UI DNA yet; the engine falls back to repo context plus the brand block.
 
 ## 7. Delivery Requirements
@@ -340,7 +340,7 @@ Milestone 4: Trust polish
 - Baseline comparison.
 - Permanent annotated image routes.
 - Marketplace listing.
-- YC demo repo and public launch artifacts.
+- Golden-path demo repo and public launch artifacts.
 
 ## 11. Acceptance Criteria
 
@@ -409,7 +409,7 @@ Alerts:
 - Unit tests: config normalization, preview-source verification, supersession and publish-time guard, Check Run conclusion mapping.
 - Engine boundary: contract tests for `GateReviewRequest`/`GateReviewResult` against a mock `judgment-engine`, with no live model calls.
 - End-to-end acceptance harness: asserts every Section 11 criterion in CI against the mock engine (explicit-URL review, deployment-status review, stale-publish guard at zero, advisory blocker stays neutral, functions without `contents: write`, feedback GET is inert).
-- Demo-as-test: the YC golden-path repo runs as a scheduled smoke test that posts an annotated review in under 90 seconds and flips the Check Run to passing after the fix.
+- Demo-as-test: the golden-path repo runs as a scheduled smoke test that posts an annotated review in under 90 seconds and flips the Check Run to passing after the fix.
 - Engine boundary contract test: `GateReviewResult` is validated against a Zod schema and a golden fixture (`packages/types/fixtures/gate-review-result.golden.json`). The same fixture feeds the e2e harness mock, so the mock cannot drift from the live contract.
 
 ## 15. Architecture Review Decisions (2026-06-15)

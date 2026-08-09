@@ -1,7 +1,9 @@
 # Root dependency-update merge procedure
 
-Status: required repository-control procedure (2026-07-15).
-Owner: the release steward or dependency-update bot.
+Status: archived record (2026-07-15). Dependabot and the image/SBOM CI job
+were removed when the repository was archived; the serialization reasoning
+below is kept because the shared-lockfile hazard it describes is real for any
+fork that re-enables automated dependency updates.
 
 The root `@gate/*` workspace has one shared `pnpm-lock.yaml`. A PR-local green
 check is not sufficient evidence when another root dependency update has merged
@@ -30,10 +32,3 @@ the manifests before merging anything else. The push-to-`main` CI workflow is
 the post-merge canary; investigate any frozen-lock failure as a release and
 security-evidence incident.
 
-## Scope and residual control
-
-This procedure implements the repository-owned serialization control for
-[#183](https://github.com/apatureai/gate/issues/183). It does not claim to
-provide an external paging integration: alert routing remains an operations
-configuration task and the repository's current GitHub plan does not provide
-required-up-to-date branch protection for this private repository.

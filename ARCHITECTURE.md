@@ -73,13 +73,9 @@ flowchart LR
 
   subgraph Future["Apature ecosystem surfaces"]
     M["mcp-review"]
-    N["pointer"]
-    O["interactive-review"]
     P["ui-dna"]
     Q["ui-graph"]
-    R["source-of-truth"]
     S["entropy-engine"]
-    T["dna-consultant"]
   end
 
   D -->|"POST/GET/DELETE /jobs (HMAC-signed, installationId-scoped)"| H
@@ -88,18 +84,16 @@ flowchart LR
   K --> E
   E --> L
   M --> Engine
-  N --> Engine
-  O --> Engine
   P --> Engine
   P --> Gate
   Q -. "optional prompt/grounding layer" .-> Gate
-  R --> P
   S --> P
   S --> Engine
-  T --> Gate
-  T --> P
-  T --> S
 ```
+
+The `Apature ecosystem surfaces` subgraph describes sibling services that shared the
+same substrate. Gate never depended on any of them at runtime, and several were never
+released — do not go looking for repositories that back every node.
 
 The seam is an asynchronous job API, not a blocking call:
 
@@ -198,14 +192,12 @@ Queue payloads carry IDs, URLs, and the `jobId`, never large artifacts. Screensh
 
 ## 7. Issue Ownership
 
-- Gate issues: orchestrator and queue behavior; the engine-job client and failure handling; GitHub Action/App delivery; sticky comment and Check Run UX; dashboard, billing, config UI, GTM; gate-side security (preview-source provenance, secret custody, tenant isolation).
+- Gate issues: orchestrator and queue behavior; the engine-job client and failure handling; GitHub Action/App delivery; sticky comment and Check Run UX; dashboard, billing, config UI; gate-side security (preview-source provenance, secret custody, tenant isolation).
 - Judgment Engine issues: capture, context extraction, model adapters, validation, eval, data store, the async `/jobs` API, and deep shared security (SSRF, DNS rebind, egress, screenshot encryption, prompt-injection).
 - UI DNA issues: token extraction, design genome schema, canonical standard, approval state, and downstream DNA snapshots.
 - UI Graph issues: compact rendered-UI graph schema, graph construction, prompt views, and graph metrics. Gate may consume it later, but it must not block M1.
-- MCP Review, Pointer, Interactive Review issues: their respective delivery surfaces.
-- Source Of Truth issues: upstream UI DNA read API and MCP answers for agents before generation.
+- MCP Review issues: its delivery surface.
 - Entropy Engine issues: whole-codebase drift detection and consolidation planning.
-- DNA Consultant issues: enterprise orchestration over UI DNA, Gate, Source Of Truth, and Entropy Engine.
 
 ## 8. Architecture Decision Log
 

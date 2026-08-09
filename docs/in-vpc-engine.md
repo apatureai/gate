@@ -28,7 +28,6 @@ never transit a third party.
 
 ## What stays managed
 
-There is **no BYOK** (it adds consumer friction). Standard and paid accounts use
-fully-managed hosted serving with zero customer key management; Apature runs the
-model. In-VPC is purely a data-residency relocation of the engine, gated to the
-enterprise tier (#20).
+There is no bring-your-own-key path; model serving is fully managed. In-VPC is
+purely a data-residency relocation of the engine and does not change the request
+contract.

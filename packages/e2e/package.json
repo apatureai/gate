@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "End-to-end acceptance harness asserting the TRD §11 Action-path criteria against a mock engine.",
+  "license": "MIT",
   "scripts": {
     "test": "vitest run"
   },
