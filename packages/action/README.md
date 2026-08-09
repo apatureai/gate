@@ -62,7 +62,24 @@ also attached to the Check Run (fenced, labeled untrusted) for quick triage.
 env** (your runner secrets — engine keys, `GITHUB_TOKEN` — are never passed to
 it), is loopback-only, and an off-localhost redirect is refused. On **Linux** the
 child group is also resource-capped (`ulimit`: ≤512 procs, ≤4 GiB/proc by
-default) so a fork-bomb or memory balloon can't wedge the runner before teardown.
+default) so a fork-bomb or memory balloon can't wedge the runner before teardown;
+the capped command runs under `/bin/bash` when it exists, because `/bin/sh` on
+Debian/Ubuntu is dash and dash's `ulimit` has no `-u`.
+
+## Running the supervisor by hand
+
+The local-serve supervisor is demonstrable on its own, with no credentials and no
+network beyond loopback. From the repository root:
+
+```bash
+pnpm demo        # spawn the fixture app in packages/action/fixtures, then tear the group down
+pnpm demo:review # run the review orchestration against a recorded engine response
+```
+
+`pnpm demo` prints the process-group census before and during teardown (including
+the worker that traps `SIGTERM` and has to be `SIGKILL`ed), the env the child
+actually received, the rlimits it ran under, and the refusal of an off-loopback
+redirect. See the root [README](../../README.md) for the annotated transcript.
 
 ## Security: hostile-PR capture
 
@@ -71,4 +88,5 @@ in the capture browser and can probe runner-internal networks. **Do not run on
 `pull_request_target` with secrets in scope.** `storageState`/auth and
 preview-bypass secrets are disabled automatically on fork PRs. For untrusted
 forks, prefer the App path (engine-sandboxed capture). Full analysis:
-[docs/threat-model-action-path.md](../../docs/threat-model-action-path.md).
+the "Threat model — Action-path hostile-PR capture" section of the
+[root README](../../README.md).

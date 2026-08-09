@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS } from "../src/index.js";
+import { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS, resolveCapShell } from "../src/index.js";
 
 describe("buildResourceCappedCommand (#79)", () => {
   it("prepends a hard pids + memory ulimit prologue on Linux", () => {
@@ -32,5 +32,21 @@ describe("buildResourceCappedCommand (#79)", () => {
     const out = buildResourceCappedCommand("x", { maxProcesses: 10.9, maxMemoryMb: 2.5 }, "linux");
     expect(out).toContain("ulimit -u 10 ");
     expect(out).toContain("ulimit -v 2048 "); // floor(2.5)=2 MiB -> 2048 KiB
+  });
+});
+
+describe("resolveCapShell (#79)", () => {
+  it("runs the capped command under bash on Linux, where /bin/sh is dash", () => {
+    // dash's `ulimit` has no `-u`, so the pids cap would be silently dropped.
+    expect(resolveCapShell("linux", (p) => p === "/bin/bash")).toBe("/bin/bash");
+  });
+
+  it("falls back to the default shell when bash is missing (memory cap still applies)", () => {
+    expect(resolveCapShell("linux", () => false)).toBe(true);
+  });
+
+  it("uses the default shell off Linux, where the prologue is a no-op anyway", () => {
+    expect(resolveCapShell("darwin", () => true)).toBe(true);
+    expect(resolveCapShell("win32", () => true)).toBe(true);
   });
 });

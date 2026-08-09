@@ -16,6 +16,8 @@
   },
   "scripts": {
     "build": "tsc -b",
+    "demo": "tsc -b packages/action && node packages/action/dist/supervisor-demo-cli.js",
+    "demo:review": "tsc -b packages/action && node packages/action/dist/review-demo-cli.js",
     "typecheck": "tsc -b",
     "clean": "tsc -b --clean",
     "test": "vitest run",

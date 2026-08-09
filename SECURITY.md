@@ -48,9 +48,9 @@ Specific things to check before running it against production:
 - **The Action path renders untrusted PR code in your runner.** Capturing a
   preview means a browser loads code from the pull request, inside your own CI
   environment. The residual risk and the mitigations Gate does and does not
-  provide are written up in [`docs/threat-model-action-path.md`](docs/threat-model-action-path.md).
-  Read that document before enabling the Action path on a repository that
-  accepts fork PRs.
+  provide are written up under "Threat model — Action-path hostile-PR capture"
+  in [`README.md`](README.md). Read that section before enabling the Action path
+  on a repository that accepts fork PRs.
 - **Dependencies are frozen at archive time.** `pnpm-lock.yaml` and the base
   images reflect the last maintained state, not today's. While the project was
   maintained, CI generated SBOMs and failed the build on fixable

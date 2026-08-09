@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+
 /**
  * Resource cap for the local-serve child (#79). The #70 supervisor contains the
  * fork dev-server for CONFIDENTIALITY (env allowlist + loopback-only + ephemeral
@@ -53,4 +55,28 @@ export function buildResourceCappedCommand(
   // Set processes + virtual-memory caps (hard+soft), then run the command in the
   // same limited shell so all descendants inherit the rlimits.
   return `ulimit -u ${procs} 2>/dev/null; ulimit -v ${kb} 2>/dev/null; ${command}`;
+}
+
+/**
+ * Shell the capped command must run in. `{ shell: true }` gives `/bin/sh`, which
+ * on Debian/Ubuntu (every ubuntu-latest runner) is dash — and dash's `ulimit`
+ * has no `-u`, so the pids cap silently does nothing there while `-v` still
+ * applies. Selecting bash when it exists is what makes `ulimit -u` real; if bash
+ * is missing we fall back to Node's default shell and keep the memory cap.
+ *
+ * Returns what `child_process.spawn`'s `shell` option takes: a path, or `true`
+ * for the platform default.
+ */
+export function resolveCapShell(
+  platform: NodeJS.Platform = process.platform,
+  exists: (path: string) => boolean = defaultExists,
+): string | true {
+  if (platform !== "linux") return true;
+  return exists(BASH_PATH) ? BASH_PATH : true;
+}
+
+const BASH_PATH = "/bin/bash";
+
+function defaultExists(path: string): boolean {
+  return existsSync(path);
 }

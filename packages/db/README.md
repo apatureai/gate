@@ -4,7 +4,7 @@ Gate's durable product state: Postgres schema + an idempotent migration runner.
 
 Gate stores **metadata, correctness state, and billing only**. Screenshots,
 critique JSON, and the preference dataset live in `judgment-engine` object
-storage — never here (TRD §5, §12).
+storage — never here.
 
 ## Tables
 
@@ -13,7 +13,7 @@ storage — never here (TRD §5, §12).
   `UNIQUE(repo_owner, repo_name, pr_number, head_sha)`; carries `grade`,
   `engine_version`, `model`, `ui_dna_version`, `last_full_review_at`,
   `expires_at`. The queue supersession key remains `repo#pr`.
-- `feedback_events` — product-facing feedback (TRD §9).
+- `feedback_events` — product-facing feedback.
 - `billing_customers` — Stripe/plan state.
 - `webhook_log` — `delivery_id` PK for at-least-once webhook dedupe (§15.4).
 

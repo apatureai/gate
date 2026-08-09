@@ -11,3 +11,7 @@ artifacts/
 *.log
 .idea/
 .vscode/
+out/
+# Written by hand when following the README (local Action run, auth sealing).
+/event.json
+/storageState.sealed.json

@@ -52,7 +52,7 @@ export function assertProductionEnv(
   if (!ok) {
     throw new Error(
       `Production readiness: missing required environment variable(s): ${missing.join(", ")}. ` +
-        `Set them before go-live (see docs/go-live.md, #64).`,
+        `Set them before go-live (see the Configuration section of README.md, #64).`,
     );
   }
 }

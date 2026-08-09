@@ -111,8 +111,8 @@ describe("golden-path demo smoke test", () => {
     expect(gh.checkRuns.at(-1)?.conclusion).toBe("success");
   });
 
-  it("the golden-path runbook documents the demo + scheduled smoke test", () => {
-    const doc = readFileSync(fileURLToPath(new URL("../../../docs/golden-path-demo.md", import.meta.url)), "utf8");
+  it("the README documents the demo + the scheduled smoke test that never ran", () => {
+    const doc = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
     expect(doc).toContain("under 90 seconds");
     expect(doc.toLowerCase()).toContain("scheduled");
   });

@@ -1,6 +1,11 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { waitForReadiness } from "@gate/engine";
-import { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS, type ResourceLimits } from "./resource-cap.js";
+import {
+  buildResourceCappedCommand,
+  DEFAULT_RESOURCE_LIMITS,
+  resolveCapShell,
+  type ResourceLimits,
+} from "./resource-cap.js";
 
 /**
  * Local build-and-serve supervisor for the Action path (#70). Spawns the repo's
@@ -47,6 +52,8 @@ export interface StartLocalServerOptions {
   readyStatus?: number[] | null;
   /** Resource cap (pids + memory) for the child group (#79); defaults to DEFAULT_RESOURCE_LIMITS. */
   resourceLimits?: ResourceLimits;
+  /** Shell to run the capped command in; defaults to `resolveCapShell()` (bash on Linux). */
+  shell?: string | true;
   ceilingMs?: number; // default 120_000
   graceMs?: number; // default 5_000
   pollIntervalMs?: number; // default 2_000
@@ -128,7 +135,9 @@ export async function startLocalServer(
   // env allowlist + loopback still apply.
   const cappedCommand = buildResourceCappedCommand(command, options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS);
   const child = spawn(cappedCommand, {
-    shell: true,
+    // bash on Linux when it exists: `/bin/sh` there is dash, whose `ulimit` has
+    // no `-u`, so the pids half of the cap would be silently dropped (#79).
+    shell: options.shell ?? resolveCapShell(),
     detached: true, // own process group -> group-kill the tree on teardown
     cwd: options.cwd,
     env: options.env,

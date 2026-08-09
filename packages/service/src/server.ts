@@ -62,7 +62,7 @@ export interface ProductionRuntimeFactories {
 function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
   if (value === undefined || value.trim() === "") {
-    throw new Error(`Production readiness: missing required environment variable(s): ${name}. Set them before go-live (see docs/go-live.md, #64).`);
+    throw new Error(`Production readiness: missing required environment variable(s): ${name}. Set them before go-live (see the Configuration section of README.md, #64).`);
   }
   return value;
 }

@@ -28,8 +28,30 @@ export type {
   LocalServerStartResult,
   StartLocalServerOptions,
 } from "./local-serve.js";
-export { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS } from "./resource-cap.js";
+export { buildResourceCappedCommand, DEFAULT_RESOURCE_LIMITS, resolveCapShell } from "./resource-cap.js";
 export type { ResourceLimits } from "./resource-cap.js";
+export {
+  censusProcessGroup,
+  compressCensus,
+  DEMO_RUNNER_SECRETS,
+  formatSupervisorDemoReport,
+  isGroupAlive,
+  liveProcesses,
+  parseProcessTable,
+  parseProcStat,
+  runSupervisorDemo,
+} from "./supervisor-demo.js";
+export { formatReviewDemoResult, renderFixturePage, runReviewDemo } from "./review-demo.js";
+export type { ReviewDemoResult, ReviewDemoScreenshot } from "./review-demo.js";
+export type {
+  CensusSample,
+  ChildLimits,
+  ProcessInfo,
+  RedirectScenario,
+  SupervisorDemoOptions,
+  SupervisorDemoReport,
+  TeardownScenario,
+} from "./supervisor-demo.js";
 export { setupFailureCheckRun, publishSetupFailureCheckRun } from "./setup-failure.js";
 export type { SetupFailurePublisher } from "./setup-failure.js";
 

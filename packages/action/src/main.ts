@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { loadDesignReviewConfig } from "@gate/config";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
 import type { GateMode } from "@gate/types";
+import { formatActionError } from "./action-error.js";
 import { createGitHubApi } from "./github.js";
 import { buildAllowlistedEnv, startLocalServer as runLocalServer, type LocalServerHandle } from "./local-serve.js";
 import { runAction } from "./run.js";
@@ -140,5 +141,5 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   // Never fail the PR on an internal error; surface it in the log.
-  console.error("Apature Gate action error:", err);
+  console.error(formatActionError(err));
 });

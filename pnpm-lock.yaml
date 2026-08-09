@@ -48,6 +48,9 @@ importers:
       '@gate/types':
         specifier: workspace:*
         version: link:../types
+      sharp:
+        specifier: ^0.35.3
+        version: 0.35.3(@types/node@26.1.1)
 
   packages/config:
     dependencies:

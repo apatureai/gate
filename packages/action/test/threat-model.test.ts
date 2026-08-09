@@ -4,10 +4,9 @@ import { verifyPreviewHandoff } from "@gate/engine";
 import { describe, expect, it } from "vitest";
 import { GATE_GITHUB_PERMISSIONS } from "../src/index.js";
 
-const threatModel = readFileSync(
-  fileURLToPath(new URL("../../../docs/threat-model-action-path.md", import.meta.url)),
-  "utf8",
-);
+// The threat model lives in the README (the repository's only documentation);
+// these assertions keep it from being edited down to nothing.
+const threatModel = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
 
 describe("Action-path threat model (#51)", () => {
   it("documents the required sections", () => {

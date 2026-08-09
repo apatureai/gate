@@ -128,13 +128,12 @@ lint/typecheck/test and the dashboard build.
 
 ## Orientation
 
-- [`README.md`](README.md) — what Gate is, the two execution paths, package map
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — data flow, repo boundaries, failure modes
-- [`TRD.md`](TRD.md) — contracts, env vars, invariants
+- [`README.md`](README.md) — the documentation: what Gate is, the runnable demos, the
+  engine contract, the Action-path threat model, failure modes, configuration and the package map
 - [`SECURITY.md`](SECURITY.md) — read this before running it against anything real
 
 One boundary is load-bearing across the whole codebase: **Gate judges and
 verifies, it never edits code.** It publishes PR comments and Check Runs and
 never requests `contents: write`. If you change that in a fork, the tests that
-guard it (`assertNoContentsWrite`) will tell you, and the docs will no longer
+guard it (`assertNoContentsWrite`) will tell you, and the README will no longer
 describe what you are running.

@@ -12,7 +12,7 @@ import {
  * Queue abstraction (TRD §5, §12, §15.3; ARCHITECTURE §8 D2). Orchestration
  * (supersession, the publish-time SHA guard) depends only on this interface, so
  * BullMQ can be swapped for a durable-execution engine (Inngest) without a
- * rewrite — see docs/queue-migration-inngest.md. BullMQ cannot preempt active
+ * rewrite — see "Deferred by design" in README.md. BullMQ cannot preempt active
  * jobs, so cancellation is cooperative via an AbortSignal threaded into the
  * engine client; the publish-time SHA guard is the queue-agnostic backstop.
  */
