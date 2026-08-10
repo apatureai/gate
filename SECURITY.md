@@ -19,11 +19,9 @@ If you find something and want it on the record:
 
 1. Use **GitHub private vulnerability reporting** on this repository (Security tab
    → "Report a vulnerability"), if it is available.
-2. Archiving makes a repository read-only — issues and pull requests are disabled,
-   and the private reporting form may be disabled too. If it is, there is no other
-   monitored channel. Please publish your finding where downstream users will see
-   it (a public advisory database, or a note in your fork) rather than waiting for
-   a reply here.
+2. There is no monitored channel behind it. Please also publish your finding where
+   downstream users will actually see it — a public advisory database, or a note in
+   your fork — rather than waiting for a reply here.
 
 Do not expect an acknowledgement, a CVE, or a fix. Reports are accepted as a
 courtesy to whoever forks this code next, not as an obligation.

@@ -5,9 +5,8 @@ wound down; the source is published so it stays useful to whoever wants it.
 
 What that means in practice:
 
-- **Pull requests and issues are not being reviewed.** An archived repository is
-  read-only on GitHub, so you likely cannot open one at all. If the archive is
-  ever unlocked, assume a PR will sit unread.
+- **Pull requests and issues are not being reviewed.** You can still open them;
+  nobody is watching. Assume anything you file sits unread indefinitely.
 - **Forking is the intended path.** Fork it, rename it, change the boundaries,
   ship it. The MIT license (see [`LICENSE`](LICENSE)) permits all of that with
   no permission needed.
