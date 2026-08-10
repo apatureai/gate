@@ -1,6 +1,6 @@
 {
   "name": "@gate/monorepo",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Runs a pull request's preview build inside a hardened sandbox and publishes a design review as a sticky PR comment plus a Check Run",

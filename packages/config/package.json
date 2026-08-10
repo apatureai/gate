@@ -1,6 +1,6 @@
 {
   "name": "@gate/config",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Schema, validation, and defaults for .gate.yml. Shared by extractor and dashboard.",
   "license": "MIT",

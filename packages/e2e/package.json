@@ -1,6 +1,6 @@
 {
   "name": "@gate/e2e",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "End-to-end acceptance harness asserting the TRD §11 Action-path criteria against a mock engine.",

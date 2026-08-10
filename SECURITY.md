@@ -2,13 +2,14 @@
 
 ## Supported versions
 
-Gate is developed on `main` and has no tagged releases yet. Security fixes land
-on `main`, and the supported version is the latest commit on `main`.
+Gate is developed on `main`. Tags such as `v0.1.0` mark a point on `main` for
+citation; they are not maintenance branches. Security fixes land on `main` only,
+and the supported version is the latest commit on `main`.
 
 | | |
 |---|---|
 | Supported | `main` (latest commit) |
-| Not supported | forks, and any commit other than the current `main` |
+| Not supported | forks, released tags once `main` has moved past them, and any commit other than the current `main` |
 | Private reporting | enabled, see below |
 | Bug bounty | none |
 

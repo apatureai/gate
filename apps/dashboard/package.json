@@ -1,6 +1,6 @@
 {
   "name": "@gate/dashboard-app",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Next.js (app-router) shell rendering the @gate/dashboard hosted-tier core (#63). Standalone \u2014 NOT part of the monorepo tsc -b/vitest/eslint harness; built with `next build`.",

@@ -1,6 +1,6 @@
 {
   "name": "@gate/dashboard",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Hosted dashboard core: GitHub OAuth, sessions, installation-scoped access, nav model. Consumed by the Next.js shell.",
   "license": "MIT",
