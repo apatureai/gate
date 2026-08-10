@@ -2,7 +2,7 @@
 
 The single source of truth for Gate's engine-boundary contracts:
 `GateReviewRequest`, `GateReviewResult`, `Finding`, `NormalizedDesignReviewConfig`,
-`ReviewDepth`, `FeedbackEvent`. Engine-neutral — no model-specific fields (the
+`ReviewDepth`, `FeedbackEvent`. Engine-neutral, with no model-specific fields (the
 default judge is Qwen3-VL through `judgment-engine`; nothing here hard-codes
 Claude).
 
@@ -23,7 +23,7 @@ Enforcement:
 - The engine response carries an `x-schema-version` header. Gate validates the
   **major** version, then Zod-parses `GateReviewResult` (`@gate/engine`
   `parseEngineResult`). A version or shape mismatch is a typed error that blocks
-  publish — never a silent null-grade comment.
+  publish, never a silent null-grade comment.
 - The golden fixture `fixtures/gate-review-result.golden.json` is the shared
   contract artifact: Gate's mock/e2e and the engine's serializer test (cross-repo)
   both consume it, so the mock cannot drift from the live contract.

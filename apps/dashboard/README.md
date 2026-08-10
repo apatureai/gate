@@ -1,6 +1,6 @@
-# Apature Gate — dashboard app (#63)
+# Apature Gate dashboard app (#63)
 
-Next.js (app-router) shell that renders the fully-tested `@gate/dashboard` hosted-tier **core** (OAuth, sessions, installation-scoped access, run history, finding browser, feedback stats, config UI, billing). The app is a **thin consumer** — all logic lives in `@gate/dashboard` / `@gate/service` / `@gate/types`; the pages just wire them to routes.
+Next.js (app-router) shell that renders the fully-tested `@gate/dashboard` hosted-tier **core** (OAuth, sessions, installation-scoped access, run history, finding browser, feedback stats, config UI, billing). The app is a **thin consumer**: all logic lives in `@gate/dashboard` / `@gate/service` / `@gate/types`; the pages just wire them to routes.
 
 ## Why it's outside the monorepo harness
 
@@ -31,10 +31,11 @@ the override once Next depends on a patched PostCSS release directly and
 `npm audit --audit-level=moderate` remains clean.
 
 **Archived, unmaintained.** This app's dependency tree was frozen at the archive cut
-and `npm audit` reports known high-severity advisories (Next.js, postcss — the override
-above now pins it *below* the patched line — nanoid, and sharp via libvips). The root
+and `npm audit` reports known high-severity advisories (Next.js; postcss, which the override
+above now pins *below* the patched line; nanoid; and sharp via libvips). The root
 pnpm workspace is clean; this tree is not. Update before running it anywhere real, and
 do not blind-`npm audit fix` (it pulls a major Next bump).
+
 ## CI Wiring
 
 Root CI keeps the framework-free package gate (`pnpm lint`, `pnpm typecheck`,
@@ -58,12 +59,12 @@ is required because the app depends on the local packages through `file:` links.
 ## Pages
 
 - `/api/auth/login` → GitHub OAuth; `/api/auth/callback` → mint signed session; `/api/auth/logout`.
-- `/[installationId]` — repo picker (access enforced via `assertInstallationAccess`).
-- `/[installationId]/runs` — `listRunHistory`.
-- `/[installationId]/findings` + `/findings/[runId]` — `buildFindingBrowser`; screenshots via **capability URLs** (`mintScreenshotCapability` + `capabilityScreenshotUrl`, #61), never anonymous `/i`.
-- `/[installationId]/feedback` — `computeFeedbackStats` / `feedbackTrend`.
-- `/[installationId]/config` — `validateConfig` + `buildProposeConfigUrl` (user opens the PR; Gate never writes, no `contents: write`).
-- `/[installationId]/billing` — plan/status + `computeMonthlyTotalCents`.
+- `/[installationId]`: repo picker (access enforced via `assertInstallationAccess`).
+- `/[installationId]/runs`: `listRunHistory`.
+- `/[installationId]/findings` + `/findings/[runId]`: `buildFindingBrowser`; screenshots via **capability URLs** (`mintScreenshotCapability` + `capabilityScreenshotUrl`, #61), never anonymous `/i`.
+- `/[installationId]/feedback`: `computeFeedbackStats` / `feedbackTrend`.
+- `/[installationId]/config`: `validateConfig` + `buildProposeConfigUrl` (user opens the PR; Gate never writes, no `contents: write`).
+- `/[installationId]/billing`: plan/status + `computeMonthlyTotalCents`.
 
 ## Remaining wiring
 
@@ -72,4 +73,4 @@ is required because the app depends on the local packages through `file:` links.
   (`createTemplateResultUrlSigner`). Production still needs the ops-owned object store
   provisioned and the template (or a real short-lived signed-GET signer) configured.
 
-(The isolated CI `next build` job from #83 is in place — `.github/workflows/ci.yml`.)
+(The isolated CI `next build` job from #83 is in place; see `.github/workflows/ci.yml`.)

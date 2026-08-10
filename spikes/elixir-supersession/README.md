@@ -6,14 +6,14 @@ the BEAM buys and costs.
 
 ## What it models (mirroring `packages/service/src/{queue,supersession}.ts` exactly)
 
-- Supersession/dedup key `owner/name#pr` — at most one pending review per PR,
+- Supersession/dedup key `owner/name#pr`: at most one pending review per PR,
   **newest push wins** (remove-then-add).
 - Abort signal to a superseded in-flight job (the TS `AbortController`, here a
   message; cooperative in both worlds).
 - The **publish-time SHA guard**: publish only if the job's sha still equals
   `current_sha`; stale results are discarded, never published.
 - Deliberately NOT modeled: the durable completed-review identity
-  `(repo_owner, repo_name, pr_number, head_sha)` — a different concern (the `runs`
+  `(repo_owner, repo_name, pr_number, head_sha)`, a different concern (the `runs`
   table), same separation as the TS code.
 
 Shape: one `GenServer` per key under `Registry` + `DynamicSupervisor` (chosen over
@@ -34,7 +34,7 @@ spec, not a copy of the GenServer):
 
 Plus unit tests: the abort message on supersession (and its absence on same-sha
 re-push), and 100 concurrent enqueues on one key ending with exactly one pending
-job whose sha equals `current_sha` — the invariant that in TS is *guarded* is here
+job whose sha equals `current_sha`. The invariant that in TS is *guarded* is here
 *unrepresentable to violate*, because the key process serializes transitions.
 
 ## The verdict
@@ -46,15 +46,15 @@ What the BEAM genuinely bought, measured on this spike:
 - The semantic core is **141 lines** (vs **315** for the TS
   `supersession.ts` + `queue.ts` + `worker.ts` trio) and the two central
   invariants (one pending per key; pending/current can't diverge) hold
-  *structurally* rather than by guarded discipline — the property suite couldn't
+  *structurally* rather than by guarded discipline; the property suite couldn't
   break them by construction.
 - Supervision and per-key crash isolation come free.
 
 Why that still doesn't justify adoption:
 
 - The LOC win is misleading: BullMQ/Redis carries **persistence, retries,
-  delayed jobs, and horizontal workers** that this in-memory model doesn't —
-  reproducing those on the BEAM means Oban + Postgres, at which point the
+  delayed jobs, and horizontal workers** that this in-memory model doesn't.
+  Reproducing those on the BEAM means Oban + Postgres, at which point the
   footprint advantage disappears.
 - The TS publish-time guard is already the queue-agnostic backstop, is
   property-tested semantics-equivalent here, and survives process crashes because
@@ -62,8 +62,8 @@ Why that still doesn't justify adoption:
 - Polyglot ops cost (deploy image, observability, on-call literacy) is a real
   cost that the queue's current correctness properties do not justify.
 
-**When to re-open:** if gate ever needs *stateful per-session live processes* —
-an interactive sidecar shape (long-lived per-user sessions, presence, fan-in of
+**When to re-open:** if gate ever needs *stateful per-session live processes*.
+An interactive sidecar shape (long-lived per-user sessions, presence, fan-in of
 browser events) is the workload where Registry-per-key stops being a modeling
 trick and becomes the architecture. This spike is the executable half of that
 argument.
@@ -82,10 +82,10 @@ component.
 
 ## Known divergence from the TS mirror (reviewer finding, non-blocking)
 
-`worker.ts` aborts the in-flight job **unconditionally** on enqueue — a same-sha
+`worker.ts` aborts the in-flight job **unconditionally** on enqueue, so a same-sha
 re-push aborts and restarts the run. This spike only signals abort when the new
 sha **differs** (pinned in the "same-sha re-push does not abort" test). The
 spike's behavior is arguably the refinement (an identical head needs no
 restart), but it is a deliberate divergence from the production semantics, not
-an oversight — flagged here so nobody ports the model back assuming an exact
+an oversight. It is flagged here so nobody ports the model back assuming an exact
 mirror.

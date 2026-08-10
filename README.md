@@ -30,7 +30,7 @@ Runnable from this repository, right now:
 
 | Need | Check | Notes |
 |---|---|---|
-| Node 24.x | `node -v  # need v24.x` | `.node-version` pins `24`; `engines` requires `>=24` |
+| Node 24 or newer | `node -v  # need v24 or above` | `.node-version` pins `24` and `engines` requires `>=24`; verified on v24.14.0 |
 | pnpm 10.34.3 | `pnpm -v  # need 10.34.3` | install with `corepack enable && corepack prepare pnpm@10.34.3 --activate` |
 | macOS or Linux | n/a | verified on macOS 15.6 and on Linux (Docker `node:24-slim`); Windows is out of scope |
 | Docker (optional) | `docker --version` | only for the Linux resource-cap check at the end of the quickstart |
