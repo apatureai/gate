@@ -32,7 +32,7 @@
     "@octokit/app": "^16.1.2",
     "@octokit/webhooks": "^14.2.0",
     "bullmq": "^5.80.4",
-    "fastify": "^5.10.0",
+    "fastify": "^5.11.3",
     "pg": "^8.22.0"
   },
   "devDependencies": {

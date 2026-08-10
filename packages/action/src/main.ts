@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
-import { loadDesignReviewConfig } from "@gate/config";
+import { existsSync, readFileSync } from "node:fs";
+import { CONFIG_FILENAME, loadDesignReviewConfig, resolveConfigPath } from "@gate/config";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
+import { resolveEngineClientEnv } from "@gate/secrets";
 import type { GateMode } from "@gate/types";
 import { formatActionError } from "./action-error.js";
 import { createGitHubApi } from "./github.js";
@@ -39,15 +40,23 @@ async function main(): Promise<void> {
   }
 
   const token = input("github-token") || (process.env.GITHUB_TOKEN ?? "");
-  const configPath = input("config-path") || ".gate.yml";
+  const configPath = input("config-path") || CONFIG_FILENAME;
   const gateModeInput = input("gate-mode");
   const gh = createGitHubApi(token, { owner, repo, prNumber: pr.number, headSha: pr.head.sha });
 
+  const resolvedConfig = resolveConfigPath(configPath, existsSync);
+  if (resolvedConfig?.legacy) {
+    console.warn(
+      `Apature Gate: ${resolvedConfig.path} is the pre-rename config filename and will be dropped; rename it to ${CONFIG_FILENAME}.`,
+    );
+  }
   let configText: string | null = null;
-  try {
-    configText = readFileSync(configPath, "utf8");
-  } catch {
-    configText = null; // optional file
+  if (resolvedConfig) {
+    try {
+      configText = readFileSync(resolvedConfig.path, "utf8");
+    } catch {
+      configText = null; // optional file
+    }
   }
   let config;
   try {
@@ -67,11 +76,17 @@ async function main(): Promise<void> {
     !!pr.head.repo?.full_name && !!pr.base.repo?.full_name &&
     pr.head.repo.full_name !== pr.base.repo.full_name;
 
+  const engineEnv = resolveEngineClientEnv(process.env);
+  for (const { legacyName, canonicalName } of engineEnv.legacyNamesUsed) {
+    console.warn(
+      `Apature Gate: ${legacyName} is deprecated and will be dropped; rename it to ${canonicalName}.`,
+    );
+  }
   const engine = createJudgmentEngineClient(
     createHttpEngineTransport({
-      baseUrl: process.env.GATE_ENGINE_ENDPOINT ?? "",
-      apiKey: process.env.GATE_ENGINE_API_KEY,
-      hmacSecret: process.env.GATE_ENGINE_HMAC_SECRET,
+      baseUrl: engineEnv.endpoint,
+      apiKey: engineEnv.apiKey,
+      hmacSecret: engineEnv.hmacSecret,
     }),
   );
 

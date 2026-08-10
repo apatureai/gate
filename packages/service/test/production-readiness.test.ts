@@ -49,4 +49,32 @@ describe("production-readiness env check (#64)", () => {
   it("honors a custom required set", () => {
     expect(checkRequiredEnv({ FOO: "x" }, ["FOO", "BAR"]).missing).toEqual(["BAR"]);
   });
+
+  it("accepts a deprecated pre-rename alias, so the boot check agrees with EnvSecretStore", () => {
+    const env = fullEnv();
+    delete env.GATE_ENGINE_API_KEY;
+    env.JUDGMENT_ENGINE_API_KEY = "set";
+    expect(checkRequiredEnv(env)).toEqual({ ok: true, missing: [] });
+    expect(() => assertProductionEnv(env)).not.toThrow();
+  });
+
+  it("still names the canonical variable when neither name is set", () => {
+    const env = fullEnv();
+    delete env.GATE_ENGINE_HMAC_SECRET;
+    expect(checkRequiredEnv(env).missing).toEqual(["GATE_ENGINE_HMAC_SECRET"]);
+  });
+
+  it("treats a blank deprecated alias as missing too", () => {
+    const env = fullEnv();
+    delete env.GATE_ENGINE_ENDPOINT;
+    env.JUDGMENT_ENGINE_ENDPOINT = "  ";
+    expect(checkRequiredEnv(env).missing).toEqual(["GATE_ENGINE_ENDPOINT"]);
+  });
+
+  it("does not invent an alias for a variable that never had one", () => {
+    const env = fullEnv();
+    delete env.DATABASE_URL;
+    env.JUDGMENT_ENGINE_ENDPOINT = "set";
+    expect(checkRequiredEnv(env).missing).toEqual(["DATABASE_URL"]);
+  });
 });

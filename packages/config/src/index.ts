@@ -12,6 +12,41 @@ export {
 } from "./schema.js";
 export type { RawDesignReviewConfig } from "./schema.js";
 
+/** The config file Gate looks for. */
+export const CONFIG_FILENAME = ".gate.yml";
+
+/**
+ * The pre-2026-08-09 name for the same file. Still read, with a warning, so a
+ * repository configured before the rename keeps its settings instead of
+ * silently falling back to defaults.
+ */
+export const LEGACY_CONFIG_FILENAME = ".designreview.yml";
+
+/** Which config file to read, and whether it was found under the old name. */
+export type ConfigFileResolution = {
+  path: string;
+  legacy: boolean;
+};
+
+/**
+ * Resolve the config file to load. The requested path wins when it exists; when
+ * it is the default `.gate.yml` and is absent, `.designreview.yml` is accepted
+ * as a deprecated fallback. Returns null when neither exists, since the file is
+ * optional and Gate then runs on defaults. `exists` is injected to keep this
+ * pure and testable.
+ */
+export function resolveConfigPath(
+  requestedPath: string | null | undefined,
+  exists: (path: string) => boolean,
+): ConfigFileResolution | null {
+  const path = requestedPath?.trim() || CONFIG_FILENAME;
+  if (exists(path)) return { path, legacy: false };
+  if (path === CONFIG_FILENAME && exists(LEGACY_CONFIG_FILENAME)) {
+    return { path: LEGACY_CONFIG_FILENAME, legacy: true };
+  }
+  return null;
+}
+
 /** Thrown when a `.gate.yml` fails validation; carries readable issues. */
 export class ConfigValidationError extends Error {
   readonly issues: string[];

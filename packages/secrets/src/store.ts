@@ -29,9 +29,99 @@ const ENV_VARS: Record<AppSecretKey, string> = {
   engineEndpoint: "GATE_ENGINE_ENDPOINT",
 };
 
+/**
+ * Pre-2026-08-09 names for the three engine-client variables, kept readable so
+ * an environment provisioned before the rename still works. They named the
+ * `judgment-engine` repository, which is now `verdict`, and they were never
+ * Gate's to own: these configure Gate's client for whatever critique service it
+ * is pointed at. Reading one emits a deprecation warning.
+ */
+const LEGACY_ENV_VARS: Partial<Record<AppSecretKey, string>> = {
+  engineApiKey: "JUDGMENT_ENGINE_API_KEY",
+  engineHmacSecret: "JUDGMENT_ENGINE_HMAC_SECRET",
+  engineEndpoint: "JUDGMENT_ENGINE_ENDPOINT",
+};
+
 /** The env var name backing each app secret key (the canonical source for go-live env checks, #64). */
 export function secretEnvVarName(key: AppSecretKey): string {
   return ENV_VARS[key];
+}
+
+/** The deprecated env var name for a key, or null if it never had one. */
+export function legacySecretEnvVarName(key: AppSecretKey): string | null {
+  return LEGACY_ENV_VARS[key] ?? null;
+}
+
+/**
+ * Deprecated alias keyed by canonical env var name. The go-live readiness check
+ * reads this so a still-migrating environment boots on the same names the
+ * secret store accepts, rather than passing one gate and failing the other.
+ */
+export const LEGACY_ENV_VAR_ALIASES: Readonly<Record<string, string>> = Object.fromEntries(
+  APP_SECRET_KEYS.flatMap((key) => {
+    const legacy = LEGACY_ENV_VARS[key];
+    return legacy ? [[ENV_VARS[key], legacy] as const] : [];
+  }),
+);
+
+/** An env var read, and whether it came from the deprecated name. */
+export type EnvVarResolution = {
+  value: string | undefined;
+  legacyName: string | null;
+};
+
+/**
+ * Read one app secret from env, preferring the canonical `GATE_*` name and
+ * falling back to the deprecated one. `legacyName` is set only when the
+ * fallback actually supplied the value, so callers can warn precisely.
+ */
+export function resolveSecretEnv(
+  key: AppSecretKey,
+  env: NodeJS.ProcessEnv = process.env,
+): EnvVarResolution {
+  const value = env[ENV_VARS[key]];
+  if (value !== undefined && value !== "") return { value, legacyName: null };
+  const legacyName = LEGACY_ENV_VARS[key];
+  if (legacyName) {
+    const legacyValue = env[legacyName];
+    if (legacyValue !== undefined && legacyValue !== "") {
+      return { value: legacyValue, legacyName };
+    }
+  }
+  return { value: undefined, legacyName: null };
+}
+
+/** A value that arrived under a deprecated name, and the name it should move to. */
+export type LegacyEnvVarUse = {
+  legacyName: string;
+  canonicalName: string;
+};
+
+/** The engine client's three settings, plus the deprecated names that supplied any of them. */
+export type EngineClientEnv = {
+  endpoint: string;
+  apiKey: string | undefined;
+  hmacSecret: string | undefined;
+  legacyNamesUsed: LegacyEnvVarUse[];
+};
+
+/**
+ * Resolve the engine client's endpoint, API key and HMAC secret from env,
+ * accepting the deprecated `JUDGMENT_ENGINE_*` names. Absent endpoint stays the
+ * empty string, which is what makes an unconfigured run end in a neutral Check
+ * Run rather than an error.
+ */
+export function resolveEngineClientEnv(env: NodeJS.ProcessEnv = process.env): EngineClientEnv {
+  const legacyNamesUsed: LegacyEnvVarUse[] = [];
+  const read = (key: AppSecretKey): string | undefined => {
+    const { value, legacyName } = resolveSecretEnv(key, env);
+    if (legacyName) legacyNamesUsed.push({ legacyName, canonicalName: ENV_VARS[key] });
+    return value;
+  };
+  const endpoint = read("engineEndpoint");
+  const apiKey = read("engineApiKey");
+  const hmacSecret = read("engineHmacSecret");
+  return { endpoint: endpoint ?? "", apiKey, hmacSecret, legacyNamesUsed };
 }
 
 /** Env var names for every required app secret: the source of truth for the production-readiness check (#64). */
@@ -49,9 +139,14 @@ export class EnvSecretStore implements SecretStore {
   }
 
   async get(key: AppSecretKey): Promise<string> {
-    const value = this.env[ENV_VARS[key]];
-    if (value === undefined || value === "") {
+    const { value, legacyName } = resolveSecretEnv(key, this.env);
+    if (value === undefined) {
       throw new Error(`Missing secret: ${key} (${ENV_VARS[key]})`);
+    }
+    if (legacyName) {
+      console.warn(
+        `Apature Gate: ${legacyName} is deprecated and will be dropped; rename it to ${ENV_VARS[key]}.`,
+      );
     }
     return value;
   }

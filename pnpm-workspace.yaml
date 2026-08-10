@@ -4,6 +4,10 @@ packages:
 overrides:
   vite: 6.4.3
   ioredis: ^5.11.1
+  # GHSA-mh99-v99m-4gvg and GHSA-rgw5-rvv9-x895. eslint's minimatch asks for
+  # ^5.0.5 and resolves to a vulnerable 5.0.7 without this. Scoped to the
+  # minimatch edge so a future 1.x or 2.x consumer is not forced onto 5.x.
+  minimatch>brace-expansion: ^5.0.9
 
 allowBuilds:
   esbuild: true

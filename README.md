@@ -19,6 +19,12 @@ pnpm demo          # the sandbox supervisor, live, against a hostile fixture app
 pnpm demo:review   # a full design review comment, from a recorded critique, written to ./out
 ```
 
+<img src="gate_review_demo.png" alt="The review demo's annotated screenshot: a mobile pricing page with a red box and the label f_001 CTA off-palette around the primary call to action" width="300" align="right">
+
+That second command writes this file, `out/annotated-f_001.png`, on your machine in about a second, with no credentials and no network. It is the real annotation path, not a mockup: the box and label are composited by `annotateScreenshot` from a recorded critique. The full transcript, and the sticky comment that ships alongside it, are [further down](#a-design-review-end-to-end). The image here is a committed copy of that output, so you can diff your run against it.
+
+<br clear="right">
+
 ![Gate architecture](gate_architecture.png)
 
 *The green panel, "What verdict owns", is the half this repository does not implement. Everything else on the poster is here. Editable source: [`poster_gate.html`](poster_gate.html).*
@@ -170,11 +176,7 @@ Gate review demo (recorded engine response, no model call, no network)
     ./out/annotated-f_002.png  (26878 bytes — finding f_002 boxed on the fixture page)
 ```
 
-**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`:
-
-<img src="gate_review_demo.png" alt="The review demo's annotated screenshot: a mobile pricing page with a red box and the label f_001 CTA off-palette around the primary call to action" width="320">
-
-That file is a committed copy of `out/annotated-f_001.png`, so you can compare your run against it. Regenerate it with `cp out/annotated-f_001.png gate_review_demo.png`.
+**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`, byte-identical to [the image at the top of this file](gate_review_demo.png). Regenerate that committed copy with `cp out/annotated-f_001.png gate_review_demo.png`.
 
 What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI; it replays a recorded judgment through the real delivery path.
 
@@ -185,7 +187,7 @@ Both demos are covered by the test suite (`packages/action/test/supervisor-demo.
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 573 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 596 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -200,21 +202,32 @@ What runs today, from a clean clone, with no credentials:
 | Preview login sealing (`gate auth`) | **Works** | Runs offline against a bundled fixture |
 | GitHub Action, live | **Needs an endpoint** | Code complete; needs a reachable critique service and a published action ref |
 | App path (webhooks, queue, Postgres, RLS) | **Needs provisioning** | Tested against PGlite and in-memory fakes |
-| Dashboard | **Builds** | Core logic tested; the Next.js shell carries npm advisories, see roadmap |
+| Dashboard | **Builds** | Core logic tested; the Next.js shell is a thin renderer over it |
 | Billing | **Untested against Stripe** | Stripe plumbing and tier limits are unit-tested; no real charge has ever run |
 | Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; see roadmap item 1 |
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
 | Baseline before/after comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the pairs; nothing on the review path calls it |
 
-Verified on 2026-08-09, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
+Verified on 2026-08-10, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
 ```
-pnpm build       tsc -b, clean, exit 0
-pnpm lint        eslint . --max-warnings=0, exit 0
-pnpm typecheck   tsc -b, exit 0
-pnpm test        Test Files  92 passed (92)
-                      Tests  573 passed (573)
-                   Duration  19.40s
+pnpm install --frozen-lockfile   lockfile up to date, exit 0
+pnpm build                       tsc -b, clean, exit 0
+pnpm lint                        eslint . --max-warnings=0, exit 0
+pnpm typecheck                   tsc -b, exit 0
+pnpm test                        Test Files  94 passed (94)
+                                       Tests  596 passed (596)
+                                    Duration  13.62s
+pnpm audit                       No known vulnerabilities found
+```
+
+And in `apps/dashboard`, which is built separately with npm:
+
+```
+npm ci                           49 packages, 0 vulnerabilities
+npm run build                    next build, 12 routes, exit 0
+npm run typecheck                tsc --noEmit, exit 0
+npm audit                        found 0 vulnerabilities
 ```
 
 Both demos were re-run against this revision, and the transcripts above are from those runs.
@@ -227,7 +240,7 @@ Concrete, pickup-able work. Each one names the seam it plugs into.
 2. **A fixture-backed transport people can import.** The review demo replays a recorded response, but that replay lives inside the demo CLI rather than being exported. A `createFixtureEngineTransport` on `@gate/engine`'s public surface would let anyone run the whole Action path against their own repository with no endpoint at all. Small, high leverage, good first issue.
 3. **Wire up baseline before/after comparison.** `packages/delivery/src/baseline.ts` already builds `ComparisonPair`s and `BeforeAfterArtifact`s behind a `BaselineStore` interface, and it is tested, but no caller exists on the review path. Deciding where the base capture comes from is the interesting half.
 4. **Ship an object-store adapter for screenshots.** `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE` expects a `{objectKey}` template today, and `packages/dashboard` already mints short-lived capability tokens. An S3 or R2 signed-GET signer implementing the same interface would close the loop.
-5. **Clear the dependency advisories.** As of 2026-08-09, `pnpm audit` at the root reports 7 (1 moderate, 6 high): `fast-uri` and `find-my-way` reach runtime through `fastify` in `packages/service`, the rest are dev-tooling only (`brace-expansion` via eslint, `postcss` and `nanoid` via vitest/vite). Separately, `apps/dashboard` reports 4 high (`next`, `postcss`, `nanoid`, `sharp` via libvips). Do not blind-run `npm audit fix` on the dashboard, it pulls a major Next bump; the `overrides.postcss` pin in `apps/dashboard/package.json` needs revisiting at the same time.
+5. **Keep the dependency tree clean.** Both trees audit clean as of 2026-08-10, and staying there is the ongoing job. The eleven advisories that were open the day before are cleared in [SECURITY.md](SECURITY.md#dependency-advisories), which also records the one pinned override holding a fix in place. Dependabot opens the bumps; what is missing is a CI job that fails on a new advisory rather than leaving it to whoever next runs `pnpm audit` by hand. That job is the pickup-able piece, and it wants the same drift policy as item 10.
 6. **Aggregate cgroup-v2 caps for the supervisor.** The `ulimit` caps are per-process. `pids.max` and `memory.max` on a cgroup would make containment aggregate rather than per-process, which is the difference between a mitigation and a sandbox. Needs host setup, so it wants a design discussion first.
 7. **Windows support.** The supervisor relies on POSIX process groups. A Job Object based implementation behind the same `startLocalServer` signature would be a substantial and self-contained contribution.
 8. **Publish the Action.** `uses: apatureai/gate@v1` does not resolve yet; the Action is a Docker action defined by `action.yml` and `Dockerfile.action`, so this is a release-tag and Marketplace step.
@@ -242,7 +255,7 @@ Longer-horizon design changes, each with the trigger that would justify it, are 
 
 One product, one word: **Gate**. The repository is `apatureai/gate`, the packages are `@gate/*`, the config file is `.gate.yml`, the CLI bin is `gate`, and the environment variables are `GATE_*`.
 
-Three of those are renames landed on 2026-08-09, deliberately taken while this has no users and the change is therefore free rather than left to break someone later. If you saw an earlier revision of this repository, translate:
+Three of those are renames landed on 2026-08-09, deliberately taken while this has no users and the change is therefore free rather than left to break someone later. The deprecated names are still read, with a warning, as of 2026-08-10. If you saw an earlier revision of this repository, translate:
 
 | Was | Is now | Why |
 |---|---|---|
@@ -250,7 +263,9 @@ Three of those are renames landed on 2026-08-09, deliberately taken while this h
 | bin `designreview` | bin `gate` | Same, and `gate auth` matches how every other surface is spelled. |
 | `JUDGMENT_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | `GATE_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | These configure *Gate's* client for whatever critique service you point it at. `verdict` is one such service, not the only one, so it should not own the variable names. The rest of the App's variables were already `GATE_*`. |
 
-**There is no fallback.** Gate reads `.gate.yml` and the `GATE_ENGINE_*` variables only; the old names are not accepted, and a leftover `.designreview.yml` is simply not found, which means Gate runs on default config rather than raising an error. Migrating is renaming one file and three variables.
+**The old names still work, and say so.** If `.gate.yml` is absent and `.designreview.yml` is present, Gate reads the old file and logs `Apature Gate: .designreview.yml is the pre-rename config filename and will be dropped; rename it to .gate.yml.` Each `JUDGMENT_ENGINE_*` variable is read the same way when its `GATE_ENGINE_*` counterpart is unset, with the same one-line warning naming both variables and never the value. The new name always wins when both are set, and a named `config-path` that does not exist never silently falls back to the repository root. This is a deprecation, not a supported alias: migrating is renaming one file and three variables, and the fallback goes away once it has nothing left to catch. Behaviour is pinned by `packages/config/test/config-path.test.ts` and `packages/secrets/test/engine-env.test.ts`.
+
+The reason to have a fallback at all is that the failure it replaces was silent. A leftover `.designreview.yml` used to be simply not found, so Gate ran on default config and reviewed the wrong thing without ever saying that it had ignored your settings.
 
 One deliberate exception, so it does not read as drift: what Gate publishes into *your* repository is titled **"Apature Gate"**, not "Gate". That is the Check Run name, the sticky comment heading, the `user-agent`, and the prefix on the Action's error lines. In a checks list next to twenty other entries, a bare "Gate" says nothing about who published it. The publisher name is qualified on purpose; everything you type stays short.
 
@@ -463,9 +478,9 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 
 | Variable | Required | Default | Effect |
 |---|---|---|---|
-| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → every review ends in a neutral "unavailable" Check Run. |
-| `GATE_ENGINE_API_KEY` | Action + App | none | Service auth. Unset → the job is rejected. |
-| `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests. Unset → requests are unsigned and refused. |
+| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → every review ends in a neutral "unavailable" Check Run. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
+| `GATE_ENGINE_API_KEY` | Action + App | none | Service auth. Unset → the job is rejected. Deprecated alias: `JUDGMENT_ENGINE_API_KEY`. |
+| `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests. Unset → requests are unsigned and refused. Deprecated alias: `JUDGMENT_ENGINE_HMAC_SECRET`. |
 | `GITHUB_TOKEN` / `INPUT_GITHUB_TOKEN` | Action | none | Posts the sticky comment and Check Run. Unset → nothing is published. |
 | `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH` | Action | none | Runner-supplied context. Missing → the entrypoint throws `missing GitHub Action context`. |
 | `GITHUB_DEFAULT_BRANCH` | Action | `main` | Default branch reported with the request. |
@@ -586,7 +601,7 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **The Action path constrains hostile pull request code; it does not sandbox it.** The `ulimit` caps, environment allowlist, loopback-redirect refusal and fork gating are real mitigations. The aggregate cgroup-v2 caps that would make them airtight are roadmap item 6. Read the threat model before running the Action path on a repository that accepts fork pull requests.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.
-- **Dependency advisories are open.** Root and dashboard counts, with the exact packages, are in roadmap item 5.
+- **Nothing fails CI on a new dependency advisory.** Both trees audit clean today and the history is in [SECURITY.md](SECURITY.md#dependency-advisories), but no job enforces that, so the guarantee is only as fresh as the last manual `pnpm audit`. Roadmap item 5.
 - **Billing has never processed a real charge.** The Stripe plumbing and tier limits are unit-tested against fakes.
 - **Some source comments cite documents that are not in this repository.** Issue numbers (`#70`, `#79`, …) point at this repository's tracker, and section references like `TRD §7` or `ARCHITECTURE §6` point at design documents that were not published. The load-bearing parts of both are absorbed into this README; the citations are left in place as the record of why each piece exists.
 

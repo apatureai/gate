@@ -1,4 +1,4 @@
-import { APP_SECRET_ENV_VARS } from "@gate/secrets";
+import { APP_SECRET_ENV_VARS, LEGACY_ENV_VAR_ALIASES } from "@gate/secrets";
 
 /**
  * Production-readiness env check (#64). Go-live needs a set of secrets + infra
@@ -27,14 +27,26 @@ export interface EnvCheckResult {
   missing: string[];
 }
 
-/** Which of `names` are absent or blank in `env` (the missing-required set). */
+const isSet = (env: NodeJS.ProcessEnv, name: string): boolean => {
+  const v = env[name];
+  return v !== undefined && v.trim() !== "";
+};
+
+/**
+ * Which of `names` are absent or blank in `env` (the missing-required set). A
+ * variable set only under its deprecated pre-rename alias counts as present, so
+ * this check and `EnvSecretStore` agree about what a bootable environment is;
+ * the store is what emits the deprecation warning when it actually reads one.
+ * Missing variables are always reported under the canonical name.
+ */
 export function checkRequiredEnv(
   env: NodeJS.ProcessEnv,
   names: readonly string[] = PRODUCTION_ENV_VARS,
 ): EnvCheckResult {
   const missing = names.filter((n) => {
-    const v = env[n];
-    return v === undefined || v.trim() === "";
+    if (isSet(env, n)) return false;
+    const alias = LEGACY_ENV_VAR_ALIASES[n];
+    return !(alias !== undefined && isSet(env, alias));
   });
   return { ok: missing.length === 0, missing };
 }

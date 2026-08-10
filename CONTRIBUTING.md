@@ -5,8 +5,8 @@ Contributions are welcome. Issues and pull requests are read.
 The fastest way to find something worth doing is the **Roadmap** section of
 [`README.md`](README.md#roadmap): ten concrete items, each naming the file or
 interface it plugs into. Items 2 (a fixture-backed transport on `@gate/engine`'s
-public surface) and 5 (dependency advisories) are good first issues. Item 1 (a
-reference critique service) is the one that unlocks the most.
+public surface) and 5 (a CI gate on new dependency advisories) are good first
+issues. Item 1 (a reference critique service) is the one that unlocks the most.
 
 Small fixes need no preamble: open a pull request. For anything that changes a
 public interface, a database schema, or one of the invariants below, open an
