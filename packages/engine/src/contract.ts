@@ -33,7 +33,7 @@ const calibrationSchema = z.object({
 
 const findingSchema = z.object({
   id: z.string(),
-  // Additive engine field (judgment-engine#159): preserved through parsing so
+  // Additive engine field (verdict#159): preserved through parsing so
   // downstream consumers keep the rubric dimension; Gate never synthesizes it.
   dimension: z
     .enum(["visual_hierarchy", "spacing", "color_contrast", "typography", "consistency", "responsiveness", "accessibility", "brand"])
@@ -69,7 +69,7 @@ export const GateReviewResultSchema = z.object({
   artifacts: z.object({
     annotatedScreenshots: z.array(z.object({ findingId: z.string(), url: z.string() })),
     engineDebugUrl: z.string().optional(),
-    // Additive engine field (Judgment Engine #20). Preserved through parsing;
+    // Additive engine field (Verdict #20). Preserved through parsing;
     // rendered as an informational capture-health caveat, never a finding.
     pageHealthFootnote: z.string().optional(),
   }),

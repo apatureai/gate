@@ -4,8 +4,8 @@ import { context, propagation } from "@opentelemetry/api";
  * W3C trace-context propagation (gate#161).
  *
  * Inject the ACTIVE OpenTelemetry context into an outbound carrier via the
- * globally-configured propagator, so a Gate span continues into the Judgment
- * Engine instead of stopping at the process boundary. We never hand-format a
+ * globally-configured propagator, so a Gate span continues into Verdict
+ * instead of stopping at the process boundary. We never hand-format a
  * traceparent: `propagation.inject` delegates to the registered W3C propagator,
  * which emits a standards-valid `traceparent` (and `tracestate` when present)
  * for a valid active span context and emits NOTHING for an invalid/absent one

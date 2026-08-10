@@ -15,7 +15,7 @@ import { runAction, type ActionOutcome } from "./run.js";
  * `x-schema-version` + Zod parsing, the sticky-comment renderer, the Check Run
  * mapping, and `annotateScreenshot`'s SVG-over-PNG compositing.
  *
- * What is substituted, because it lives in the judgment-engine repo and needs a
+ * What is substituted, because it lives in the verdict repo and needs a
  * model endpoint: the engine's HTTP responses (replayed from the golden fixture
  * in `packages/types/fixtures`), the base screenshot (drawn here from an SVG),
  * and the element geometry the boxes are drawn from. Nothing in this module

@@ -4,7 +4,7 @@ import { parseEngineResult, SCHEMA_VERSION } from "../src/index.js";
 
 const golden = loadGoldenReviewResult();
 
-/** Producer-shaped footnotes for the health signals Judgment Engine #20 emits. */
+/** Producer-shaped footnotes for the health signals Verdict #20 emits. */
 const PRODUCER_FOOTNOTES = {
   console_errors: "1 console error observed during capture.",
   failed_requests: "2 network requests failed during capture.",

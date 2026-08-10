@@ -28,5 +28,5 @@ export function tokenBucketKey(installationId: string): string {
   return `${REDIS_NAMESPACES.tokenBucket}${installationId}`;
 }
 
-/** Circuit-breaker state key for the judgment-engine client. */
+/** Circuit-breaker state key for the verdict client. */
 export const ENGINE_CIRCUIT_BREAKER_KEY = `${REDIS_NAMESPACES.circuitBreaker}engine`;

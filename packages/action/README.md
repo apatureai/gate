@@ -2,7 +2,7 @@
 
 The Gate **Action path**: a zero-infra GitHub Action that resolves a PR preview
 URL, submits a review job to the critique service you configure through
-`GATE_ENGINE_ENDPOINT` (the public `judgment-engine` being one), and posts a
+`GATE_ENGINE_ENDPOINT` (the public `verdict` being one), and posts a
 sticky comment + advisory Check Run. No critique service ships in this
 repository, and with none reachable the run ends in a neutral Check Run saying
 so. Judgment-only: it never requests `contents: write`.

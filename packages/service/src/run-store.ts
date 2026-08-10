@@ -12,7 +12,7 @@ import type { SqlQuery } from "./review-window.js";
  * the same repo/PR/head SHA never creates a second row or republishes.
  *
  * Gate stores only judgment metadata + lineage, never critique JSON or
- * screenshot bytes (those stay owned by judgment-engine). Run it through the
+ * screenshot bytes (those stay owned by verdict). Run it through the
  * installation-scoped (RLS) transaction helper in production.
  */
 export interface CompletedRunRecord {

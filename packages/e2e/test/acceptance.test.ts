@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 /**
  * TRD §11 Action-path acceptance harness. Drives the real runAction +
- * HTTP transport + contract parse against a MOCK judgment-engine (fake fetch);
+ * HTTP transport + contract parse against a MOCK verdict (fake fetch);
  * no live model calls. M2 extends this with deployment_status, the stale-publish
  * guard, and feedback GET-inert.
  */

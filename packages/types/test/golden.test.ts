@@ -17,7 +17,7 @@ import type {
 
 const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"];
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
-// Re-pinned for the CalibrationReportV1 provenance contract (#166 / JE #160).
+// Re-pinned for the CalibrationReportV1 provenance contract (#166 / Verdict #160).
 const GATE_ENGINE_GOLDEN_BLOB = "54a7add15f3431964f092f9795af2a72800d33a0";
 const GATE_ENGINE_PRE_CALIBRATION_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
 
@@ -34,7 +34,7 @@ describe("golden GateReviewResult fixture", () => {
     expect(golden.overall.length).toBeGreaterThan(0);
   });
 
-  it("is byte-identical to the pinned Judgment Engine golden fixture", () => {
+  it("is byte-identical to the pinned Verdict golden fixture", () => {
     const bytes = readFileSync(goldenReviewResultPath());
     const oid = createHash("sha1")
       .update(`blob ${bytes.length}\0`)

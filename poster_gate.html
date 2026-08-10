@@ -85,7 +85,7 @@
   </div>
 
   <div class="lede">
-    Gate is GitHub-native review for rendered UI. It discovers a preview deploy, schedules exactly the current PR head, calls <b>judgment-engine</b>, then publishes annotated findings back to GitHub. Gate owns the shipping workflow; the shared engine owns capture, context, Qwen3-VL critique, validation, eval, and feedback primitives.
+    Gate is GitHub-native review for rendered UI. It discovers a preview deploy, schedules exactly the current PR head, calls <b>verdict</b>, then publishes annotated findings back to GitHub. Gate owns the shipping workflow; the shared engine owns capture, context, Qwen3-VL critique, validation, eval, and feedback primitives.
   </div>
 
   <div class="stage">
@@ -185,7 +185,7 @@
           <ul>
             <li>Review this current PR head against this repo's UI DNA and config.</li>
             <li>Return only validated findings with route, viewport, element ref, evidence, suggestion, and severity.</li>
-            <li>Use Qwen3-VL through judgment-engine; Gate never hard-codes a model vendor.</li>
+            <li>Use Qwen3-VL through verdict; Gate never hard-codes a model vendor.</li>
           </ul>
           <div class="tags">
             <span class="chip"><img class="ic" src="icons/zod.svg">validated findings</span>
@@ -195,7 +195,7 @@
         </div>
         <div class="card green">
           <div class="eyebrow">Shared judgment boundary</div>
-          <h2>What judgment-engine owns</h2>
+          <h2>What verdict owns</h2>
           <ul>
             <li>Browser capture, readiness, tiling, DOM geometry, computed styles, and page-health facts.</li>
             <li>Repo context extraction, model calls, post-parse validation, eval, and feedback primitives.</li>
@@ -278,8 +278,8 @@
         <h2>Gate owns delivery, not the engine</h2>
         <ul>
           <li><b>Gate:</b> GitHub UX, queue correctness, config, dashboard, billing.</li>
-          <li><b>Judgment Engine:</b> capture, context, Qwen3-VL, eval, feedback store.</li>
-          <li><b>Next surfaces:</b> MCP Review after Gate proves trust.</li>
+          <li><b>Verdict:</b> capture, context, Qwen3-VL, eval, feedback store.</li>
+          <li><b>Next surfaces:</b> Bastion, the MCP surface, after Gate proves trust.</li>
         </ul>
       </div>
 
@@ -303,7 +303,7 @@
       <div class="lg"><span class="dot" style="background:var(--data)"></span>Delivery + feedback</div>
       <div class="lg"><span class="dot" style="background:#bb4b4b"></span>No-write boundary</div>
     </div>
-    <div>apatureai/gate - generated 2026-08-09</div>
+    <div>apatureai/gate - generated 2026-08-10</div>
   </div>
 </div>
 </body>

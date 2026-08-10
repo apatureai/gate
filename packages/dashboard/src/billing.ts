@@ -4,8 +4,8 @@ import type { SqlQuery } from "./runs.js";
 /**
  * Billing for the CI Gate product (PRD §9): $20/dev/mo Stripe subscriptions and
  * enforced free-tier limits. Pure billing logic + a Postgres store; the Stripe
- * webhook route wires these. (MCP-review metering is out of scope; that's
- * apatureai/mcp-review.)
+ * webhook route wires these. (MCP-surface metering is out of scope; that's
+ * apatureai/bastion.)
  */
 export const PRICE_PER_SEAT_CENTS = 2000; // $20 / dev / month
 

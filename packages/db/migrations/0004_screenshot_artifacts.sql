@@ -3,7 +3,7 @@
 -- (the golden fixture reuses `f_001`), so colliding ids across runs/repos could
 -- resolve/authorize the wrong artifact, and there was no durable store (the route
 -- couldn't survive a restart). Gate owns this metadata; screenshot BYTES and
--- critique JSON stay in judgment-engine's encrypted bucket.
+-- critique JSON stay in verdict's encrypted bucket.
 --
 -- `artifact_id` is Gate-generated and globally collision-resistant
 -- (sha256(installation:owner:name:head_sha:finding_id), deriveArtifactId), so it

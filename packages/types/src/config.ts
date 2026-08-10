@@ -2,7 +2,7 @@
  * Normalized `.gate.yml` configuration (TRD §3).
  *
  * Gate validates and normalizes the raw repo config, then passes these
- * normalized values to `judgment-engine`. Gate does NOT implement design-token
+ * normalized values to `verdict`. Gate does NOT implement design-token
  * extraction itself; that is the engine's job, grounded in the repo's UI DNA.
  */
 

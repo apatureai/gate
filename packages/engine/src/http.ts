@@ -140,7 +140,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
             signal,
           }),
         );
-        // Judgment Engine returns 200 even when the job became terminal before
+        // Verdict returns 200 even when the job became terminal before
         // DELETE; that completion-vs-timeout race is an intentional no-op. Other
         // non-2xx responses are real cleanup failures and must reach diagnostics.
         if (!res.ok) throw new EngineJobError(`engine cancel failed: ${res.status}`);

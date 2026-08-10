@@ -133,7 +133,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
 
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);
 
-  // Capture-health caveat: the engine's page-health footnote (JE #20), rendered
+  // Capture-health caveat: the engine's page-health footnote (Verdict #20), rendered
   // as informational untrusted display text. It never changes grade, severity,
   // or the Check Run conclusion; those stay the engine's holistic verdict.
   const health = result.artifacts.pageHealthFootnote;

@@ -3,11 +3,11 @@ import { createHash } from "node:crypto";
 import { defaultSleep } from "./sleep.js";
 
 /**
- * Async job protocol for the Gate -> judgment-engine seam (TRD §6, §15.1).
+ * Async job protocol for the Gate -> verdict seam (TRD §6, §15.1).
  *
  * A review takes 90s+; Gate must not hold a connection open (the Fly proxy idle
  * timeout would drop it). Gate submits a job and polls. The engine-side handlers
- * live in apatureai/judgment-engine; this module is the Gate-side contract +
+ * live in apatureai/verdict; this module is the Gate-side contract +
  * client. HMAC signing (#47) and x-schema-version + Zod parse (#46) layer on the
  * transport later.
  */
@@ -16,7 +16,7 @@ import { defaultSleep } from "./sleep.js";
 export const REVIEW_DEADLINE_MS = 10 * 60 * 1000;
 
 /**
- * Versioned namespace for Gate's caller-owned Judgment Engine intent hash.
+ * Versioned namespace for Gate's caller-owned Verdict intent hash.
  *
  * Legacy keys used the ambiguous, repository-less `${prNumber}:${headSha}`
  * shape. Keeping the namespace outside and inside the digest makes the new key
@@ -145,7 +145,7 @@ export function canonicalReviewIdentity(input: ReviewIdentityInput): ReviewIdent
 }
 
 /**
- * Build Gate's opaque Judgment Engine intent key from an unambiguous canonical
+ * Build Gate's opaque Verdict intent key from an unambiguous canonical
  * tuple. JSON array encoding preserves field boundaries before hashing.
  */
 export function idempotencyKey(input: ReviewIdentityInput): string {

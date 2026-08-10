@@ -16,7 +16,7 @@ import {
 import { defaultSleep } from "./sleep.js";
 
 /**
- * The single seam where Gate talks to judgment-engine (TRD §1, §6;
+ * The single seam where Gate talks to verdict (TRD §1, §6;
  * ARCHITECTURE §3). Gate owns when to call and how to publish; the engine owns
  * capture, context, model, and validation. Everything downstream programs
  * against GateReviewResult, never raw engine calls.
@@ -97,7 +97,7 @@ export function assertReviewOutcomeIdentity(
 
 
 /**
- * Create the judgment-engine client. Auth + request timeout live in the
+ * Create the verdict client. Auth + request timeout live in the
  * transport; this adds bounded submit retry with backoff and uses a versioned,
  * repository-scoped engine intent key. That key remains distinct from both the
  * `repo#pr` supersession key and the durable `runs` identity.

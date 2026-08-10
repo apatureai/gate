@@ -53,7 +53,7 @@ export function buildCheckRun(
 ): CheckRun {
   const conclusion = mapCheckRunConclusion(result.grade, gate);
   const summaryParts = [`**Grade:** ${GRADE_TITLE[result.grade]}`, result.overall];
-  // Informational capture-health caveat (JE #20), bounded + sanitized. Never
+  // Informational capture-health caveat (Verdict #20), bounded + sanitized. Never
   // changes the conclusion; that is `mapCheckRunConclusion(grade)` alone.
   const health = result.artifacts.pageHealthFootnote;
   if (health !== undefined && health.trim().length > 0) {

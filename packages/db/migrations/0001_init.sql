@@ -1,7 +1,7 @@
 -- 0001_init: Gate durable product state (TRD §5, §9, §12; §15.4/§15.5/§15.6).
 -- Idempotent: every object uses IF NOT EXISTS so re-applying is a no-op.
 -- Gate stores only metadata, correctness state, and billing. Screenshots,
--- critique JSON, and the preference dataset live in judgment-engine object
+-- critique JSON, and the preference dataset live in Verdict's object
 -- storage, never here.
 
 -- GitHub App installations (one per account that installs Gate).

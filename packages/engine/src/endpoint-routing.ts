@@ -4,7 +4,7 @@ import type { EngineTransport } from "./jobs.js";
 /**
  * Per-account engine endpoint routing (TRD §6, §8, §15.5; ARCHITECTURE §3/§4 D3).
  *
- * Enterprise accounts can run `judgment-engine` in their own VPC so screenshots
+ * Enterprise accounts can run `verdict` in their own VPC so screenshots
  * (real staging PII) never leave their cloud. `engineEndpoint` is **Gate-internal
  * routing**, never a `GateReviewRequest` field. There is NO silent fallback to
  * the hosted engine: an in-VPC account's transport targets only the in-VPC

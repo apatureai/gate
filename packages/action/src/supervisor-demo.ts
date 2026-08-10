@@ -18,7 +18,7 @@ import {
  * (`startLocalServer`) against the fixture app in `packages/action/fixtures`.
  *
  * It is the part of the Action path that can be demonstrated on its own: the
- * hosted review needs a judgment-engine endpoint, but the supervisor only needs
+ * hosted review needs a Verdict endpoint, but the supervisor only needs
  * a process and a loopback socket. Everything asserted here is produced by the
  * production code path; this module supplies a fixture and reads the results,
  * it does not re-implement any of the containment.

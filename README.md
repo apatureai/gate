@@ -2,7 +2,7 @@
 
 **Gate runs a pull request's preview build inside a hardened sandbox, hands the verified preview URL to a critique service you supply, and publishes that service's design review back to GitHub as one sticky comment plus a Check Run.**
 
-**Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`judgment-engine`](https://github.com/apatureai/judgment-engine) is one; writing your own is [roadmap item 1](#roadmap). With no reachable critique service configured, every review ends in a neutral Check Run saying exactly that, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
+**Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`verdict`](https://github.com/apatureai/verdict) is one; writing your own is [roadmap item 1](#roadmap). With no reachable critique service configured, every review ends in a neutral Check Run saying exactly that, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
 
 **The half it does own, it owns end to end.** A sandbox that executes untrusted pull request code and cleans up after it, preview-URL discovery with provenance checks, fork gating, queue supersession, a publish-time SHA guard, version- and schema-checked results, annotated screenshots, sticky-comment upsert, and Check Run mapping. Every one of those runs from a clean clone with no credentials, and both demos below prove it on your machine.
 
@@ -19,7 +19,7 @@ pnpm demo:review   # a full design review comment, from a recorded critique, wri
 
 ![Gate architecture](gate_architecture.png)
 
-*The green panel, "What judgment-engine owns", is the half this repository does not implement. Everything else on the poster is here. Editable source: [`poster_gate.html`](poster_gate.html).*
+*The green panel, "What verdict owns", is the half this repository does not implement. Everything else on the poster is here. Editable source: [`poster_gate.html`](poster_gate.html).*
 
 ## Why it is interesting
 
@@ -246,7 +246,7 @@ Three of those are renames landed on 2026-08-09, deliberately taken while this h
 |---|---|---|
 | `.designreview.yml` | `.gate.yml` | The config file named a category, not the tool reading it. |
 | bin `designreview` | bin `gate` | Same, and `gate auth` matches how every other surface is spelled. |
-| `JUDGMENT_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | `GATE_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | These configure *Gate's* client for whatever critique service you point it at. `judgment-engine` is one such service, not the only one, so it should not own the variable names. The rest of the App's variables were already `GATE_*`. |
+| `JUDGMENT_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | `GATE_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | These configure *Gate's* client for whatever critique service you point it at. `verdict` is one such service, not the only one, so it should not own the variable names. The rest of the App's variables were already `GATE_*`. |
 
 **There is no fallback.** Gate reads `.gate.yml` and the `GATE_ENGINE_*` variables only; the old names are not accepted, and a leftover `.designreview.yml` is simply not found, which means Gate runs on default config rather than raising an error. Migrating is renaming one file and three variables.
 
@@ -372,7 +372,7 @@ Cookies and localStorage outside `--origins` are dropped before sealing. Pass `-
 
 On the Action path, capture runs inside **your** runner, which means attacker-authored code from a fork pull request executes on a network with reachable internal services. This is the same class of risk as any "build untrusted PR code in CI" step, but rendering a page makes it explicit.
 
-**Why the App path differs.** On the App path, capture does not run in your runner: Gate hands the verified preview URL to the critique service, which is where the isolation belongs. The companion `judgment-engine` service is specified to capture inside a Firecracker microVM with an egress policy, internal-IP deny and DNS-rebind rechecks. The Action path cannot offer that isolation, because the runner is yours.
+**Why the App path differs.** On the App path, capture does not run in your runner: Gate hands the verified preview URL to the critique service, which is where the isolation belongs. The companion `verdict` service is specified to capture inside a Firecracker microVM with an egress policy, internal-IP deny and DNS-rebind rechecks. The Action path cannot offer that isolation, because the runner is yours.
 
 **Gate-owned (this repository):**
 

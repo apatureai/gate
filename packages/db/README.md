@@ -3,7 +3,7 @@
 Gate's durable product state: Postgres schema + an idempotent migration runner.
 
 Gate stores **metadata, correctness state, and billing only**. Screenshots,
-critique JSON, and the preference dataset live in `judgment-engine` object
+critique JSON, and the preference dataset live in Verdict's object
 storage, never here.
 
 ## Tables

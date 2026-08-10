@@ -4,7 +4,7 @@ import { parseEngineResult, SCHEMA_VERSION } from "../src/index.js";
 
 const golden = loadGoldenReviewResult();
 
-describe("finding.dimension preservation (judgment-engine#159 consumer)", () => {
+describe("finding.dimension preservation (verdict#159 consumer)", () => {
   it("preserves the engine's rubric dimension through parseEngineResult", () => {
     const body = {
       ...golden,

@@ -33,7 +33,7 @@ function context(repositoryName: string): ReviewRequestContext {
 }
 
 /**
- * Minimal producer-contract fake mirroring Judgment Engine's durable key:
+ * Minimal producer-contract fake mirroring Verdict's durable key:
  * `(consumer, installation, intent_type, caller_intent_hash)`. The caller hash
  * remains opaque; the fake only persists and deduplicates it.
  */
@@ -71,7 +71,7 @@ class ContractEngineTransport implements EngineTransport {
   async cancel(): Promise<void> {}
 }
 
-describe("Gate ↔ Judgment Engine repository-scoped idempotency contract", () => {
+describe("Gate ↔ Verdict repository-scoped idempotency contract", () => {
   it("deduplicates exact retries without colliding repositories in one installation", async () => {
     const transport = new ContractEngineTransport();
     const client = createJudgmentEngineClient(transport);

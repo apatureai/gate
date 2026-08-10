@@ -6,7 +6,7 @@ import type { SqlQuery } from "./review-window.js";
 /**
  * Feedback event model + forwarding (TRD §9; PRD §10). Gate records the
  * product-facing signal (incl. the rater's repo-permission level and source) and
- * forwards it to the shared feedback store owned by judgment-engine, which owns
+ * forwards it to the shared feedback store owned by verdict, which owns
  * weighting and the preference dataset. Non-collaborator down-weighting is the
  * engine's job. Implicit positive is detected by suggestion string-match ONLY;
  * "touched the element" never counts.

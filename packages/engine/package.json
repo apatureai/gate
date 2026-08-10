@@ -2,7 +2,7 @@
   "name": "@gate/engine",
   "version": "0.0.0",
   "private": true,
-  "description": "Gate-side judgment-engine async job client (POST/GET/DELETE /jobs, idempotency, poll/cancel).",
+  "description": "Gate-side Verdict async job client (POST/GET/DELETE /jobs, idempotency, poll/cancel).",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

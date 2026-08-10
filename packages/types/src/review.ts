@@ -2,11 +2,11 @@ import type { NormalizedDesignReviewConfig, Severity, Viewport } from "./config.
 import type { ReviewDepth } from "./depth.js";
 
 /**
- * Gate <-> judgment-engine review contract (TRD §6, amended by §15.1 and §15.2).
+ * Gate <-> verdict review contract (TRD §6, amended by §15.1 and §15.2).
  *
  * This package is the single source of truth for the boundary. It deliberately
  * carries no engine implementation detail and no model-specific fields: the
- * default judge is Qwen3-VL through `judgment-engine`, and nothing here may
+ * default judge is Qwen3-VL through `verdict`, and nothing here may
  * hard-code Claude or any other model.
  */
 
@@ -39,7 +39,7 @@ export type ConfidenceUnavailableReason =
   | "unattested_calibration_report";
 
 /** A single design-review finding produced by the engine. */
-/** The engine's eight-value design rubric (judgment-engine#159), preserved verbatim. */
+/** The engine's eight-value design rubric (verdict#159), preserved verbatim. */
 export type Dimension =
   | "visual_hierarchy"
   | "spacing"
@@ -55,7 +55,7 @@ export type Finding = {
   id: string;
   severity: Severity;
   /**
-   * The engine's rubric dimension (judgment-engine#159). Gate PRESERVES this
+   * The engine's rubric dimension (verdict#159). Gate PRESERVES this
    * additive field through the contract even though the current renderer does
    * not display it; Gate never synthesizes it. Optional only so results stored
    * before the field existed still type-check.
@@ -74,7 +74,7 @@ export type Finding = {
   suggestion: string | null;
   /**
    * Engine-produced calibrated confidence in [0, 1]. Optional only for results
-   * stored before judgment-engine#150; Gate preserves but never synthesizes it.
+   * stored before verdict#150; Gate preserves but never synthesizes it.
    */
   confidence?: number;
 };
@@ -142,7 +142,7 @@ export type GateReviewResult = {
      */
     engineDebugUrl?: string;
     /**
-     * Engine-owned capture-health footnote (Judgment Engine #20): fixed aggregate
+     * Engine-owned capture-health footnote (Verdict #20): fixed aggregate
      * prose about console errors, failed requests, blocked/substituted fonts, or
      * visual instability during capture. INFORMATIONAL ONLY: Gate renders it as a
      * caveat and never lets it change grade, severity, or the Check Run
