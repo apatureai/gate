@@ -1,7 +1,5 @@
 # gate
 
-**Archived. Provided as-is, with no updates expected.** Issues and pull requests are not monitored. Last verified working 2026-08-09 on macOS 15.6 with Node 24.14.0 and pnpm 10.34.3, and on Linux via Docker `node:24-slim`.
-
 Gate is the GitHub-facing half of an automated *design* reviewer: it resolves a pull request's preview URL, has a separate vision-model service critique the rendered UI, and publishes the findings as one sticky PR comment plus a Check Run.
 
 ## Why this exists
