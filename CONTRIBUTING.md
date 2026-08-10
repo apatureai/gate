@@ -22,7 +22,7 @@ tree instead of guesswork.
 Requirements:
 
 - **Node 24** (pinned in [`.node-version`](.node-version); `package.json` requires
-  `>=24 <25`)
+  `>=24`)
 - **pnpm 10.34.3** (pinned via `packageManager`; `corepack enable` will pick it up)
 
 The root workspace is `packages/*` — a pnpm workspace with TypeScript project
