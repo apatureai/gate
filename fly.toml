@@ -32,6 +32,6 @@ primary_region = "iad"
   size = "shared-cpu-1x"
   memory = "512mb"
 
-# Secrets (GitHub App private key, webhook secret, judgment-engine API key,
+# Secrets (GitHub App private key, webhook secret, GATE_ENGINE_API_KEY,
 # Stripe keys, DATABASE_URL, REDIS_URL) are injected from the Fly secret store
 # via `fly secrets set ...` and are never baked into the image.

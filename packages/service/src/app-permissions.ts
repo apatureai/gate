@@ -8,7 +8,7 @@
  *
  *   checks: write         publish the design-review Check Run
  *   pull_requests: write  post/update the sticky comment
- *   contents: read        read .designreview.yml and the diff
+ *   contents: read        read .gate.yml and the diff
  *   deployments: read     receive deployment_status for App-path discovery
  */
 export const GATE_APP_PERMISSIONS = {

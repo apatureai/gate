@@ -18,7 +18,7 @@ describe("setupFailureCheckRun", () => {
       conclusion: "neutral",
       title: "Config invalid",
     });
-    expect(run.summary).toContain(".designreview.yml");
+    expect(run.summary).toContain(".gate.yml");
     expect(run.summary).toContain("YAML syntax");
   });
 

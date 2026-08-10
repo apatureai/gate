@@ -69,7 +69,7 @@ export interface ProductionAppServerDeps {
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
   installationClients(job: ReviewJobPayload): InstallationClients | Promise<InstallationClients>;
-  /** Per-repo `.designreview.yml` (#27); defaults to `DEFAULT_CONFIG`. */
+  /** Per-repo `.gate.yml` (#27); defaults to `DEFAULT_CONFIG`. */
   loadConfig?(job: ReviewJobPayload): NormalizedDesignReviewConfig | Promise<NormalizedDesignReviewConfig>;
   /** Preview readiness gate before engine handoff (#149); defaults to shared waitForReadiness. */
   previewReadiness?(options: ReadinessOptions): Promise<ReadinessResult>;

@@ -201,7 +201,7 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
       windowStore: createInMemoryFullReviewWindow(),
       resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
       loadConfig: vi.fn(async () => {
-        const err = new Error("Invalid .designreview.yml");
+        const err = new Error("Invalid .gate.yml");
         err.name = "ConfigValidationError";
         (err as Error & { issues: string[] }).issues = ["rules.gate: Invalid enum value"];
         throw err;

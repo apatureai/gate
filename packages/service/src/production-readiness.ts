@@ -14,7 +14,7 @@ import { APP_SECRET_ENV_VARS } from "@gate/secrets";
 /** App secrets + the two infra URLs the app cannot boot without (go-live checklist, #64). */
 export const PRODUCTION_ENV_VARS: readonly string[] = [
   "GITHUB_APP_ID",
-  ...APP_SECRET_ENV_VARS, // GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET, JUDGMENT_ENGINE_*, STRIPE_*
+  ...APP_SECRET_ENV_VARS, // GITHUB_APP_PRIVATE_KEY, GITHUB_WEBHOOK_SECRET, GATE_ENGINE_*, STRIPE_*
   "DATABASE_URL",
   "REDIS_URL",
   "GATE_SCREENSHOT_OBJECT_URL_TEMPLATE",

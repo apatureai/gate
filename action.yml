@@ -20,9 +20,9 @@ inputs:
     description: "Command to build and serve the app locally as a fallback."
     required: false
   config-path:
-    description: "Path to .designreview.yml."
+    description: "Path to .gate.yml."
     required: false
-    default: ".designreview.yml"
+    default: ".gate.yml"
   gate-mode:
     description: "Override rules.gate: none | nits | blockers."
     required: false

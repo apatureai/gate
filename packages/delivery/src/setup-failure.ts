@@ -26,7 +26,7 @@ export function setupFailureCheckRun(error: unknown, surface: "Action" | "App" =
       name: "Apature Gate",
       conclusion: "neutral",
       title: "Config invalid",
-      summary: capText(`The .designreview.yml file is invalid, so Gate skipped this review.\n\n${issues.map((issue) => `- ${issue}`).join("\n")}`),
+      summary: capText(`The .gate.yml file is invalid, so Gate skipped this review.\n\n${issues.map((issue) => `- ${issue}`).join("\n")}`),
     };
   }
 

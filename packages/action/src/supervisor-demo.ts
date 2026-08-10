@@ -43,8 +43,8 @@ const FIXTURE_APP = fileURLToPath(new URL("../fixtures/preview-app.mjs", import.
 /** Runner secrets deliberately offered to the supervisor, to prove they do not reach the child. */
 export const DEMO_RUNNER_SECRETS: Record<string, string> = {
   GITHUB_TOKEN: "ghp_demo_not_a_real_token",
-  JUDGMENT_ENGINE_API_KEY: "sk_demo_not_a_real_key",
-  JUDGMENT_ENGINE_HMAC_SECRET: "hmac_demo_not_a_real_secret",
+  GATE_ENGINE_API_KEY: "sk_demo_not_a_real_key",
+  GATE_ENGINE_HMAC_SECRET: "hmac_demo_not_a_real_secret",
 };
 
 export interface ProcessInfo {

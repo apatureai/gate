@@ -1,17 +1,25 @@
 # Gate
 
-**Gate runs a pull request's preview build inside a hardened sandbox and publishes a design review back to GitHub as one sticky comment plus a Check Run.**
+**Gate runs a pull request's preview build inside a hardened sandbox, hands the verified preview URL to a critique service you supply, and publishes that service's design review back to GitHub as one sticky comment plus a Check Run.**
 
-It is for two audiences. If you want automated UI review on your pull requests, Gate is the GitHub-facing half: preview-URL discovery, provenance checks, review delivery, Check Run mapping, annotated screenshots. If you are building any GitHub Action that has to execute untrusted pull request code inside a runner, the sandbox supervisor in `packages/action` is the part worth stealing, and it runs standalone with no credentials and no network.
+**Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`judgment-engine`](https://github.com/apatureai/judgment-engine) is one; writing your own is [roadmap item 1](#roadmap). With no reachable critique service configured, every review ends in a neutral Check Run saying exactly that, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
+
+**The half it does own, it owns end to end.** A sandbox that executes untrusted pull request code and cleans up after it, preview-URL discovery with provenance checks, fork gating, queue supersession, a publish-time SHA guard, version- and schema-checked results, annotated screenshots, sticky-comment upsert, and Check Run mapping. Every one of those runs from a clean clone with no credentials, and both demos below prove it on your machine.
+
+**The strongest single piece is the sandbox supervisor** in `packages/action`, and it stands alone: no credentials, no network, no critique service, and no dependency on the rest of Gate. If you are writing any GitHub Action that has to execute untrusted pull request code inside a runner, that is the part worth stealing, and `pnpm demo` runs it against a fixture that actively fights teardown.
 
 Gate judges and reports. It never edits code, never commits, never opens fix PRs, and never requests `contents: write`.
 
 ```bash
 git clone https://github.com/apatureai/gate.git && cd gate
 pnpm install --frozen-lockfile
-pnpm demo          # sandbox supervisor, live, against a hostile fixture app
-pnpm demo:review   # a full design review comment written to ./out
+pnpm demo          # the sandbox supervisor, live, against a hostile fixture app
+pnpm demo:review   # a full design review comment, from a recorded critique, written to ./out
 ```
+
+![Gate architecture](gate_architecture.png)
+
+*The green panel, "What judgment-engine owns", is the half this repository does not implement. Everything else on the poster is here. Editable source: [`poster_gate.html`](poster_gate.html).*
 
 ## Why it is interesting
 
@@ -49,7 +57,7 @@ cd gate
 pnpm install --frozen-lockfile
 ```
 
-On a fresh clone you will see exactly **eight** `designreview` bin warnings: two each for `packages/action`, `engine`, `service` and `dashboard`, because `@gate/secrets` declares a workspace bin (`dist/cli/auth.js`) that only exists after a build, and pnpm tries both the workspace path and the linked copy. They disappear after `pnpm build` and nothing below depends on that bin.
+On a fresh clone you will see exactly **eight** `gate` bin warnings: two each for `packages/action`, `engine`, `service` and `dashboard`, because `@gate/secrets` declares a workspace bin (`dist/cli/auth.js`) that only exists after a build, and pnpm tries both the workspace path and the linked copy. They disappear after `pnpm build` and nothing below depends on that bin.
 
 Both demos compile what they need (`tsc -b packages/action`) before running, so no separate build step is required. To build everything: `pnpm build`.
 
@@ -82,7 +90,7 @@ platform darwin · node v24.14.0 · shell /bin/sh (platform default)
   result        group gone after 2106 ms · orphans: 0
 
 [2/4] environment allowlist
-  offered       GITHUB_TOKEN, JUDGMENT_ENGINE_API_KEY, JUDGMENT_ENGINE_HMAC_SECRET (fake runner secrets)
+  offered       GITHUB_TOKEN, GATE_ENGINE_API_KEY, GATE_ENGINE_HMAC_SECRET (fake runner secrets)
   passed in     HOME, LANG, PATH, TERM, TMPDIR
   child saw     HOME, LANG, PATH, PORT, PWD, SHLVL, TERM, TMPDIR, _, __CF_USER_TEXT_ENCODING  (PORT comes from the supervisor caller, PWD/SHLVL/_ from the shell)
   leaked        none
@@ -160,7 +168,11 @@ Gate review demo (recorded engine response, no model call, no network)
     ./out/annotated-f_002.png  (26878 bytes — finding f_002 boxed on the fixture page)
 ```
 
-**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`.
+**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`:
+
+<img src="gate_review_demo.png" alt="The review demo's annotated screenshot: a mobile pricing page with a red box and the label f_001 CTA off-palette around the primary call to action" width="320">
+
+That file is a committed copy of `out/annotated-f_001.png`, so you can compare your run against it. Regenerate it with `cp out/annotated-f_001.png gate_review_demo.png`.
 
 What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI; it replays a recorded judgment through the real delivery path.
 
@@ -183,7 +195,7 @@ What runs today, from a clean clone, with no credentials:
 | Review delivery (comment, Check Run, annotation) | **Works** | `pnpm demo:review` |
 | Engine client (async jobs, HMAC, schema checks) | **Works** | Exercised against a mock engine |
 | Action path orchestration (`runAction`) | **Works** | Covered end to end in `@gate/e2e` |
-| Preview login sealing (`designreview auth`) | **Works** | Runs offline against a bundled fixture |
+| Preview login sealing (`gate auth`) | **Works** | Runs offline against a bundled fixture |
 | GitHub Action, live | **Needs an endpoint** | Code complete; needs a reachable critique service and a published action ref |
 | App path (webhooks, queue, Postgres, RLS) | **Needs provisioning** | Tested against PGlite and in-memory fakes |
 | Dashboard | **Builds** | Core logic tested; the Next.js shell carries npm advisories, see roadmap |
@@ -197,10 +209,13 @@ Verified on 2026-08-09, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 ```
 pnpm build       tsc -b, clean, exit 0
 pnpm lint        eslint . --max-warnings=0, exit 0
+pnpm typecheck   tsc -b, exit 0
 pnpm test        Test Files  92 passed (92)
                       Tests  573 passed (573)
-                   Duration  27.90s
+                   Duration  19.40s
 ```
+
+Both demos were re-run against this revision, and the transcripts above are from those runs.
 
 ## Roadmap
 
@@ -220,6 +235,22 @@ Concrete, pickup-able work. Each one names the seam it plugs into.
 Longer-horizon design changes, each with the trigger that would justify it, are in [Deferred by design](#deferred-by-design).
 
 ## Usage
+
+### Naming
+
+One product, one word: **Gate**. The repository is `apatureai/gate`, the packages are `@gate/*`, the config file is `.gate.yml`, the CLI bin is `gate`, and the environment variables are `GATE_*`.
+
+Three of those are renames landed on 2026-08-09, deliberately taken while this has no users and the change is therefore free rather than left to break someone later. If you saw an earlier revision of this repository, translate:
+
+| Was | Is now | Why |
+|---|---|---|
+| `.designreview.yml` | `.gate.yml` | The config file named a category, not the tool reading it. |
+| bin `designreview` | bin `gate` | Same, and `gate auth` matches how every other surface is spelled. |
+| `JUDGMENT_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | `GATE_ENGINE_ENDPOINT` / `_API_KEY` / `_HMAC_SECRET` | These configure *Gate's* client for whatever critique service you point it at. `judgment-engine` is one such service, not the only one, so it should not own the variable names. The rest of the App's variables were already `GATE_*`. |
+
+**There is no fallback.** Gate reads `.gate.yml` and the `GATE_ENGINE_*` variables only; the old names are not accepted, and a leftover `.designreview.yml` is simply not found, which means Gate runs on default config rather than raising an error. Migrating is renaming one file and three variables.
+
+One deliberate exception, so it does not read as drift: what Gate publishes into *your* repository is titled **"Apature Gate"**, not "Gate". That is the Check Run name, the sticky comment heading, the `user-agent`, and the prefix on the Action's error lines. In a checks list next to twenty other entries, a bare "Gate" says nothing about who published it. The publisher name is qualified on purpose; everything you type stays short.
 
 ### The three surfaces
 
@@ -247,7 +278,7 @@ jobs:
         with:
           preview-url: ${{ steps.deploy.outputs.preview-url }}
           # or: preview-command: "pnpm build && pnpm preview"
-          config-path: .designreview.yml
+          config-path: .gate.yml
           gate-mode: none   # none | nits | blockers
 ```
 
@@ -275,9 +306,9 @@ docker run --rm -v "$PWD/event.json":/tmp/event.json \
   -e GITHUB_EVENT_PATH=/tmp/event.json \
   -e INPUT_PREVIEW_URL=https://acme-web-pr7.vercel.app \
   -e INPUT_GITHUB_TOKEN=<a token with checks:write and pull-requests:write> \
-  -e JUDGMENT_ENGINE_ENDPOINT=<your critique service base URL> \
-  -e JUDGMENT_ENGINE_API_KEY=<your key> \
-  -e JUDGMENT_ENGINE_HMAC_SECRET=<your HMAC secret> \
+  -e GATE_ENGINE_ENDPOINT=<your critique service base URL> \
+  -e GATE_ENGINE_API_KEY=<your key> \
+  -e GATE_ENGINE_HMAC_SECRET=<your HMAC secret> \
   gate-action
 ```
 
@@ -310,9 +341,11 @@ The four containment properties are described under [Why it is interesting](#why
 - **Readiness, bounded.** Polls the base URL (or `ready_path`) until an accepted status, with a 120 s ceiling and early abort if the command exits. The accepted set is Playwright's `webServer` set (2xx/3xx plus 400/401/402/403), because an auth-gated dev server is still "up".
 - **Output as evidence, not as an echo.** stdout and stderr drain into a bounded ring buffer. `parsePreviewBuildFacts` turns known patterns (compile errors, hydration mismatches, chunk 404s, deprecations) into structured facts for the critique; anything surfaced on the pull request is secret-scrubbed and length-capped first.
 
-### Sealing a preview login (`designreview auth`)
+### Sealing a preview login (`gate auth`)
 
 A repository whose preview deployment sits behind a login supplies a Playwright `storageState` JSON: the file `browserContext.storageState({ path })` writes, or `npx playwright open --save-storage=storageState.json <url>` after logging in by hand. It is never stored raw. The CLI in `@gate/secrets` origin-scopes it and seals it under a tenant key (envelope encryption; a deployment resolves a managed KMS key, the CLI uses a passphrase-derived local key).
+
+`@gate/secrets` declares that CLI as the `gate` bin, so a published install spells it `gate auth`. From a clone the bin is only linked into workspace packages once `dist/` exists, so call the built file directly, as below.
 
 You do not need Playwright to try it. `packages/secrets/fixtures/storageState.example.json` is a minimal, made-up one. This runs offline, after `pnpm build`:
 
@@ -384,9 +417,9 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 | Annotated artifact past retention | `/i/<id>.png` returns a 410 tombstone, not a broken redirect |
 | Blocking finding while in advisory mode | Check Run stays neutral |
 
-### Repository configuration (`.designreview.yml`)
+### Repository configuration (`.gate.yml`)
 
-A repository opts in with an optional `.designreview.yml`. Every field has a working default and the schema is strict, so a typo like `viewport:` is a validation error rather than a silently ignored key.
+A repository opts in with an optional `.gate.yml`. Every field has a working default and the schema is strict, so a typo like `viewport:` is a validation error rather than a silently ignored key.
 
 ```yaml
 preview:
@@ -428,9 +461,9 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 
 | Variable | Required | Default | Effect |
 |---|---|---|---|
-| `JUDGMENT_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → every review ends in a neutral "unavailable" Check Run. |
-| `JUDGMENT_ENGINE_API_KEY` | Action + App | none | Service auth. Unset → the job is rejected. |
-| `JUDGMENT_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests. Unset → requests are unsigned and refused. |
+| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → every review ends in a neutral "unavailable" Check Run. |
+| `GATE_ENGINE_API_KEY` | Action + App | none | Service auth. Unset → the job is rejected. |
+| `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests. Unset → requests are unsigned and refused. |
 | `GITHUB_TOKEN` / `INPUT_GITHUB_TOKEN` | Action | none | Posts the sticky comment and Check Run. Unset → nothing is published. |
 | `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH` | Action | none | Runner-supplied context. Missing → the entrypoint throws `missing GitHub Action context`. |
 | `GITHUB_DEFAULT_BRANCH` | Action | `main` | Default branch reported with the request. |
@@ -450,9 +483,7 @@ The App path fails fast at boot: `assertProductionEnv` throws one aggregated err
 
 ## How it works
 
-![Gate architecture](gate_architecture.png)
-
-*(The poster's editable source is [`poster_gate.html`](poster_gate.html), which loads the logos in [`icons/`](icons).)*
+The [architecture poster](#gate) is at the top of this file. Its editable source is [`poster_gate.html`](poster_gate.html), which loads the logos in [`icons/`](icons); regenerating `gate_architecture.png` after editing it is one command, in [Development](#development). The request path in detail:
 
 ```mermaid
 flowchart TD
@@ -479,7 +510,7 @@ pnpm workspace, TypeScript project references, Vitest, ESLint. Roughly 10k lines
 | Package | What it is |
 |---|---|
 | `packages/types` | The boundary contract: `GateReviewRequest`/`GateReviewResult`, config types, feedback events, the golden fixture loader, `deriveArtifactId`. Carries no model-specific fields by design. |
-| `packages/config` | `.designreview.yml`: Zod schema, validation, defaults, normalization. |
+| `packages/config` | `.gate.yml`: Zod schema, validation, defaults, normalization. |
 | `packages/engine` | Client for the async job API: submit/poll/cancel, HMAC signing, preview-handoff verification, `x-schema-version` parsing, rate limiting, per-account endpoint routing. |
 | `packages/delivery` | Sticky comment upsert, Check Run conclusion mapping, finding validation and degradation decisions, SVG+sharp screenshot annotation, baseline before/after pairs. |
 | `packages/service` | App path: Fastify server, GitHub App auth and webhook verification, permission assertions, deployment-preview discovery, BullMQ queue, supersession, orchestrator, fail-fast env check. |
@@ -523,6 +554,19 @@ npm run build
 ```
 
 `next build` rewrites `apps/dashboard/next-env.d.ts` and reformats `apps/dashboard/tsconfig.json` (it adds the generated route types and flips `jsx` to `react-jsx`). Both files are committed **in their post-build form**, so a build on a clean tree leaves `git status` clean; if you upgrade Next, expect one commit of regenerated churn.
+
+### Regenerating the architecture poster
+
+`gate_architecture.png` is a screenshot of `poster_gate.html`, which is designed at exactly 3020x2018. Edit the HTML, then re-shoot it with headless Chrome, from the repository root:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
+  --window-size=3020,2018 --virtual-time-budget=4000 \
+  --screenshot="$PWD/gate_architecture.png" "file://$PWD/poster_gate.html"
+```
+
+On Linux use `google-chrome` or `chromium` in place of the macOS path. The render is deterministic: re-shooting an unedited `poster_gate.html` reproduces the committed PNG byte for byte, so `git status` stays clean unless you actually changed the poster. Keep the window size, or the poster is cropped rather than scaled.
 
 More in [`CONTRIBUTING.md`](CONTRIBUTING.md): conventions, the three edits adding a package requires, and the two Postgres details that cost real time.
 

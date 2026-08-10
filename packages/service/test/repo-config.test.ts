@@ -18,7 +18,7 @@ function content(text: string): { type: string; encoding: string; content: strin
 }
 
 describe("createGitHubRepoConfigClient", () => {
-  it("loads and normalizes .designreview.yml from the PR head ref", async () => {
+  it("loads and normalizes .gate.yml from the PR head ref", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse(
         content(`
@@ -36,7 +36,7 @@ brand: Checkout UX
     expect(config.rules.minSeverityToComment).toBe("major");
     expect(config.brand).toBe("Checkout UX");
     expect(fetchImpl).toHaveBeenCalledWith(
-      "https://api.github.com/repos/acme/web/contents/.designreview.yml?ref=abc123",
+      "https://api.github.com/repos/acme/web/contents/.gate.yml?ref=abc123",
       expect.objectContaining({
         headers: expect.objectContaining({ authorization: "Bearer token" }),
       }),
@@ -55,7 +55,7 @@ brand: Checkout UX
     const fetchImpl = vi.fn(async () => jsonResponse(content("rules:\n  gate: always-block\n"))) as unknown as typeof fetch;
 
     await expect(createGitHubRepoConfigClient("token", fetchImpl).loadConfig("acme", "web", "abc123")).rejects.toThrow(
-      /Invalid .designreview.yml/,
+      /Invalid .gate.yml/,
     );
   });
 });

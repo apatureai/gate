@@ -37,11 +37,11 @@ describe("EnvSecretStore", () => {
     const store = new EnvSecretStore({
       GITHUB_APP_PRIVATE_KEY: "pk",
       GITHUB_WEBHOOK_SECRET: "ws",
-      JUDGMENT_ENGINE_API_KEY: "ek",
-      JUDGMENT_ENGINE_HMAC_SECRET: "hmac",
+      GATE_ENGINE_API_KEY: "ek",
+      GATE_ENGINE_HMAC_SECRET: "hmac",
       STRIPE_SECRET_KEY: "sk",
       STRIPE_WEBHOOK_SECRET: "swh",
-      JUDGMENT_ENGINE_ENDPOINT: "https://engine.acme.internal",
+      GATE_ENGINE_ENDPOINT: "https://engine.acme.internal",
     });
     for (const key of APP_SECRET_KEYS) {
       await expect(store.get(key)).resolves.toBeTruthy();

@@ -2,7 +2,7 @@
   "name": "@gate/config",
   "version": "0.0.0",
   "private": true,
-  "description": "Schema, validation, and defaults for .designreview.yml. Shared by extractor and dashboard.",
+  "description": "Schema, validation, and defaults for .gate.yml. Shared by extractor and dashboard.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

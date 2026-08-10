@@ -12,7 +12,7 @@ export {
 } from "./schema.js";
 export type { RawDesignReviewConfig } from "./schema.js";
 
-/** Thrown when a `.designreview.yml` fails validation; carries readable issues. */
+/** Thrown when a `.gate.yml` fails validation; carries readable issues. */
 export class ConfigValidationError extends Error {
   readonly issues: string[];
 
@@ -21,7 +21,7 @@ export class ConfigValidationError extends Error {
       issues instanceof z.ZodError
         ? issues.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
         : issues;
-    super(`Invalid .designreview.yml:\n${list.map((s) => `  - ${s}`).join("\n")}`);
+    super(`Invalid .gate.yml:\n${list.map((s) => `  - ${s}`).join("\n")}`);
     this.name = "ConfigValidationError";
     this.issues = list;
   }
@@ -71,7 +71,7 @@ export function parseDesignReviewConfig(input: unknown): NormalizedDesignReviewC
 }
 
 /**
- * Load a `.designreview.yml` from raw text. A null/empty file yields the full
+ * Load a `.gate.yml` from raw text. A null/empty file yields the full
  * defaults (the file is optional); YAML syntax errors and schema errors both
  * surface as `ConfigValidationError`.
  */
@@ -90,5 +90,5 @@ export function loadDesignReviewConfig(
   return parseDesignReviewConfig(parsed ?? {});
 }
 
-/** The fully-defaulted config used when no `.designreview.yml` is present. */
+/** The fully-defaulted config used when no `.gate.yml` is present. */
 export const DEFAULT_CONFIG: NormalizedDesignReviewConfig = parseDesignReviewConfig({});

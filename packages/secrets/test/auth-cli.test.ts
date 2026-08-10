@@ -101,7 +101,7 @@ describe("runAuthCli input handling", () => {
   it("requires --input and --origins, printing usage", async () => {
     expect(await runAuthCli(["--input", "state.json"], io)).toBe(1);
     expect(io.err.join("\n")).toContain("--input and --origins are both required");
-    expect(io.err.join("\n")).toContain("usage: designreview auth");
+    expect(io.err.join("\n")).toContain("usage: gate auth");
   });
 
   it("rejects invalid JSON with a one-line message", async () => {

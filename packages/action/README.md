@@ -1,8 +1,14 @@
 # @gate/action
 
-The Apature Gate **Action path**: a zero-infra GitHub Action that resolves a PR
-preview URL, submits a hosted `judgment-engine` review job, and posts a sticky
-comment + advisory Check Run. Judgment-only: it never requests `contents: write`.
+The Gate **Action path**: a zero-infra GitHub Action that resolves a PR preview
+URL, submits a review job to the critique service you configure through
+`GATE_ENGINE_ENDPOINT` (the public `judgment-engine` being one), and posts a
+sticky comment + advisory Check Run. No critique service ships in this
+repository, and with none reachable the run ends in a neutral Check Run saying
+so. Judgment-only: it never requests `contents: write`.
+
+The part that needs no service at all is the local-serve supervisor documented
+below; `pnpm demo` exercises it from a clean clone.
 
 ## Usage
 
@@ -22,7 +28,7 @@ jobs:
         with:
           preview-url: ${{ steps.deploy.outputs.preview-url }}
           # or: preview-command: "pnpm build && pnpm preview"
-          config-path: .designreview.yml
+          config-path: .gate.yml
           gate-mode: none   # none | nits | blockers
 ```
 
@@ -43,7 +49,7 @@ serves the PR locally** in the runner, then reviews that:
    SIGKILL 5s later, on success, failure, timeout, or job cancellation. No
    orphans.
 
-**Readiness tuning (`.designreview.yml`):** by default the base URL is polled and
+**Readiness tuning (`.gate.yml`):** by default the base URL is polled and
 the status set above is accepted. Override per repo:
 
 ```yaml
@@ -59,7 +65,7 @@ also attached to the Check Run (fenced, labeled untrusted) for quick triage.
 
 **Forks:** local-serve runs the PR's own code, so on a fork (untrusted) it is
 **disabled by default**. Set `preview: { fork_preview: true }` in
-`.designreview.yml` to opt in. The spawned server runs with an **allowlisted
+`.gate.yml` to opt in. The spawned server runs with an **allowlisted
 env** (your runner secrets, engine keys and `GITHUB_TOKEN` among them, are never
 passed to it), is loopback-only, and an off-localhost redirect is refused. On
 **Linux** the child group is also resource-capped (`ulimit`: ≤512 procs, ≤4 GiB/proc by

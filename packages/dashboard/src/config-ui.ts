@@ -2,7 +2,7 @@ import { ConfigValidationError, loadDesignReviewConfig } from "@gate/config";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 
 /**
- * Config UI core (TRD §13, §12, §11): validate `.designreview.yml` edits against
+ * Config UI core (TRD §13, §12, §11): validate `.gate.yml` edits against
  * the schema and propose changes the customer applies themselves: a copyable
  * config or a user-initiated GitHub PR. Gate NEVER writes to the repo (no
  * `contents: write`); the only "apply" path is a prefilled GitHub new-file URL
@@ -41,7 +41,7 @@ export interface ProposeConfigOptions {
  */
 export function buildProposeConfigUrl(options: ProposeConfigOptions): string {
   const branch = options.branch ?? "main";
-  const filename = options.filename ?? ".designreview.yml";
+  const filename = options.filename ?? ".gate.yml";
   const url = new URL(`https://github.com/${options.owner}/${options.name}/new/${branch}`);
   url.searchParams.set("filename", filename);
   url.searchParams.set("value", options.yamlText);

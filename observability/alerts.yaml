@@ -42,4 +42,4 @@ groups:
         labels:
           severity: ticket
         annotations:
-          summary: "judgment-engine error rate elevated"
+          summary: "critique service error rate elevated"

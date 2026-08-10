@@ -21,7 +21,7 @@ describe("onboarding steps + provider guides", () => {
 });
 
 describe("buildOnboardingConfig", () => {
-  it("produces a valid .designreview.yml from the answers", () => {
+  it("produces a valid .gate.yml from the answers", () => {
     const { yaml, validation } = buildOnboardingConfig({
       brand: "Calm fintech for SMB owners.",
       source: "vercel",

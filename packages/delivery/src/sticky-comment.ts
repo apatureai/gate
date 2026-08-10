@@ -1,7 +1,7 @@
 import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
 import { sanitizeDisplayText } from "./sanitize.js";
 
-/** Severity ladder, lowest to highest (mirrors the `.designreview.yml` enum). */
+/** Severity ladder, lowest to highest (mirrors the `.gate.yml` enum). */
 const SEVERITY_RANK: Record<Severity, number> = { nit: 0, minor: 1, major: 2, blocker: 3 };
 
 /**
@@ -19,7 +19,7 @@ export function findingsAtOrAbove(findings: Finding[], min: Severity = "nit"): F
  * Drop findings the repo has explicitly muted via `rules.suppress` (TRD §3). A
  * suppress entry matches a finding when it exactly equals the finding's stable
  * `id` or its `element` selector, the two identity fields callers can name in
- * `.designreview.yml` (`["f_001", "#cookie-banner"]`). Matching is exact, not
+ * `.gate.yml` (`["f_001", "#cookie-banner"]`). Matching is exact, not
  * glob/regex: pattern semantics are undefined in the config contract, so an
  * ambiguous match is never guessed. Like the severity filter, this only changes
  * what the comment *lists*; the grade and Check Run conclusion still reflect the

@@ -22,11 +22,11 @@ export interface SecretStore {
 const ENV_VARS: Record<AppSecretKey, string> = {
   githubAppPrivateKey: "GITHUB_APP_PRIVATE_KEY",
   webhookSecret: "GITHUB_WEBHOOK_SECRET",
-  engineApiKey: "JUDGMENT_ENGINE_API_KEY",
-  engineHmacSecret: "JUDGMENT_ENGINE_HMAC_SECRET",
+  engineApiKey: "GATE_ENGINE_API_KEY",
+  engineHmacSecret: "GATE_ENGINE_HMAC_SECRET",
   stripeSecretKey: "STRIPE_SECRET_KEY",
   stripeWebhookSecret: "STRIPE_WEBHOOK_SECRET",
-  engineEndpoint: "JUDGMENT_ENGINE_ENDPOINT",
+  engineEndpoint: "GATE_ENGINE_ENDPOINT",
 };
 
 /** The env var name backing each app secret key (the canonical source for go-live env checks, #64). */

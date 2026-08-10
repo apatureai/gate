@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Zod schema for `.designreview.yml` (TRD §3, §12). The raw on-disk shape is
+ * Zod schema for `.gate.yml` (TRD §3, §12). The raw on-disk shape is
  * snake_case; every field has a working default so the file is optional and a
  * missing/empty config is valid. `.strict()` surfaces typos (e.g. `viewport:`)
  * as validation errors rather than silently ignoring them.

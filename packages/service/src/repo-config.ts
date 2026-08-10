@@ -3,7 +3,7 @@ import { withRateLimitRetry } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import { GITHUB_API_ROOT } from "./github-api.js";
 
-const DEFAULT_CONFIG_PATH = ".designreview.yml";
+const DEFAULT_CONFIG_PATH = ".gate.yml";
 
 export interface RepoConfigClient {
   loadConfig(owner: string, name: string, ref: string): Promise<NormalizedDesignReviewConfig>;
@@ -43,7 +43,7 @@ export function createGitHubRepoConfigClient(
       const url = `${GITHUB_API_ROOT}/repos/${owner}/${name}/contents/${path}?ref=${encodeURIComponent(ref)}`;
       const res = await send(url);
       if (res.status === 404) return DEFAULT_CONFIG;
-      if (!res.ok) throw new Error(`fetch .designreview.yml failed: ${res.status}`);
+      if (!res.ok) throw new Error(`fetch .gate.yml failed: ${res.status}`);
 
       const raw = (await res.json()) as RawContentFile | RawContentFile[];
       if (Array.isArray(raw)) return DEFAULT_CONFIG;

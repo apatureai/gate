@@ -3,7 +3,7 @@ import { LocalKms } from "../kms.js";
 import { prepareStorageStateArtifact, type StorageState } from "../storage-state.js";
 
 /**
- * `npx designreview auth` wizard (TRD §4.3). Records the login (via the capture
+ * `npx gate auth` wizard (TRD §4.3). Records the login (via the capture
  * repo's Playwright flow, #25, which produces a storageState JSON), then origin-scopes
  * and encrypts it under the tenant key, writing the sealed artifact to store per
  * repo. Production resolves the tenant CMK from a managed KMS; this CLI uses a
@@ -13,8 +13,8 @@ import { prepareStorageStateArtifact, type StorageState } from "../storage-state
  * spawning a process: `auth.ts` only calls `runAuthCli` and sets the exit code.
  */
 export const AUTH_USAGE = [
-  "usage: designreview auth --input <storageState.json> --origins <https://app.acme.com,...>",
-  "                        [--out <file>] [--tenant <id>]",
+  "usage: gate auth --input <storageState.json> --origins <https://app.acme.com,...>",
+  "                 [--out <file>] [--tenant <id>]",
   "",
   "  --input    Playwright storageState JSON to seal (see packages/secrets/fixtures/storageState.example.json)",
   "  --origins  comma-separated origin allowlist; cookies/localStorage outside it are dropped",

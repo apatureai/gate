@@ -1,5 +1,5 @@
 /**
- * Normalized `.designreview.yml` configuration (TRD §3).
+ * Normalized `.gate.yml` configuration (TRD §3).
  *
  * Gate validates and normalizes the raw repo config, then passes these
  * normalized values to `judgment-engine`. Gate does NOT implement design-token

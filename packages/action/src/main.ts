@@ -39,7 +39,7 @@ async function main(): Promise<void> {
   }
 
   const token = input("github-token") || (process.env.GITHUB_TOKEN ?? "");
-  const configPath = input("config-path") || ".designreview.yml";
+  const configPath = input("config-path") || ".gate.yml";
   const gateModeInput = input("gate-mode");
   const gh = createGitHubApi(token, { owner, repo, prNumber: pr.number, headSha: pr.head.sha });
 
@@ -69,9 +69,9 @@ async function main(): Promise<void> {
 
   const engine = createJudgmentEngineClient(
     createHttpEngineTransport({
-      baseUrl: process.env.JUDGMENT_ENGINE_ENDPOINT ?? "",
-      apiKey: process.env.JUDGMENT_ENGINE_API_KEY,
-      hmacSecret: process.env.JUDGMENT_ENGINE_HMAC_SECRET,
+      baseUrl: process.env.GATE_ENGINE_ENDPOINT ?? "",
+      apiKey: process.env.GATE_ENGINE_API_KEY,
+      hmacSecret: process.env.GATE_ENGINE_HMAC_SECRET,
     }),
   );
 

@@ -32,7 +32,7 @@ describe("buildProposeConfigUrl (user-initiated, no contents:write)", () => {
       buildProposeConfigUrl({ owner: "acme", name: "web", yamlText: "dark_mode: true" }),
     );
     expect(url.origin + url.pathname).toBe("https://github.com/acme/web/new/main");
-    expect(url.searchParams.get("filename")).toBe(".designreview.yml");
+    expect(url.searchParams.get("filename")).toBe(".gate.yml");
     expect(url.searchParams.get("value")).toBe("dark_mode: true");
     // It's a deep-link the user acts on; Gate performs no write itself.
     expect(url.hostname).toBe("github.com");
@@ -40,9 +40,9 @@ describe("buildProposeConfigUrl (user-initiated, no contents:write)", () => {
 
   it("honors a custom branch + filename", () => {
     const url = new URL(
-      buildProposeConfigUrl({ owner: "acme", name: "web", yamlText: "x: 1", branch: "dev", filename: "config/.designreview.yml" }),
+      buildProposeConfigUrl({ owner: "acme", name: "web", yamlText: "x: 1", branch: "dev", filename: "config/.gate.yml" }),
     );
     expect(url.pathname).toBe("/acme/web/new/dev");
-    expect(url.searchParams.get("filename")).toBe("config/.designreview.yml");
+    expect(url.searchParams.get("filename")).toBe("config/.gate.yml");
   });
 });

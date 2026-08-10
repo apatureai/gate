@@ -232,15 +232,15 @@ describe("buildAllowlistedEnv (#70 fork-safety)", () => {
     const env = buildAllowlistedEnv({
       PATH: "/usr/bin",
       HOME: "/home/runner",
-      JUDGMENT_ENGINE_API_KEY: "sk-secret",
-      JUDGMENT_ENGINE_HMAC_SECRET: "hmac",
+      GATE_ENGINE_API_KEY: "sk-secret",
+      GATE_ENGINE_HMAC_SECRET: "hmac",
       GITHUB_TOKEN: "ghs_token",
       MY_APP_SECRET: "x",
     });
     expect(env.PATH).toBe("/usr/bin");
     expect(env.HOME).toBe("/home/runner");
-    expect(env.JUDGMENT_ENGINE_API_KEY).toBeUndefined();
-    expect(env.JUDGMENT_ENGINE_HMAC_SECRET).toBeUndefined();
+    expect(env.GATE_ENGINE_API_KEY).toBeUndefined();
+    expect(env.GATE_ENGINE_HMAC_SECRET).toBeUndefined();
     expect(env.GITHUB_TOKEN).toBeUndefined();
     expect(env.MY_APP_SECRET).toBeUndefined();
   });

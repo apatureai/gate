@@ -185,7 +185,7 @@ export async function runAction(
       await deps.publishCheckRun(
         neutralCheckRun(
           "Preview skipped on fork",
-          "Local preview is disabled for fork PRs; set `fork_preview: true` in .designreview.yml to enable.",
+          "Local preview is disabled for fork PRs; set `fork_preview: true` in .gate.yml to enable.",
         ),
       );
       return { status: "no_preview", conclusion: "neutral", notReviewed: "fork preview disabled" };

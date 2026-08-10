@@ -7,7 +7,7 @@ import { validateConfig, type ConfigValidation } from "./config-ui.js";
  * Onboarding flow (TRD §3.1, §12, §5.2): collect the brand block (the primary
  * ask), the `protection_bypass` secret (KMS-stored), and the preview source/env,
  * documenting Netlify and Cloudflare equivalents. Produces a valid
- * `.designreview.yml` the customer adopts (Gate never writes it, #18).
+ * `.gate.yml` the customer adopts (Gate never writes it, #18).
  */
 export interface OnboardingStep {
   key: "brand" | "protection_bypass" | "preview";
@@ -57,7 +57,7 @@ export interface OnboardingInput {
   protectionBypassSecretName?: string | null;
 }
 
-/** Build the `.designreview.yml` text from onboarding answers, validated. */
+/** Build the `.gate.yml` text from onboarding answers, validated. */
 export function buildOnboardingConfig(input: OnboardingInput): { yaml: string; validation: ConfigValidation } {
   const environment =
     input.environment ?? PROVIDER_GUIDES[input.source]?.defaultEnvironment ?? "Preview";
