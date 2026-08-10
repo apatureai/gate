@@ -129,7 +129,7 @@ lint/typecheck/test and the dashboard build.
 
 - [`README.md`](README.md) is the documentation: what Gate is, the runnable demos, the
   engine contract, the Action-path threat model, failure modes, configuration and the package map
-- [`SECURITY.md`](SECURITY.md) is worth reading before you run this against anything real
+- [`SECURITY.md`](SECURITY.md) is the file to read before running this against anything real
 
 One boundary is load-bearing across the whole codebase: **Gate judges and
 verifies, it never edits code.** It publishes PR comments and Check Runs and
