@@ -31,7 +31,7 @@ export interface SelectOptions {
   perInstallationCap: number;
   /** Jobs already running per installation. */
   inFlightByInstallation?: Record<string, number>;
-  /** `(repo, pr)` keys already running — never start a second one. */
+  /** `(repo, pr)` keys already running; never start a second one. */
   inFlightKeys?: Iterable<string>;
   /** Global slots available to start now. */
   maxToStart: number;

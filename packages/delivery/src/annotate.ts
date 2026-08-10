@@ -3,12 +3,12 @@ import type { Severity } from "@gate/types";
 /**
  * Annotated screenshots (TRD §7.1). Boxes are drawn from **recorded DOM geometry
  * rects** (from the engine's capture geometry map), never from VLM-predicted
- * pixel coordinates — so the box always lands on the real element. Gate composites
+ * pixel coordinates, so the box always lands on the real element. Gate composites
  * an SVG overlay onto the base screenshot with `sharp`.
  *
  * `sharp` (a native module) is loaded lazily inside `annotateScreenshot` rather
  * than at the top level: this module is re-exported through the `@gate/service`
- * barrel, which the dashboard imports only for capability/URL helpers — eagerly
+ * barrel, which the dashboard imports only for capability/URL helpers. Eagerly
  * loading sharp there forces its native binary on a path that never annotates
  * and breaks `next build` page-data collection.
  */

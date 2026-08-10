@@ -3,7 +3,7 @@ import { Redis, type RedisOptions } from "ioredis";
 /**
  * Resilient connection options shared by every Gate Redis client.
  *
- * - `maxRetriesPerRequest: null` — required by BullMQ for blocking commands and
+ * - `maxRetriesPerRequest: null` is required by BullMQ for blocking commands and
  *   keeps commands queued across reconnects instead of failing fast.
  * - `retryStrategy` always returns a (capped) delay, so the client keeps
  *   reconnecting rather than silently giving up (acceptance: no silent drops).

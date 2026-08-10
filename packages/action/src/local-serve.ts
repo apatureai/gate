@@ -15,7 +15,7 @@ import {
  *
  * Implementation note (refines DR-9): built on `node:child_process` directly,
  * NOT execa. A dev server (`npm run dev`) forks children, so teardown MUST
- * group-kill the tree via `process.kill(-pgid, sig)` — execa's
+ * group-kill the tree via `process.kill(-pgid, sig)`; execa's
  * `forceKillAfterDelay` only signals the direct child, and its `cleanup` is
  * covered by Part 5's process signal handlers + the tini PID-1 backstop. So
  * execa would be redundant here; the grace->SIGKILL escalation is ours. Linux
@@ -32,7 +32,7 @@ export type LocalServerReason = "spawn_failed" | "early_exit" | "not_ready" | "r
 export interface LocalServerHandle {
   url: string;
   pid: number;
-  /** Captured stdout+stderr so far (bounded ring buffer) — the build/boot log (#70 U1). */
+  /** Captured stdout+stderr so far (bounded ring buffer): the build/boot log (#70 U1). */
   output(): string;
   /** Terminate the process group (SIGTERM -> grace -> SIGKILL). Idempotent. */
   stop(): Promise<void>;
@@ -194,7 +194,7 @@ export async function startLocalServer(
     // Gate teardown on GROUP liveness, not the direct-child `exited` flag: with
     // `{shell:true}` the direct child is the shell, which can exit while a trapped
     // grandchild (the dev server) survives. Keying on `exited` would skip the
-    // SIGKILL and orphan that grandchild (Linux runners — the prod target).
+    // SIGKILL and orphan that grandchild (Linux runners, the prod target).
     if (!groupAlive()) return;
     killGroup("SIGTERM");
     const start = (options.now ?? Date.now)();
@@ -245,7 +245,7 @@ export async function startLocalServer(
     return { ok: true, server: { url: options.url, pid, output: () => tail, stop } };
   }
 
-  // Not ready: classify from the poll outcome BEFORE teardown — calling stop()
+  // Not ready: classify from the poll outcome BEFORE teardown, because calling stop()
   // SIGTERMs a still-running server, which would otherwise look like early_exit.
   if (spawnErrorMessage) return { ok: false, reason: "spawn_failed", detail: spawnErrorMessage, tail };
   const childDiedOnItsOwn = !result.ready && result.reason === "child_exited";

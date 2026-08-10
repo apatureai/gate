@@ -1,6 +1,6 @@
 /**
- * Free-text secret scrubber (#78). `redact()` (redact.ts) masks STRUCTURED data —
- * sensitive object keys, signed-URL strings, image data — but cannot sanitize an
+ * Free-text secret scrubber (#78). `redact()` (redact.ts) masks STRUCTURED data
+ * (sensitive object keys, signed-URL strings, image data) but cannot sanitize an
  * arbitrary blob of free text such as a preview-command's stdout/stderr tail.
  * That tail is attacker-influenced (fork PR code) and may print the user's OWN
  * secrets, so before any of it reaches a PR Check Run it must have known secret
@@ -41,7 +41,7 @@ const PATTERNS: TextSecretPattern[] = [
   { kind: "signed-url", re: /[?&](?:x-amz-signature|signature|sig|access_token|token)=([^&\s'"]+)/gi, group: 1 },
   // Explicit secret assignments: API_KEY=..., AWS_SECRET_ACCESS_KEY=..., password: "...".
   // The key may be an UPPER_SNAKE / camel identifier that CONTAINS a secret word
-  // (so `\b` word-boundaries won't do — `AWS_SECRET_ACCESS_KEY` has none around
+  // (so `\b` word-boundaries won't do: `AWS_SECRET_ACCESS_KEY` has none around
   // "SECRET"). The value lookahead avoids re-masking an already-masked token.
   {
     kind: "secret",

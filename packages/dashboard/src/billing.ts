@@ -4,7 +4,7 @@ import type { SqlQuery } from "./runs.js";
 /**
  * Billing for the CI Gate product (PRD §9): $20/dev/mo Stripe subscriptions and
  * enforced free-tier limits. Pure billing logic + a Postgres store; the Stripe
- * webhook route wires these. (MCP-review metering is out of scope — that's
+ * webhook route wires these. (MCP-review metering is out of scope; that's
  * apatureai/mcp-review.)
  */
 export const PRICE_PER_SEAT_CENTS = 2000; // $20 / dev / month
@@ -79,7 +79,7 @@ export function mapStripeEvent(event: StripeEvent): BillingUpdate | null {
     case "customer.subscription.updated": {
       const status = obj["status"];
       // A subscription can transition to canceled/unpaid via an update, not only
-      // the deleted event — drop to free in that case. (cancel_at_period_end
+      // the deleted event, so drop to free in that case. (cancel_at_period_end
       // stays active/paid: access continues until the period ends.)
       if (status === "canceled" || status === "unpaid") {
         return { installationId, plan: "free", status: "canceled" };

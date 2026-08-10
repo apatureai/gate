@@ -2,8 +2,8 @@
  * Preview readiness poll (TRD §3.2, §15.2). Polls a URL until it responds within
  * a ceiling, honoring an optional `wait_seconds` floor, then hands off to the
  * engine's in-page stability protocol (the real arbiter of "settled"). The
- * pattern is abort-and-restart on the latest push — start immediately, abort on
- * supersession (signal), restart for the new SHA — NOT a delay-start timer.
+ * pattern is abort-and-restart on the latest push: start immediately, abort on
+ * supersession (signal), restart for the new SHA. NOT a delay-start timer.
  *
  * Lives in `@gate/engine` (shared) so both the App path (`@gate/service`) and the
  * Action path (`@gate/action` local-serve, #70) use one definition of "ready".

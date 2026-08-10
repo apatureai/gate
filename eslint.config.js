@@ -14,7 +14,7 @@ export default tseslint.config(
   {
     // Fixture apps are plain Node ESM scripts spawned as child processes (they
     // stand in for a repo's `preview-command`), so they are outside the
-    // TypeScript project but still linted — they just need the Node globals.
+    // TypeScript project but still linted; they just need the Node globals.
     files: ["packages/*/fixtures/**/*.mjs"],
     languageOptions: {
       globals: {

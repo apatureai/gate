@@ -93,7 +93,7 @@ describe("sign/verify round-trip", () => {
       now: 1000,
     });
     // signature won't match (signed over "1000"), but even a matching sig must not
-    // bypass skew — the reason is signature_mismatch OR timestamp_skew, never ok.
+    // bypass skew: the reason is signature_mismatch OR timestamp_skew, never ok.
     expect(result.ok).toBe(false);
   });
 

@@ -7,7 +7,7 @@ import type { PreviewBuildFact, PreviewBuildFactKind } from "@gate/types";
  * (a hydration warning, a failed compile, a 404'd asset are design-quality
  * signals a screenshot alone hides). Framework-agnostic, line-based, conservative
  * (only well-known patterns), deduped, and capped so it can never bloat the
- * request. Pure — no I/O.
+ * request. Pure, with no I/O.
  */
 const MAX_FACTS = 20;
 const MAX_MESSAGE_LEN = 300;

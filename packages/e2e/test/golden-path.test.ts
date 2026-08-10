@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Golden-path demo-as-test (#42, TRD §14): the full Action path against the
- * MOCK engine — break -> annotated review under the 90s budget -> fix flips the
+ * MOCK engine: break -> annotated review under the 90s budget -> fix flips the
  * Check Run green. The scheduled live-pipeline run is an ops wiring step.
  */
 const REVIEW_BUDGET_MS = 90_000;

@@ -5,10 +5,10 @@ import { GITHUB_API_ROOT } from "./github-api.js";
 /**
  * App-path GitHub REST client (installation token): the comment + check-run
  * surface `runHostedReview` delivers through (#10/#11). It is the App-path peer
- * of the Action path's `createGitHubApi` — kept in `@gate/service` (alongside
+ * of the Action path's `createGitHubApi`, kept in `@gate/service` (alongside
  * `createGitHubPullsClient`) rather than imported from `@gate/action`, since the
  * service must not depend on the top-level Action package. It only reads contents
- * and writes issue comments + check runs — **never `contents: write`**. All calls
+ * and writes issue comments + check runs, but **never `contents: write`**. All calls
  * honor GitHub primary/secondary rate limits (#49).
  */
 

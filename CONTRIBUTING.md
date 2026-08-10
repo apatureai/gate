@@ -24,7 +24,7 @@ Requirements:
   `>=24`)
 - **pnpm 10.34.3** (pinned via `packageManager`; `corepack enable` will pick it up)
 
-The root workspace is `packages/*` — a pnpm workspace with TypeScript project
+The root workspace is `packages/*`, a pnpm workspace with TypeScript project
 references, Vitest, and ESLint:
 
 ```bash
@@ -38,7 +38,7 @@ All three must pass; lint treats warnings as failures. `pnpm build` is the same
 `tsc -b`, and `pnpm clean` runs `tsc -b --clean`.
 
 The Next.js dashboard shell in `apps/dashboard` is deliberately **outside** the
-root workspace — it keeps React/Next in its own `package-lock.json` and builds
+root workspace. It keeps React/Next in its own `package-lock.json` and builds
 with its own toolchain, exactly as CI does it:
 
 ```bash
@@ -71,7 +71,7 @@ Vitest picks up `packages/*/test/**/*.test.ts` and aliases each `@gate/*` packag
 straight to its source (see [`vitest.config.ts`](vitest.config.ts)), so tests run
 without a build step. The suites that boot PGlite are the slowest in the repo,
 which is why that config raises `testTimeout`/`hookTimeout` above the vitest
-defaults — don't lower them.
+defaults. Don't lower them.
 
 ## Codebase conventions
 
@@ -105,7 +105,7 @@ Two Postgres details are easy to get wrong and cost real time:
   the RLS tests pass vacuously. Foreign-key checks bypass RLS regardless, so
   cross-tenant FKs still validate.
 - The tenant GUC is set with `set_config('app.current_installation_id', $1,
-  true)` — transaction-local — because `SET LOCAL name = $1` cannot be
+  true)`, which is transaction-local, because `SET LOCAL name = $1` cannot be
   parameterized.
 
 ## Container images
@@ -127,9 +127,9 @@ lint/typecheck/test and the dashboard build.
 
 ## Orientation
 
-- [`README.md`](README.md) — the documentation: what Gate is, the runnable demos, the
+- [`README.md`](README.md) is the documentation: what Gate is, the runnable demos, the
   engine contract, the Action-path threat model, failure modes, configuration and the package map
-- [`SECURITY.md`](SECURITY.md) — read this before running it against anything real
+- [`SECURITY.md`](SECURITY.md) is worth reading before you run this against anything real
 
 One boundary is load-bearing across the whole codebase: **Gate judges and
 verifies, it never edits code.** It publishes PR comments and Check Runs and

@@ -1,8 +1,8 @@
 /**
  * Human-readable rendering of a fatal Action error.
  *
- * The entrypoint never rethrows — the Check Run, not the exit code, is the gate
- * (#21) — so this log line is the *only* thing an operator sees when the run
+ * The entrypoint never rethrows: the Check Run, not the exit code, is the gate
+ * (#21). So this log line is the *only* thing an operator sees when the run
  * dies before anything can be published. A bare stack trace from `readFileSync`
  * or a `401` is not diagnosable, so the common wiring mistakes get a second
  * line naming the input that is wrong.

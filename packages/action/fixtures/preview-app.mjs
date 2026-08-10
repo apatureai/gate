@@ -1,5 +1,5 @@
 /**
- * Fixture "preview app" for the sandbox supervisor demo — it stands in for the
+ * Fixture "preview app" for the sandbox supervisor demo. It stands in for the
  * `preview-command` a repo would run in its own GitHub runner (`pnpm dev`,
  * `npm run preview`, …). No network access, no dependencies.
  *

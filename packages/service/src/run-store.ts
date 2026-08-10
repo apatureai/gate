@@ -11,7 +11,7 @@ import type { SqlQuery } from "./review-window.js";
  * keyed on the repository-scoped completed-review identity (#65) so a retry of
  * the same repo/PR/head SHA never creates a second row or republishes.
  *
- * Gate stores only judgment metadata + lineage — never critique JSON or
+ * Gate stores only judgment metadata + lineage, never critique JSON or
  * screenshot bytes (those stay owned by judgment-engine). Run it through the
  * installation-scoped (RLS) transaction helper in production.
  */

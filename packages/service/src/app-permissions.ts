@@ -1,15 +1,15 @@
 /**
- * Minimal GitHub App permissions (TRD §11) — the neutrality guarantee.
+ * Minimal GitHub App permissions (TRD §11): the neutrality guarantee.
  *
  * Gate requests ONLY these four scopes and NEVER `contents: write`: it is
  * judgment-only and must be unable to edit, commit, or push customer code. That
- * inability is the product promise, not just hygiene — a reviewer that cannot
+ * inability is the product promise, not just hygiene: a reviewer that cannot
  * write code cannot be coerced into changing it.
  *
- *   checks: write        — publish the design-review Check Run
- *   pull_requests: write — post/update the sticky comment
- *   contents: read       — read .designreview.yml and the diff
- *   deployments: read    — receive deployment_status for App-path discovery
+ *   checks: write         publish the design-review Check Run
+ *   pull_requests: write  post/update the sticky comment
+ *   contents: read        read .designreview.yml and the diff
+ *   deployments: read     receive deployment_status for App-path discovery
  */
 export const GATE_APP_PERMISSIONS = {
   checks: "write",

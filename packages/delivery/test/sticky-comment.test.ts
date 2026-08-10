@@ -73,11 +73,11 @@ describe("renderStickyComment", () => {
   it("applies min_severity_to_comment: omits findings below the threshold", () => {
     // golden has one major, one minor, one nit finding.
     const out = renderStickyComment(golden, { headSha: "abc1234", minSeverityToComment: "major" });
-    expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept (in Should fix)
+    expect(out).toContain("Primary CTA uses an off-brand color"); // major, kept (in Should fix)
     expect(out).toContain("Should fix (1)"); // the major finding still lives here
-    expect(out).not.toContain("Pricing card grid overflows"); // minor — omitted
+    expect(out).not.toContain("Pricing card grid overflows"); // minor, omitted
     expect(out).not.toContain(golden.artifacts.annotatedScreenshots[1]!.url); // omitted finding's evidence
-    expect(out).not.toContain("Inconsistent vertical rhythm"); // nit — omitted
+    expect(out).not.toContain("Inconsistent vertical rhythm"); // nit, omitted
     expect(out).not.toContain("Nits ("); // nits section empties out
   });
 
@@ -100,7 +100,7 @@ describe("renderStickyComment", () => {
       headSha: "abc1234",
       suppress: [".pricing-grid", "f_003"],
     });
-    expect(out).toContain("Primary CTA uses an off-brand color"); // major — kept
+    expect(out).toContain("Primary CTA uses an off-brand color"); // major, kept
     expect(out).not.toContain("Pricing card grid overflows"); // suppressed by element
     expect(out).not.toContain(golden.artifacts.annotatedScreenshots[1]!.url); // suppressed evidence omitted
     expect(out).not.toContain("Inconsistent vertical rhythm"); // suppressed by id

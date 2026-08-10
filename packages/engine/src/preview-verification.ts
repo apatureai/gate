@@ -5,7 +5,7 @@ import type { GateReviewRequest } from "@gate/types";
  * Gate-side preview-URL provenance guard before engine handoff (TRD §8).
  *
  * Gate answers "is this URL one this installation or configured workflow
- * legitimately produced?" — and independently re-checks provider/domain here
+ * legitimately produced?", and independently re-checks provider/domain here
  * rather than trusting the discovery layer (defense-in-depth). Deep SSRF,
  * internal-IP egress deny, and DNS-rebind recheck remain engine-owned; do NOT
  * duplicate those here.

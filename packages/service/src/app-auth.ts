@@ -3,7 +3,7 @@ import { App } from "@octokit/app";
 /**
  * GitHub App authentication via @octokit/app (TRD §2): app-JWT minting and
  * installation-token caching (the library caches installation tokens until they
- * near expiry — we don't hand-roll it). The private key + webhook secret come
+ * near expiry, so we don't hand-roll it). The private key + webhook secret come
  * from the KMS-backed store (`@gate/secrets`).
  */
 export interface GitHubAppAuth {

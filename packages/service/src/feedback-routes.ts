@@ -62,7 +62,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, options: FeedbackRo
       );
   });
 
-  // GET must never mutate — a prefetch/scan hitting /feedback is rejected.
+  // GET must never mutate, so a prefetch/scan hitting /feedback is rejected.
   app.get("/feedback", async (_request, reply) => reply.code(405).send({ error: "use POST" }));
 
   app.post("/feedback", async (request, reply) => {

@@ -41,7 +41,7 @@ function cookieDomainCoversHost(cookieDomain: string, host: string): boolean {
 
 /**
  * Keep only cookies whose domain covers an allowed origin host, and only
- * localStorage origins in the allowlist — so a recorded session can't smuggle
+ * localStorage origins in the allowlist, so a recorded session can't smuggle
  * cookies/state for unrelated domains.
  */
 export function originScopeStorageState(state: StorageState, allowedOrigins: string[]): StorageState {

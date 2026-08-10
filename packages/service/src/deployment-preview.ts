@@ -32,9 +32,9 @@ export interface DeploymentPreviewOptions {
   expectedHeadSha?: string;
   /**
    * Operator-allowlisted custom preview host suffixes (e.g. "preview.acme.com").
-   * A matching host that isn't a known provider is attributed provider "explicit"
-   * — safe because the deployment_status webhook is GitHub-authenticated
-   * provenance. Without this, only known provider domains are accepted.
+   * A matching host that isn't a known provider is attributed provider
+   * "explicit", which is safe because the deployment_status webhook is
+   * GitHub-authenticated provenance. Without this, only known provider domains are accepted.
    */
   allowedHostSuffixes?: string[];
   /** Returns true if `(sha, deployment_id)` was already processed. */

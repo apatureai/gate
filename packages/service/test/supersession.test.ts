@@ -31,7 +31,7 @@ describe("current_sha tracking + publish-time guard", () => {
   it("publish-time guard discards a stale SHA even if the abort signal was bypassed", async () => {
     const store = createInMemorySupersessionStore();
     const key = await recordEnqueue(store, repo, "current");
-    // No signal involved at all — the guard alone rejects the stale SHA.
+    // No signal involved at all; the guard alone rejects the stale SHA.
     expect(await guardPublish(store, key, "old")).toBe(false);
   });
 

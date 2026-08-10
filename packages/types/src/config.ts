@@ -3,7 +3,7 @@
  *
  * Gate validates and normalizes the raw repo config, then passes these
  * normalized values to `judgment-engine`. Gate does NOT implement design-token
- * extraction itself — that is the engine's job grounded in the repo's UI DNA.
+ * extraction itself; that is the engine's job, grounded in the repo's UI DNA.
  */
 
 /** Where the preview deployment comes from. */

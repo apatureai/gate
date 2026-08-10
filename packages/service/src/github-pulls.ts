@@ -5,7 +5,7 @@ import { GITHUB_API_ROOT } from "./github-api.js";
 /**
  * Concrete App-path GitHub PR adapter (#2 installation token). The orchestration
  * (createDeploymentStatusHandler.resolvePullRequest, hydrateReviewContext's
- * PullRequestFetcher) depends only on these interfaces — this is their
+ * PullRequestFetcher) depends only on these interfaces; this is their
  * production implementation, honoring rate limits and never requesting
  * contents:write.
  */

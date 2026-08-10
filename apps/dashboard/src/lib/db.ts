@@ -6,7 +6,7 @@ import { pgTenantRunner } from "@gate/db/tenant";
  * Postgres adapter exposing the core's `SqlQuery` seam. The dashboard core
  * (`listRunHistory`, `loadFeedbackEvents`, billing store) is written against
  * this interface, so the app only supplies a connection. The app role must be a
- * non-superuser without BYPASSRLS so tenant RLS (#50) holds — defense in depth
+ * non-superuser without BYPASSRLS so tenant RLS (#50) holds, defense in depth
  * with the edge `assertInstallationAccess` guard.
  */
 let pool: Pool | undefined;

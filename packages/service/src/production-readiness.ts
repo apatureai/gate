@@ -3,12 +3,12 @@ import { APP_SECRET_ENV_VARS } from "@gate/secrets";
 /**
  * Production-readiness env check (#64). Go-live needs a set of secrets + infra
  * URLs configured; a missing one otherwise surfaces as an opaque runtime failure
- * deep in a request (a nil secret, a failed DB connect) — or worse, silently.
+ * deep in a request (a nil secret, a failed DB connect), or worse, silently.
  * This turns "did I set every secret?" into a single fail-fast boot error that
  * lists EVERY missing variable at once, so the operator fixes them in one pass.
  *
  * The secret env-var names come from `@gate/secrets` (the canonical source), so
- * this list can't drift from the actual `SecretStore`. Pure — no I/O.
+ * this list can't drift from the actual `SecretStore`. Pure; no I/O.
  */
 
 /** App secrets + the two infra URLs the app cannot boot without (go-live checklist, #64). */

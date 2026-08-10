@@ -1,12 +1,12 @@
 # gate
 
-**Archived — provided as-is, no updates expected.** Issues and pull requests are not monitored. Last verified working 2026-08-09 on macOS 15.6 with Node 24.14.0 and pnpm 10.34.3, and on Linux via Docker `node:24-slim`.
+**Archived. Provided as-is, with no updates expected.** Issues and pull requests are not monitored. Last verified working 2026-08-09 on macOS 15.6 with Node 24.14.0 and pnpm 10.34.3, and on Linux via Docker `node:24-slim`.
 
 Gate is the GitHub-facing half of an automated *design* reviewer: it resolves a pull request's preview URL, has a separate vision-model service critique the rendered UI, and publishes the findings as one sticky PR comment plus a Check Run.
 
 ## Why this exists
 
-Apature was a design reviewer for AI-generated frontend PRs — "Applitools checks pixels, we check judgment". Gate was its product surface; the capture and the model call lived in a separate `judgment-engine` service that was never open-sourced. The company wound down in 2026 and this repository is published as a snapshot. The parts that do not need a model endpoint — the sandbox supervisor that runs an untrusted `preview-command` in a CI runner, and the whole review-delivery path — run today, from a clean clone, with no credentials.
+Apature was a design reviewer for AI-generated frontend PRs: "Applitools checks pixels, we check judgment". Gate was its product surface; the capture and the model call lived in a separate `judgment-engine` service that was never open-sourced. The company wound down in 2026 and this repository is published as a snapshot. Two parts need no model endpoint: the sandbox supervisor that runs an untrusted `preview-command` in a CI runner, and the whole review-delivery path. Both run today, from a clean clone, with no credentials.
 
 ## What it does
 
@@ -23,7 +23,7 @@ Runnable from this repository, right now:
 
 - **It never edits code.** No `contents: write`, no commits, no fix PRs, no driving the UI. `assertNoContentsWrite` throws if a permission set ever tries to grant it. The customer's coding agent was the hands; Gate was the eyes.
 - **It does not capture screenshots or call a model.** Both live in `judgment-engine`, which is not in this repository and was never published. Every claim about review *quality* is an engine claim; Gate's tests prove Gate's orchestration against a mock engine.
-- **There is no hosted service.** No GitHub App installation, no Marketplace listing, no endpoint to point at. A live review needs infrastructure you provision yourself — see [Running a live review](#running-a-live-review).
+- **There is no hosted service.** No GitHub App installation, no Marketplace listing, no endpoint to point at. A live review needs infrastructure you provision yourself; see [Running a live review](#running-a-live-review).
 - **Windows is out of scope.** The supervisor relies on POSIX process groups.
 
 ## Requirements
@@ -32,7 +32,7 @@ Runnable from this repository, right now:
 |---|---|---|
 | Node 24.x | `node -v  # need v24.x` | `.node-version` pins `24`; `engines` requires `>=24` |
 | pnpm 10.34.3 | `pnpm -v  # need 10.34.3` | install with `corepack enable && corepack prepare pnpm@10.34.3 --activate` |
-| macOS or Linux | — | verified on macOS 15.6 and on Linux (Docker `node:24-slim`); Windows is out of scope |
+| macOS or Linux | n/a | verified on macOS 15.6 and on Linux (Docker `node:24-slim`); Windows is out of scope |
 | Docker (optional) | `docker --version` | only for the Linux resource-cap check at the end of the quickstart |
 
 No credentials, API keys or network access are needed for anything in the Quickstart or the worked example. Dependencies are pinned, `pnpm-lock.yaml` is committed, and everything below was run with `--frozen-lockfile`.
@@ -58,11 +58,11 @@ Lockfile is up to date, resolution step is skipped
 Done in 1.5s using pnpm v10.34.3
 ```
 
-Exactly **eight** `designreview` bin warnings are expected on a fresh clone — two each for `packages/action`, `engine`, `service` and `dashboard`, because `@gate/secrets` declares a workspace bin (`dist/cli/auth.js`) that only exists after a build, and pnpm tries both the workspace path and the linked copy. They disappear after `pnpm build` and nothing below depends on that bin.
+Exactly **eight** `designreview` bin warnings are expected on a fresh clone: two each for `packages/action`, `engine`, `service` and `dashboard`, because `@gate/secrets` declares a workspace bin (`dist/cli/auth.js`) that only exists after a build, and pnpm tries both the workspace path and the linked copy. They disappear after `pnpm build` and nothing below depends on that bin.
 
 The demo commands below compile what they need (`tsc -b packages/action`) before running, so there is no separate build step. To build everything: `pnpm build`.
 
-## Quickstart — the sandbox supervisor
+## Quickstart: the sandbox supervisor
 
 The reusable piece of this repository is the supervisor that runs a pull request's own `preview-command` inside a CI runner. `pnpm demo` points it at a fixture app in `packages/action/fixtures/` that forks two child workers, one of which traps `SIGTERM` and refuses to die, and then reports what the supervisor did to it.
 
@@ -116,11 +116,11 @@ PASS — fixture app served, contained, and torn down with no orphaned processes
 
 **Success looks like:** the last line reads `PASS`, the teardown census ends in `0 left`, `orphans: 0`, and `leaked  none`. The exit code is 0. Ports, pids and timings will differ from the transcript.
 
-If it fails: `Error: Cannot find module` means the build did not run — use `pnpm demo`, not `node …/dist/…` directly. A `not_ready` failure means something else holds the port the fixture picked; rerun.
+If it fails: `Error: Cannot find module` means the build did not run; use `pnpm demo` rather than `node …/dist/…` directly. A `not_ready` failure means something else holds the port the fixture picked; rerun.
 
 ### Seeing the resource cap actually bite (optional, needs Docker)
 
-The `ulimit` prologue only applies on Linux — `ulimit -v` is unsupported on macOS — so on a Mac the demo honestly reports `applied  no`. To watch the kernel enforce it, run the same built CLI on Linux (`pnpm demo` above already produced `dist/`; Docker must be allowed to share the repository's path):
+The `ulimit` prologue only applies on Linux (`ulimit -v` is unsupported on macOS), so on a Mac the demo honestly reports `applied  no`. To watch the kernel enforce it, run the same built CLI on Linux (`pnpm demo` above already produced `dist/`; Docker must be allowed to share the repository's path):
 
 ```bash
 docker run --rm -v "$PWD":/repo -w /repo node:24-slim \
@@ -153,9 +153,9 @@ platform linux · node v24.19.0 · shell /bin/bash
                 address space:  soft 4294967296, hard 4294967296
 ```
 
-Two things to read there. The child's own rlimits now match the cap — the kernel is enforcing it, and the shell line says `/bin/bash`, which is what makes `ulimit -u` take effect at all. And the killed processes linger as zombies, because in a bare container this process is PID 1 and reaps nothing; a zombie holds a pid but runs no code, so it is reported separately from an orphan. (`node:24-slim` ships no `ps`; the census falls back to reading `/proc`.)
+Two things to read there. The child's own rlimits now match the cap, so the kernel is enforcing it, and the shell line says `/bin/bash`, which is what makes `ulimit -u` take effect at all. And the killed processes linger as zombies, because in a bare container this process is PID 1 and reaps nothing; a zombie holds a pid but runs no code, so it is reported separately from an orphan. (`node:24-slim` ships no `ps`; the census falls back to reading `/proc`.)
 
-## Worked example — a design review, end to end
+## Worked example: a design review, end to end
 
 `pnpm demo:review` runs the Action path's review orchestration against a **recorded** engine response (the golden fixture in `packages/types/fixtures/`) and writes what a pull request would have received.
 
@@ -185,7 +185,7 @@ Gate review demo (recorded engine response, no model call, no network)
 
 **Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*; `out/annotated-f_001.png` is a 390×844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`.
 
-What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI — it replays a recorded judgment through the real delivery path.
+What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI; it replays a recorded judgment through the real delivery path.
 
 Both demos are covered by the test suite (`packages/action/test/supervisor-demo.test.ts`, `packages/action/test/review-demo.test.ts`), so they cannot rot silently while the tests stay green.
 
@@ -193,11 +193,11 @@ Both demos are covered by the test suite (`packages/action/test/supervisor-demo.
 
 ### The three surfaces
 
-One engine contract, three ways to reach it — all behind `critique(images, context) → Findings`.
+One engine contract, three ways to reach it, all behind `critique(images, context) → Findings`.
 
-1. **GitHub Action** (`@gate/action`, [`action.yml`](action.yml)) — runs inside the customer's own runner. Takes an explicit `preview-url`, discovers one, or runs a `preview-command` under the supervisor. Needs no hosted install; requires only `checks: write` and `pull-requests: write` in the calling workflow.
-2. **GitHub App** (`@gate/service`) — a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` and `deployment_status`, and owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read` — never `contents: write`.
-3. **Dashboard** (`@gate/dashboard` + `apps/dashboard`) — OAuth, sessions, run history, a finding browser, feedback stats, config UI, Stripe billing. The logic lives in a tested, UI-agnostic core package; the Next.js app-router shell only renders it.
+1. **GitHub Action** (`@gate/action`, [`action.yml`](action.yml)) runs inside the customer's own runner. Takes an explicit `preview-url`, discovers one, or runs a `preview-command` under the supervisor. Needs no hosted install; requires only `checks: write` and `pull-requests: write` in the calling workflow.
+2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` and `deployment_status`, and owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`.
+3. **Dashboard** (`@gate/dashboard` + `apps/dashboard`) covers OAuth, sessions, run history, a finding browser, feedback stats, config UI, Stripe billing. The logic lives in a tested, UI-agnostic core package; the Next.js app-router shell only renders it.
 
 ### Using the Action in a workflow
 
@@ -227,7 +227,7 @@ The Action is a Docker action ([`Dockerfile.action`](Dockerfile.action)); `apatu
 
 The Action's entrypoint (`packages/action/src/main.ts`) reads its inputs from the runner environment, so it can be driven by hand: build the image and give it an event payload.
 
-Write the payload **inside the repository working directory**, not `/tmp`. Docker Desktop on macOS shares only a fixed set of host paths (`/Users` among them, `/tmp` and `/private/tmp` not), and a bind mount of an unshared path silently becomes an empty *directory* inside the container — the Action then dies on `EISDIR`. If your clone is under your home directory, `$PWD` is shared; if you cloned somewhere exotic, add that path under Docker Desktop → Settings → Resources → File sharing. One command tells you which you have — it must print a file, not a directory listing:
+Write the payload **inside the repository working directory**, not `/tmp`. Docker Desktop on macOS shares only a fixed set of host paths (`/Users` among them, `/tmp` and `/private/tmp` not). A bind mount of an unshared path silently becomes an empty *directory* inside the container, and the Action then dies on `EISDIR`. If your clone is under your home directory, `$PWD` is shared; if you cloned somewhere exotic, add that path under Docker Desktop → Settings → Resources → File sharing. One command tells you which you have; it must print a file, not a directory listing:
 
 ```bash
 docker run --rm -v "$PWD/README.md":/tmp/probe node:24-slim ls -la /tmp/probe
@@ -251,7 +251,7 @@ docker run --rm -v "$PWD/event.json":/tmp/event.json \
   gate-action
 ```
 
-**What you actually get depends on the token.** The angle-bracketed values above are placeholders — the command is not runnable as printed.
+**What you actually get depends on the token.** The angle-bracketed values above are placeholders, so the command is not runnable as printed.
 
 - **With no valid `INPUT_GITHUB_TOKEN`** (the common case for a reader with no `acme/web`), the first GitHub call fails and you see one line, then exit 0:
 
@@ -260,7 +260,7 @@ docker run --rm -v "$PWD/event.json":/tmp/event.json \
     GitHub rejected the token. Set INPUT_GITHUB_TOKEN (or GITHUB_TOKEN) to a token with checks:write and pull-requests:write. Nothing was published; the run still exits 0 so the pull request is not failed.
   ```
 
-  GitHub is contacted before the engine, so no Check Run is published and the engine is never reached. Exit 0 still holds — a broken reviewer never fails someone's pull request — but nothing is delivered.
+  GitHub is contacted before the engine, so no Check Run is published and the engine is never reached. Exit 0 still holds (a broken reviewer never fails someone's pull request), but nothing is delivered.
 - **With a real token on a real pull request and no reachable engine**, the run exits 0 after logging an engine error and publishing a neutral Check Run.
 
 That is the honest local story for the full Action: it is a thin wrapper whose two dependencies (GitHub and the engine) are both remote, so running it by hand needs at least one of them for real. To exercise the orchestration itself with neither, use `pnpm demo:review`, which drives the same `runAction` function.
@@ -275,16 +275,16 @@ startLocalServer(command, { url, cwd, env, readyPath, readyStatus, resourceLimit
   | { ok: false, reason: "spawn_failed" | "early_exit" | "not_ready" | "redirected_off_loopback", detail, tail }
 ```
 
-- **Process group, not process.** The child is spawned `detached`, so it owns a process group; teardown is `process.kill(-pid, SIGTERM)`, a grace window, then `SIGKILL` to whatever is left. Liveness is gated on the *group*, not on the direct child — with `shell: true` the direct child is the shell, which can exit while a trapped grandchild survives. That is exactly what the quickstart's stubborn worker demonstrates.
+- **Process group, not process.** The child is spawned `detached`, so it owns a process group; teardown is `process.kill(-pid, SIGTERM)`, a grace window, then `SIGKILL` to whatever is left. Liveness is gated on the *group*, not on the direct child: with `shell: true` the direct child is the shell, which can exit while a trapped grandchild survives. That is exactly what the quickstart's stubborn worker demonstrates.
 - **Environment allowlist, default-deny.** `buildAllowlistedEnv` passes only `PATH`, `HOME`, `LANG`, `LC_ALL`, `TMPDIR`, `TERM`, `CI`, `NODE_ENV`, `GITHUB_WORKSPACE`, `RUNNER_OS`, `RUNNER_TEMP` (plus a `PORT` derived from the target URL). Runner secrets never reach pull request code.
-- **Resource cap.** `buildResourceCappedCommand` prepends `ulimit -u <procs>; ulimit -v <kb>` as a hard cap (no `-S`, so hostile child code cannot raise it), inherited by everything the dev server forks. Linux only: `ulimit -v` (`RLIMIT_AS`) does not apply on macOS, and the command is returned unchanged there. The capped command runs under `/bin/bash` when it exists, because `/bin/sh` on Debian and Ubuntu is dash, whose `ulimit` has no `-u` — without that, the pids half of the cap silently does nothing on the exact runners it was written for.
-- **Readiness, bounded.** Polls the base URL (or `ready_path`) until an accepted status, with a 120 s ceiling and early abort if the command exits. The accepted set is Playwright's `webServer` set — 2xx/3xx plus 400/401/402/403 — because an auth-gated dev server is still "up".
+- **Resource cap.** `buildResourceCappedCommand` prepends `ulimit -u <procs>; ulimit -v <kb>` as a hard cap (no `-S`, so hostile child code cannot raise it), inherited by everything the dev server forks. Linux only: `ulimit -v` (`RLIMIT_AS`) does not apply on macOS, and the command is returned unchanged there. The capped command runs under `/bin/bash` when it exists, because `/bin/sh` on Debian and Ubuntu is dash, whose `ulimit` has no `-u`. Without that, the pids half of the cap silently does nothing on the exact runners it was written for.
+- **Readiness, bounded.** Polls the base URL (or `ready_path`) until an accepted status, with a 120 s ceiling and early abort if the command exits. The accepted set is Playwright's `webServer` set (2xx/3xx plus 400/401/402/403), because an auth-gated dev server is still "up".
 - **Off-loopback redirect refusal.** The probe uses `redirect: "manual"`; a 3xx whose `Location` leaves loopback is refused (`redirected_off_loopback`), never followed.
 - **Output as evidence, not as an echo.** stdout and stderr are drained into a bounded ring buffer. `parsePreviewBuildFacts` turns known patterns (compile errors, hydration mismatches, chunk 404s, deprecations) into structured facts for the critique; anything surfaced on the pull request is secret-scrubbed and length-capped first.
 
 ### Sealing a preview login (`designreview auth`)
 
-A repository whose preview deployment sits behind a login supplies a Playwright `storageState` JSON — the file `browserContext.storageState({ path })` writes, or `npx playwright open --save-storage=storageState.json <url>` after logging in by hand. It is never stored raw: the CLI in `@gate/secrets` origin-scopes it and seals it under a tenant key (envelope encryption; production resolves a managed KMS key, the CLI uses a passphrase-derived local key).
+A repository whose preview deployment sits behind a login supplies a Playwright `storageState` JSON: the file `browserContext.storageState({ path })` writes, or `npx playwright open --save-storage=storageState.json <url>` after logging in by hand. It is never stored raw: the CLI in `@gate/secrets` origin-scopes it and seals it under a tenant key (envelope encryption; production resolves a managed KMS key, the CLI uses a passphrase-derived local key).
 
 You do not need Playwright to try it: `packages/secrets/fixtures/storageState.example.json` is a minimal, made-up one. This runs offline, after `pnpm build`:
 
@@ -305,9 +305,9 @@ Sealed storageState -> storageState.sealed.json (1 cookies, 1 origins, origin-sc
 grep -c example-not-a-real-session-value storageState.sealed.json  # 0
 ```
 
-Cookies and localStorage outside `--origins` are dropped before sealing — pass `--origins https://other.example` instead and the CLI seals `0 cookies, 0 origins` and warns. `--help` prints the full flag list. Set `GATE_KMS_PASSPHRASE` to control the local key; on fork pull requests the sealed state is dropped before any handoff regardless.
+Cookies and localStorage outside `--origins` are dropped before sealing. Pass `--origins https://other.example` instead and the CLI seals `0 cookies, 0 origins` and warns. `--help` prints the full flag list. Set `GATE_KMS_PASSPHRASE` to control the local key; on fork pull requests the sealed state is dropped before any handoff regardless.
 
-### Threat model — Action-path hostile-PR capture
+### Threat model: Action-path hostile-PR capture
 
 On the Action path, capture runs inside **your** runner, which means attacker-authored code from a fork pull request executes on a network with reachable internal services. This is the same class of risk as any "build untrusted PR code in CI" step, but rendering a page makes it explicit.
 
@@ -315,14 +315,14 @@ On the Action path, capture runs inside **your** runner, which means attacker-au
 
 **Gate-owned (this repository):**
 
-- **Provenance.** A preview URL is forwarded only from a verified origin — `deployment_status`, explicit input, `url_template`, an allowlisted provider-bot comment, or local serve. Free-text URLs are rejected as `unverified_preview_source` (`verifyPreviewHandoff`).
+- **Provenance.** A preview URL is forwarded only from a verified origin: `deployment_status`, explicit input, `url_template`, an allowlisted provider-bot comment, or local serve. Free-text URLs are rejected as `unverified_preview_source` (`verifyPreviewHandoff`).
 - **Fork gating.** `storageState`/auth and preview-bypass secrets are disabled on fork pull requests *before* any capture or handoff. Local serve is disabled on forks unless the repository opts in with `preview: { fork_preview: true }`.
 - **Least privilege.** The Action requests no `contents: write` (`GATE_GITHUB_PERMISSIONS`); it posts comments and Check Runs only.
-- **Containment of the local server.** Environment allowlist, `ulimit` caps, loopback-only, redirect refusal, guaranteed teardown — the quickstart above is a live demonstration of each.
+- **Containment of the local server.** Environment allowlist, `ulimit` caps, loopback-only, redirect refusal, guaranteed teardown. The quickstart above demonstrates every one of them live.
 
 **Engine-owned (`judgment-engine`):** sandbox egress policy, internal-IP egress deny, SSRF protection, DNS-rebind rechecks, screenshot encryption and retention, prompt-injection controls. Gate does not duplicate these; on the Action path they are simply unavailable, which is why the residual risk is gated and documented rather than eliminated.
 
-**Operator guidance.** Do not run capture on `pull_request_target` (or a fork-triggered `workflow_run`) with repository secrets in scope: it runs in the base repository's context, with secrets, while checking out fork code — the worst combination. Use the default `pull_request` trigger. For untrusted forks prefer the App path, where capture happens in the engine sandbox. Treat the runner as compromisable and minimise what it can reach.
+**Operator guidance.** Do not run capture on `pull_request_target` (or a fork-triggered `workflow_run`) with repository secrets in scope: it runs in the base repository's context, with secrets, while checking out fork code, which is the worst combination. Use the default `pull_request` trigger. For untrusted forks prefer the App path, where capture happens in the engine sandbox. Treat the runner as compromisable and minimise what it can reach.
 
 ### The engine contract
 
@@ -356,7 +356,7 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 
 ### Repository configuration (`.designreview.yml`)
 
-A repository opts in with an optional `.designreview.yml`. Every field has a working default and the schema is strict — a typo like `viewport:` is a validation error, not a silently ignored key.
+A repository opts in with an optional `.designreview.yml`. Every field has a working default and the schema is strict, so a typo like `viewport:` is a validation error rather than a silently ignored key.
 
 ```yaml
 preview:
@@ -449,14 +449,14 @@ pnpm workspace, TypeScript project references, Vitest, ESLint. Roughly 10k lines
 | Package | What it is |
 |---|---|
 | `packages/types` | The boundary contract: `GateReviewRequest`/`GateReviewResult`, config types, feedback events, the golden fixture loader, `deriveArtifactId`. Carries no model-specific fields by design. |
-| `packages/config` | `.designreview.yml` — Zod schema, validation, defaults, normalization. |
+| `packages/config` | `.designreview.yml`: Zod schema, validation, defaults, normalization. |
 | `packages/engine` | Client for the judgment-engine async job API: submit/poll/cancel, HMAC signing, preview-handoff verification, `x-schema-version` parsing, rate limiting, per-account endpoint routing. |
 | `packages/delivery` | Sticky comment upsert, Check Run conclusion mapping, finding validation and degradation decisions, SVG+sharp screenshot annotation, baseline before/after pairs. |
 | `packages/service` | App path: Fastify server, GitHub App auth and webhook verification, permission assertions, deployment-preview discovery, BullMQ queue, supersession, orchestrator, fail-fast production env check. |
 | `packages/action` | Action path: entrypoint, GitHub API client, preview discovery, dev-server output parsing into build facts, the resource-capped local-serve supervisor, and both demos. |
 | `packages/dashboard` | Hosted-tier core logic, UI-agnostic and tested: OAuth, signed sessions, installation-scoped access, run history, finding browser, feedback stats, config UI, Stripe billing. |
 | `packages/db` | Postgres: idempotent migrations, pg/PGlite executors, RLS tenant-isolation runners. Owns `installations`, `runs`, `feedback_events`, `billing_customers`, `webhook_log`, `screenshot_artifacts`, `feedback_consumed_tokens`. |
-| `packages/redis` | Key namespaces (BullMQ, supersession, token buckets), connection handling, and a no-eviction assertion — evicting a supersession key would break the guard. |
+| `packages/redis` | Key namespaces (BullMQ, supersession, token buckets), connection handling, and a no-eviction assertion, because evicting a supersession key would break the guard. |
 | `packages/secrets` | KMS envelope encryption, app/tenant secret stores, the canonical secret→env-var map, log redaction and output scrubbing, fork-PR storageState handling. |
 | `packages/observability` | OpenTelemetry spans and metrics for the review pipeline, including the stale-publish invariant. Ships `observability/alerts.yaml` and `observability/dashboard.json`. |
 | `packages/e2e` | Acceptance harness asserting the Action-path criteria end to end against a mock engine. |
@@ -487,11 +487,11 @@ pnpm build       # tsc -b, emits dist/
 
 One file at a time: `pnpm exec vitest run packages/action/test/local-serve.test.ts`.
 
-There are no live model calls and no live network in the suite — the engine is always mocked, including in the `@gate/e2e` acceptance harness. Keep that rule if you fork this. The suites that boot PGlite (in-process WASM Postgres) are slow enough to race vitest's default 5s/10s timeouts on a loaded machine, so `vitest.config.ts` raises `testTimeout` and `hookTimeout` to 30s; do not lower them.
+There are no live model calls and no live network in the suite; the engine is always mocked, including in the `@gate/e2e` acceptance harness. Keep that rule if you fork this. The suites that boot PGlite (in-process WASM Postgres) are slow enough to race vitest's default 5s/10s timeouts on a loaded machine, so `vitest.config.ts` raises `testTimeout` and `hookTimeout` to 30s; do not lower them.
 
 `packages/e2e/test/golden-path.test.ts` is the demo-as-test: the full Action path against a mock engine, asserting an annotated, screenshot-grounded review in under 90 seconds and a green Check Run after the fix. A scheduled live-pipeline version of that smoke test was specified but is an ops wiring step that never ran.
 
-`apps/dashboard` is **not** part of this root gate — the Next.js shell keeps its own React/Next tree, its own `package-lock.json`, and is built with its own isolated `next build` CI job:
+`apps/dashboard` is **not** part of this root gate. The Next.js shell keeps its own React/Next tree, its own `package-lock.json`, and is built with its own isolated `next build` CI job:
 
 ```bash
 pnpm build
@@ -514,13 +514,13 @@ npm run build
 | App path (webhooks, queue, Postgres, RLS) | Partial | Tested against PGlite and mocks; never provisioned in public |
 | Dashboard | Partial | Core logic tested; the Next.js shell has its own toolchain and unpatched advisories |
 | Billing | Partial | Stripe plumbing and tier limits tested; no real money ever moved |
-| Screenshot capture, model critique | Not implemented | Lives in `judgment-engine`, not published. The seam is `createHttpEngineTransport` in `packages/engine` — implement that HTTP contract to plug in your own. |
+| Screenshot capture, model critique | Not implemented | Lives in `judgment-engine`, not published. The seam is `createHttpEngineTransport` in `packages/engine`; implement that HTTP contract to plug in your own. |
 | Screenshot object store | Not implemented | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no bucket was ever provisioned. |
 | Baseline before/after comparison | Partial | `packages/delivery/src/baseline.ts` builds the pairs; nothing calls it on the review path. |
 
 ## Running a live review
 
-The code seam is done; provisioning was always an operator action and none of it exists publicly. Beyond the environment variables above you would need: a Postgres instance whose app role is a non-superuser without `BYPASSRLS` (otherwise the row-level-security tenant isolation is decorative), a Redis with `maxmemory-policy=noeviction`, an AWS KMS key bound to the secret store, an object store for screenshots, a GitHub App created from `buildAppManifest` with its webhook pointed at your `/webhook`, and — above all — a reachable `judgment-engine` implementing the job protocol described above.
+The code seam is done; provisioning was always an operator action and none of it exists publicly. Beyond the environment variables above you would need: a Postgres instance whose app role is a non-superuser without `BYPASSRLS` (otherwise the row-level-security tenant isolation is decorative), a Redis with `maxmemory-policy=noeviction`, an AWS KMS key bound to the secret store, an object store for screenshots, a GitHub App created from `buildAppManifest` with its webhook pointed at your `/webhook`, and, above all, a reachable `judgment-engine` implementing the job protocol described above.
 
 Enterprise accounts could route to an in-VPC engine instead: each account has an optional KMS-encrypted `engineEndpoint`, and `createAccountEngineTransport` targets **only** that endpoint. There is no fallback path to the hosted engine, so an in-VPC outage surfaces as `not_reviewed` rather than sending screenshots to a third party.
 
@@ -550,8 +550,8 @@ This repository is archived. Pull requests are not accepted and issues are not m
 
 ## Security
 
-There is no security support and no supported versions. [`SECURITY.md`](SECURITY.md) explains what to check before pointing this at anything real — start with the threat model above if you plan to run the Action path on untrusted forks.
+There is no security support and no supported versions. [`SECURITY.md`](SECURITY.md) explains what to check before pointing this at anything real; start with the threat model above if you plan to run the Action path on untrusted forks.
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
+MIT. See [`LICENSE`](LICENSE).

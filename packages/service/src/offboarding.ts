@@ -3,8 +3,8 @@ import type { SqlQuery } from "./review-window.js";
 
 /**
  * Tenant offboarding + crypto-shredding (TRD §8, §15.6; PRD §10). On
- * `installation.deleted` (or a dashboard action), delete the tenant's rows and —
- * for paid/enterprise — destroy the per-tenant CMK so artifacts encrypted under
+ * `installation.deleted` (or a dashboard action), delete the tenant's rows and,
+ * for paid/enterprise, destroy the per-tenant CMK so artifacts encrypted under
  * it are crypto-shredded. Free tier shares a CMK, so deletion is the mechanism.
  * Every offboarding is audited with a timestamp for the DPA trail.
  */

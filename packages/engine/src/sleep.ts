@@ -2,7 +2,7 @@
  * The engine package's default sleep.
  *
  * `defaultSleep` was copy-pasted, byte-identical, into client.ts, jobs.ts,
- * readiness.ts, and rate-limit.ts — each the injectable default behind an
+ * readiness.ts, and rate-limit.ts, each the injectable default behind an
  * `options.sleep ?? defaultSleep` retry/backoff seam. It is the one real-timer
  * fallback the retrying loops share (tests inject a fake), so it lives in one
  * place.

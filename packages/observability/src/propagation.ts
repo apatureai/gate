@@ -11,7 +11,7 @@ import { context, propagation } from "@opentelemetry/api";
  * for a valid active span context and emits NOTHING for an invalid/absent one
  * (so malformed ambient context is not forwarded).
  *
- * Opaque correlation/run/job ids are deliberately NOT handled here — they stay
+ * Opaque correlation/run/job ids are deliberately NOT handled here; they stay
  * application headers/attributes and must never be copied into `traceparent`.
  */
 

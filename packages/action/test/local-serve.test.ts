@@ -2,7 +2,7 @@ import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildAllowlistedEnv, startLocalServer, type LocalServerHandle } from "../src/index.js";
 
-// Real fixture child processes (localhost only — no mock, no external network),
+// Real fixture child processes (localhost only, no mock, no external network),
 // per #70 AC. Each fixture reads PORT from its (test-supplied) env.
 const node = (script: string): string => `node -e '${script}'`;
 const serve = (status: number, extra = ""): string =>

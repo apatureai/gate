@@ -3,7 +3,7 @@ import type { NormalizedDesignReviewConfig } from "@gate/types";
 
 /**
  * Config UI core (TRD §13, §12, §11): validate `.designreview.yml` edits against
- * the schema and propose changes the customer applies themselves — a copyable
+ * the schema and propose changes the customer applies themselves: a copyable
  * config or a user-initiated GitHub PR. Gate NEVER writes to the repo (no
  * `contents: write`); the only "apply" path is a prefilled GitHub new-file URL
  * the user opens and commits.
@@ -37,7 +37,7 @@ export interface ProposeConfigOptions {
 
 /**
  * Build a prefilled GitHub "new file" URL so the user opens the PR themselves.
- * Gate writes nothing — this only deep-links into GitHub's own editor.
+ * Gate writes nothing; this only deep-links into GitHub's own editor.
  */
 export function buildProposeConfigUrl(options: ProposeConfigOptions): string {
   const branch = options.branch ?? "main";

@@ -20,16 +20,16 @@ import {
  * It is the part of the Action path that can be demonstrated on its own: the
  * hosted review needs a judgment-engine endpoint, but the supervisor only needs
  * a process and a loopback socket. Everything asserted here is produced by the
- * production code path — this module supplies a fixture and reads the results,
+ * production code path; this module supplies a fixture and reads the results,
  * it does not re-implement any of the containment.
  *
  * Four claims, each with an observation attached:
- *   1. teardown  — a stubborn grandchild that traps SIGTERM is still gone
+ *   1. teardown:  a stubborn grandchild that traps SIGTERM is still gone
  *                  afterwards (group-kill + SIGKILL escalation), 0 orphans.
- *   2. env       — the child receives the allowlist, not the runner's secrets.
- *   3. resources — the rlimits the child actually runs under (Linux; the
+ *   2. env:       the child receives the allowlist, not the runner's secrets.
+ *   3. resources: the rlimits the child actually runs under (Linux; the
  *                  `ulimit` prologue is a documented no-op elsewhere).
- *   4. redirect  — a preview that 302s off loopback is refused, not followed.
+ *   4. redirect:  a preview that 302s off loopback is refused, not followed.
  *
  * Pure formatting lives in `formatSupervisorDemoReport` so the CLI is a shell.
  */
@@ -186,7 +186,7 @@ async function censusViaProcFs(pgid: number): Promise<ProcessInfo[] | null> {
   return rows;
 }
 
-/** Group members that are actually running — a zombie holds a pid but runs nothing. */
+/** Group members that are actually running. A zombie holds a pid but runs nothing. */
 export function liveProcesses(census: ProcessInfo[] | null): ProcessInfo[] {
   return (census ?? []).filter((p) => !p.zombie);
 }
@@ -194,7 +194,7 @@ export function liveProcesses(census: ProcessInfo[] | null): ProcessInfo[] {
 /**
  * Best-effort census of a process group: `ps` first, then `/proc` for minimal
  * Linux images that ship no `ps` (node:*-slim). A null census means "not
- * observable here", never "empty" — the fallback liveness signal is
+ * observable here", never "empty": the fallback liveness signal is
  * `kill(-pgid, 0)`, which always works but cannot see that a survivor is a
  * zombie.
  */
@@ -291,13 +291,13 @@ async function runTeardownScenario(
   const groupBeforeStop = await censusProcessGroup(server.pid);
 
   // Sample the group WHILE stop() runs: the stubborn worker survives SIGTERM, so
-  // the census steps down twice — once on SIGTERM, once on the SIGKILL escalation.
+  // the census steps down twice, once on SIGTERM and once on the SIGKILL escalation.
   const census: CensusSample[] = [{ atMs: 0, alive: true, processes: groupBeforeStop }];
   const stopStartedAt = Date.now();
   const graceMs = options.graceMs ?? DEFAULT_GRACE_MS;
   // The sampler is bounded twice over: it stops when the group is gone, and it
   // stops when teardown has finished plus a margin. Without the second bound it
-  // would spin forever wherever a killed process stays a zombie — a container
+  // would spin forever wherever a killed process stays a zombie: a container
   // whose PID 1 is this process reaps nothing, and `kill(-pgid, 0)` still
   // succeeds for a zombie.
   let stopFinished = false;
@@ -436,7 +436,7 @@ function formatLimit(limit: { soft: number | string; hard: number | string } | n
   return `soft ${limit.soft}, hard ${limit.hard}`;
 }
 
-/** Render a report as the demo transcript. Pure — the CLI only prints the result. */
+/** Render a report as the demo transcript. Pure; the CLI only prints the result. */
 export function formatSupervisorDemoReport(report: SupervisorDemoReport): string {
   const out: string[] = [];
   const line = (s = ""): number => out.push(s);

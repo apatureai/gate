@@ -8,7 +8,7 @@ import type { SqlQuery } from "./review-window.js";
  * product-facing signal (incl. the rater's repo-permission level and source) and
  * forwards it to the shared feedback store owned by judgment-engine, which owns
  * weighting and the preference dataset. Non-collaborator down-weighting is the
- * engine's job. Implicit positive is detected by suggestion string-match ONLY —
+ * engine's job. Implicit positive is detected by suggestion string-match ONLY;
  * "touched the element" never counts.
  */
 

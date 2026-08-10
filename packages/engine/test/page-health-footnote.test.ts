@@ -23,7 +23,7 @@ describe("pageHealthFootnote contract preservation (gate #156)", () => {
   });
 
   it("the clean omitted-field case parses and carries no footnote (older/healthy results)", () => {
-    // The golden fixture has no footnote — the additive field is optional.
+    // The golden fixture has no footnote; the additive field is optional.
     const out = parseEngineResult(golden, SCHEMA_VERSION);
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.result.artifacts.pageHealthFootnote).toBeUndefined();

@@ -8,7 +8,7 @@ const SEVERITY_RANK: Record<Severity, number> = { nit: 0, minor: 1, major: 2, bl
  * Keep only findings at or above `min` severity (`rules.min_severity_to_comment`,
  * TRD §7). This filters what the sticky comment *lists*; it never changes the
  * grade or Check Run conclusion (those reflect the engine's holistic verdict).
- * Defaults to `nit` — the lowest rung — so an unset threshold lists everything.
+ * Defaults to `nit`, the lowest rung, so an unset threshold lists everything.
  */
 export function findingsAtOrAbove(findings: Finding[], min: Severity = "nit"): Finding[] {
   const floor = SEVERITY_RANK[min];
@@ -18,7 +18,7 @@ export function findingsAtOrAbove(findings: Finding[], min: Severity = "nit"): F
 /**
  * Drop findings the repo has explicitly muted via `rules.suppress` (TRD §3). A
  * suppress entry matches a finding when it exactly equals the finding's stable
- * `id` or its `element` selector — the two identity fields callers can name in
+ * `id` or its `element` selector, the two identity fields callers can name in
  * `.designreview.yml` (`["f_001", "#cookie-banner"]`). Matching is exact, not
  * glob/regex: pattern semantics are undefined in the config contract, so an
  * ambiguous match is never guessed. Like the severity filter, this only changes
@@ -33,7 +33,7 @@ export function suppressFindings(findings: Finding[], suppress: string[] = []): 
 
 /**
  * Sticky PR comment (TRD §7.1): one comment per PR, found and updated by a
- * hidden HTML marker, with a blockers table and collapsed should-fix/nits — it
+ * hidden HTML marker, with a blockers table and collapsed should-fix/nits, so it
  * never spams new comments. The same component serves both paths; the GitHub
  * client (Action GITHUB_TOKEN or App installation token) is injected.
  */
@@ -126,7 +126,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   const nt = detailsSection("Nits", nits, screenshots);
   if (nt) parts.push(nt);
 
-  // Always render "not reviewed" when anything was skipped — never silently drop.
+  // Always render "not reviewed" when anything was skipped; never silently drop.
   if (result.notReviewed.length > 0) {
     parts.push(`### Not reviewed\n\n${result.notReviewed.map((n) => `- ${n}`).join("\n")}`);
   }
@@ -135,7 +135,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
 
   // Capture-health caveat: the engine's page-health footnote (JE #20), rendered
   // as informational untrusted display text. It never changes grade, severity,
-  // or the Check Run conclusion — those stay the engine's holistic verdict.
+  // or the Check Run conclusion; those stay the engine's holistic verdict.
   const health = result.artifacts.pageHealthFootnote;
   if (health !== undefined && health.trim().length > 0) {
     parts.push(`> 🩺 **Capture health:** ${sanitizeDisplayText(health)}`);

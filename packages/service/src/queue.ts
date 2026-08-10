@@ -3,7 +3,7 @@ import type { ReviewDepth } from "@gate/types";
 /**
  * Review queue model (TRD §2, §3.2, §5). The supersession/dedup key is
  * `repo#pr` (at most one pending review per PR; newest push wins). Payloads
- * carry IDs/refs only — screenshots, critique JSON, and annotations flow
+ * carry IDs/refs only; screenshots, critique JSON, and annotations flow
  * through engine-owned object storage, never the queue. The durable completed
  * review identity lives in `runs` as `(repo_owner, repo_name, pr_number,
  * head_sha)`.

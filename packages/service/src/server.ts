@@ -29,9 +29,9 @@ import { createRedisSupersessionStore, type RedisLike, type RepoPr } from "./sup
  * assembled by `createProductionAppServer` (#62); this entrypoint only builds the
  * infra-bound deps from the environment and starts listening.
  *
- * Constructing those deps — the KMS-backed `SecretStore` -> `createGitHubAppAuth`
+ * Constructing those deps (the KMS-backed `SecretStore` -> `createGitHubAppAuth`
  * -> per-installation `createAppReviewClient`/`createGitHubPullsClient`, the
- * per-account engine transport, and the Redis/SQL stores -> requires live
+ * per-account engine transport, and the Redis/SQL stores) requires live
  * Postgres/Redis/Fly/secrets and is the **go-live ops step (#64)**: wire
  * `buildProductionDepsFromEnv` to the provisioned services there. Keeping it one
  * clearly-marked seam (not scattered `process.env` reads) keeps the composition

@@ -4,7 +4,7 @@ import { prepareStorageStateArtifact, type StorageState } from "../storage-state
 
 /**
  * `npx designreview auth` wizard (TRD §4.3). Records the login (via the capture
- * repo's Playwright flow, #25 — produces a storageState JSON), then origin-scopes
+ * repo's Playwright flow, #25, which produces a storageState JSON), then origin-scopes
  * and encrypts it under the tenant key, writing the sealed artifact to store per
  * repo. Production resolves the tenant CMK from a managed KMS; this CLI uses a
  * passphrase-derived LocalKms for local/dev.

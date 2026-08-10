@@ -5,7 +5,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  *
  * Gate signs the canonical payload `${timestamp}.${installationId}.${body}` so
  * `installationId` is bound into the signature. The engine verifies before
- * processing and scopes all tenant storage to the *verified* installationId — a
+ * processing and scopes all tenant storage to the *verified* installationId, so a
  * bug or compromise cannot misroute a review into another tenant's prefix. The
  * secret comes from the KMS-backed store (`@gate/secrets` `engineHmacSecret`).
  * HMAC chosen over JWT for MVP (no clock-skew/JWKS surface); short-lived JWT is

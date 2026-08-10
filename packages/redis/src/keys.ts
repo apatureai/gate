@@ -1,12 +1,12 @@
 /**
  * Redis key namespaces for the orchestrator hot paths (TRD §5, §12).
  *
- * - `bull:` — the BullMQ review queue (durable; do not evict).
- * - `sha:`  — `current_sha[repo#pr]` supersession store (MUST NOT be evicted;
- *             eviction would let the publish-time guard read nil and pass a
- *             stale SHA, §15.3).
- * - `tb:`   — per-installation token-bucket for fair scheduling (TTL keys).
- * - `cb:`   — circuit-breaker state, e.g. `cb:engine` (§15.3).
+ * - `bull:` is the BullMQ review queue (durable; do not evict).
+ * - `sha:`  is the `current_sha[repo#pr]` supersession store (MUST NOT be evicted;
+ *           eviction would let the publish-time guard read nil and pass a
+ *           stale SHA, §15.3).
+ * - `tb:`   is the per-installation token-bucket for fair scheduling (TTL keys).
+ * - `cb:`   is circuit-breaker state, e.g. `cb:engine` (§15.3).
  */
 export const REDIS_NAMESPACES = {
   queue: "bull:",

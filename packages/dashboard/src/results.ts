@@ -4,7 +4,7 @@ import type { GateReviewResult } from "@gate/types";
 /**
  * Stored-result loader for the dashboard finding browser (TRD §13, §8).
  *
- * The full `GateReviewResult` is an engine-owned artifact in object storage —
+ * The full `GateReviewResult` is an engine-owned artifact in object storage;
  * the Gate `runs` table holds only metadata/lineage (#69), never the critique
  * JSON. This is the seam the deployment wires to its object store (R2/S3): a
  * storage fetcher keyed by run id, behind which the loader applies the SAME
@@ -87,7 +87,7 @@ export function createTemplateResultUrlSigner(
 }
 
 /**
- * Build a {@link ResultStorage} over a signed-URL fetcher — the common object-
+ * Build a {@link ResultStorage} over a signed-URL fetcher, the common object-
  * store shape: the deployment mints a short-lived GET URL for the run's result
  * object and this reads + JSON-parses it. A 404 (or a null URL) is `not_found`;
  * any other non-OK status throws so the page surfaces a real error rather than a

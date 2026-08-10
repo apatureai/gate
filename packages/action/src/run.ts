@@ -60,7 +60,7 @@ function localFailureCheckRunSummary(result: Extract<LocalServerStartResult, { o
  * Action-path orchestration (TRD §2, §4, §7): resolve a preview URL, verify its
  * source, submit a hosted engine job via the async /jobs API, then post the
  * sticky comment and an advisory Check Run. Capture/annotation happen
- * engine-side; the runner only hands over a verified URL. Judgment-only — never
+ * engine-side; the runner only hands over a verified URL. Judgment-only: it never
  * requests contents: write.
  */
 export interface ActionRunContext {
@@ -173,7 +173,7 @@ export async function runAction(
 
   // 2b. Local build-and-serve (#70): when the preview was resolved by running the
   // repo's preview-command, actually start + supervise that server before handoff
-  // — and guarantee teardown. Higher-priority sources (explicit/template/bot)
+  // and guarantee teardown. Higher-priority sources (explicit/template/bot)
   // never reach here with source "local", so they never spawn anything.
   let server: LocalServerHandle | null = null;
   let previewBuildFacts: PreviewBuildFact[] | undefined;

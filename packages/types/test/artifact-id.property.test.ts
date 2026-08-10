@@ -2,7 +2,7 @@
  * Property-based laws for the collision-safe artifact identity (#71). The id
  * keys the stable `/i/<id>.png` route and authorization binding, so its
  * contract is: deterministic, and injective over the real input domain
- * (GitHub identifiers / hex SHAs / engine finding ids — none contain "\n",
+ * (GitHub identifiers / hex SHAs / engine finding ids, none of which contain "\n",
  * the join delimiter). The last test pins that domain boundary explicitly so
  * a future component with free-form content can't silently weaken identity.
  */

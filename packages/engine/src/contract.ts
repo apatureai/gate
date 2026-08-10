@@ -7,7 +7,7 @@ import { z } from "zod";
  * TS types are erased at runtime, so a renamed/removed engine field would parse
  * into a silent null-grade review without firing the stale-publish alarm. Gate
  * validates `x-schema-version` (major) and Zod-parses `GateReviewResult`; any
- * mismatch is a typed error that blocks publish — never a null-grade comment.
+ * mismatch is a typed error that blocks publish, never a null-grade comment.
  *
  * Versioning follows Stripe/GitHub: additive-only within a major version. The
  * schema intentionally does NOT use `.strict()`, so new additive engine fields

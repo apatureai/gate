@@ -9,8 +9,8 @@ patches will be issued, and there are no supported versions.
 | | |
 |---|---|
 | Supported versions | none |
-| Security patches | none — no fixes, backports, or releases are planned |
-| Bug bounty | none — there is no bounty program and no reward for reports |
+| Security patches | none; no fixes, backports, or releases are planned |
+| Bug bounty | none; there is no bounty program and no reward for reports |
 | Response time | none guaranteed; reports may not be read |
 
 ## Reporting a vulnerability anyway
@@ -20,8 +20,8 @@ If you find something and want it on the record:
 1. Use **GitHub private vulnerability reporting** on this repository (Security tab
    → "Report a vulnerability"), if it is available.
 2. There is no monitored channel behind it. Please also publish your finding where
-   downstream users will actually see it — a public advisory database, or a note in
-   your fork — rather than waiting for a reply here.
+   downstream users will actually see it (a public advisory database, or a note in
+   your fork) rather than waiting for a reply here.
 
 Do not expect an acknowledgement, a CVE, or a fix. Reports are accepted as a
 courtesy to whoever forks this code next, not as an obligation.
@@ -46,7 +46,7 @@ Specific things to check before running it against production:
 - **The Action path renders untrusted PR code in your runner.** Capturing a
   preview means a browser loads code from the pull request, inside your own CI
   environment. The residual risk and the mitigations Gate does and does not
-  provide are written up under "Threat model — Action-path hostile-PR capture"
+  provide are written up under "Threat model: Action-path hostile-PR capture"
   in [`README.md`](README.md). Read that section before enabling the Action path
   on a repository that accepts fork PRs.
 - **Dependencies are frozen at archive time.** `pnpm-lock.yaml` and the base

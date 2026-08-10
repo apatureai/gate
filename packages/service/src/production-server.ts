@@ -32,10 +32,10 @@ import type { ReviewJobWorker } from "./worker.js";
  * Live App-path composition root (#62). `createAppServer` (#1/#2/#49) wires the
  * webhook receiver to enqueue/supersede, but nothing assembled the **worker**:
  * a deployed machine received webhooks and did no reviews. This binds
- * `worker.onJob` to the full hosted pipeline — hydrate the IDs-only payload
+ * `worker.onJob` to the full hosted pipeline: hydrate the IDs-only payload
  * (#3) with the PR's details, then `runHostedReview` (#23/#4/#38) with the
  * per-installation GitHub + engine clients and the supersession abort signal
- * (#48) — and runs the boot invariant checks (#34) before listening.
+ * (#48). It also runs the boot invariant checks (#34) before listening.
  *
  * Infra-bound clients (installation tokens, the per-account engine transport,
  * SQL/Redis stores) are injected, so this is testable end-to-end with fakes + a
@@ -117,7 +117,7 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
   deps.worker.onJob(async (job, ctx) => {
     const clients = await deps.installationClients(job);
     const details = await clients.fetchPullRequest(job.owner, job.name, job.prNumber);
-    if (!details) return; // PR closed / head gone — nothing to review
+    if (!details) return; // PR closed / head gone, nothing to review
     const reviewCtx = hydrateReviewContext(job, details);
     let config: NormalizedDesignReviewConfig;
     let readinessUrl: string;
@@ -193,7 +193,7 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     start({ host = "0.0.0.0", port }) {
       if (stopPromise) return Promise.reject(new Error("production server is stopping"));
       startPromise ??= (async () => {
-        // Fail fast if a required production env var is missing (#64) — one
+        // Fail fast if a required production env var is missing (#64): one
         // aggregated error, before any connection is attempted.
         if (deps.env) assertProductionEnv(deps.env, deps.requiredEnv);
         // Fail fast if a boot invariant is violated (e.g. Redis eviction would let

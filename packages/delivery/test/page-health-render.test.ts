@@ -31,7 +31,7 @@ describe("page-health footnote rendering (gate #156)", () => {
     const withHealth = buildCheckRun(withFootnote("2 failed requests during capture."), "blockers");
     const without = buildCheckRun(withFootnote(undefined), "blockers");
     expect(withHealth.summary).toContain("Capture health:");
-    // The conclusion is a pure function of grade+gate — the footnote never moves it.
+    // The conclusion is a pure function of grade+gate; the footnote never moves it.
     expect(withHealth.conclusion).toBe(without.conclusion);
     expect(withHealth.conclusion).toBe(mapCheckRunConclusion(golden.grade, "blockers"));
     expect(withHealth.title).toBe(without.title);

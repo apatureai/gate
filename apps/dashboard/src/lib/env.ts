@@ -1,6 +1,6 @@
 /**
  * Dashboard app runtime config from env. Read lazily (functions, not top-level
- * throws) so `next build` doesn't require secrets to be present at build time —
+ * throws) so `next build` doesn't require secrets to be present at build time;
  * they're only needed when a request actually runs.
  */
 export const SESSION_COOKIE = "gate_session";

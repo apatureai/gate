@@ -19,7 +19,7 @@ export interface KmsKeyProvider {
 
 /**
  * Local KMS for dev/tests. Derives a per-`keyId` CMK from a root key via HKDF
- * and wraps DEKs with AES-256-GCM. Not for production — real deployments use a
+ * and wraps DEKs with AES-256-GCM. Not for production; real deployments use a
  * managed KMS (AWS KMS / Cloud KMS).
  */
 export class LocalKms implements KmsKeyProvider {

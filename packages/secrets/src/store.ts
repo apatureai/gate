@@ -34,7 +34,7 @@ export function secretEnvVarName(key: AppSecretKey): string {
   return ENV_VARS[key];
 }
 
-/** Env var names for every required app secret — the source of truth for the production-readiness check (#64). */
+/** Env var names for every required app secret: the source of truth for the production-readiness check (#64). */
 export const APP_SECRET_ENV_VARS: readonly string[] = APP_SECRET_KEYS.map((k) => ENV_VARS[k]);
 
 /**

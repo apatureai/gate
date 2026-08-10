@@ -15,7 +15,7 @@ import {
 /**
  * The demo is the only entry point a reader runs by hand, so it is covered like
  * production code: one real end-to-end run (fixture app, real process group,
- * real teardown — loopback only, no network, no credentials) plus unit tests for
+ * real teardown, loopback only, no network, no credentials) plus unit tests for
  * the pure helpers it prints through.
  */
 const sample = (atMs: number, alive: boolean, commands: string[]): CensusSample => ({

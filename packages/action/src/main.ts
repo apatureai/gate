@@ -11,7 +11,7 @@ import { publishSetupFailureCheckRun } from "./setup-failure.js";
 /**
  * Docker entrypoint for the GitHub Action (wiring only; orchestration lives in
  * runAction). Reads inputs/context from the runner environment, builds the
- * engine client + GitHub adapter, runs the review, and exits 0 — the Check Run
+ * engine client + GitHub adapter, runs the review, and exits 0. The Check Run
  * (not the action exit code) is the gate, so the PR is never failed by default.
  */
 function input(name: string): string {
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   // Local build-and-serve supervisor (#70): pre-bind the runner cwd + an
   // allowlisted env (never the runner's secrets) and the dev-server PORT derived
   // from the target URL. Track the live handle so a job cancellation (SIGTERM)
-  // tears the server down — on the Action path, supersession IS the cancelled job.
+  // tears the server down; on the Action path, supersession IS the cancelled job.
   let activeServer: LocalServerHandle | null = null;
   const startLocalServer = async (
     command: string,

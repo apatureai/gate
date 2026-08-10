@@ -6,7 +6,7 @@ import type { RepoPr } from "./supersession.js";
  * 10-minute full-review cap (TRD §3.2, §6.2; §15.2). At most one full (deep)
  * review per PR per 10 minutes; re-pushes inside the window run the cheap triage
  * pass. The window is tracked durably in Postgres (`runs.last_full_review_at`),
- * NOT a Redis delayed job — a Fly restart must not reset the cap and allow more
+ * NOT a Redis delayed job: a Fly restart must not reset the cap and allow more
  * than one full review per window. The cap also surfaces as the poll-loop
  * deadline (#45).
  */

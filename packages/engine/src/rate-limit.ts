@@ -2,7 +2,7 @@ import { parseRetryAfterMs } from "./jobs.js";
 import { defaultSleep } from "./sleep.js";
 
 /**
- * Generic GitHub rate-limit handling (TRD §15.4) — lives in the shared engine
+ * Generic GitHub rate-limit handling (TRD §15.4). It lives in the shared engine
  * layer so both the Action and App GitHub clients use it. Honors primary limits
  * (`x-ratelimit-remaining: 0` + `x-ratelimit-reset`) and secondary limits
  * (`Retry-After`) with exponential backoff + jitter.

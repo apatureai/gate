@@ -14,7 +14,7 @@ import type { GateReviewResult } from "./review.js";
  * by the dashboard app for plain types/helpers (e.g. `deriveArtifactId`), and a
  * top-level `new URL(..., import.meta.url)` evaluated at import time breaks the
  * Next.js bundler (`ERR_INVALID_ARG_TYPE` from `fileURLToPath`). Keeping it
- * lazy makes merely importing the barrel side-effect-free — only the
+ * lazy makes merely importing the barrel side-effect-free, so only the
  * test/mock-engine callers that actually read the fixture pay for it.
  */
 export function goldenReviewResultPath(): string {

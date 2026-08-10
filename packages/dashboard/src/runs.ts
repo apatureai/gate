@@ -80,8 +80,8 @@ export interface FindingBrowser {
 
 /**
  * Build the per-run finding browser from an engine result. Screenshot URLs use
- * the collision-safe artifact id (#71) — derived from the run's
- * installation/repo/head-SHA + finding id — so they match the registry's stable
+ * the collision-safe artifact id (#71), derived from the run's
+ * installation/repo/head-SHA + finding id, so they match the registry's stable
  * route exactly and never collide across runs/repos (requires `installationId`
  * + `headSha` in the context).
  */

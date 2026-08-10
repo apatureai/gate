@@ -198,7 +198,7 @@ describe("runEngineJob", () => {
     const clock = virtualClock();
     const outcome = await runEngineJob(t, submission, { depth: "deep", ...clock });
     expect(outcome).toEqual({ status: "timed_out", reason: "review_timed_out", jobId: "job_1" });
-    // Bounded by the 10-min deadline with 30s+ deep backoff — far fewer than, say, 100 polls.
+    // Bounded by the 10-min deadline with 30s+ deep backoff, far fewer than, say, 100 polls.
     expect(polls).toBeLessThan(20);
     expect(clock.now()).toBeGreaterThanOrEqual(REVIEW_DEADLINE_MS - 60_000);
     expect(cancel).toHaveBeenCalledOnce();

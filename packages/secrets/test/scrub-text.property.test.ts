@@ -5,7 +5,7 @@
  *
  *   1. No generated secret of a known shape survives scrubbing, wherever it
  *      sits in surrounding text (including when a key=value value overlaps
- *      its own key name — the regression behind the lastIndexOf masking).
+ *      its own key name, the regression behind the lastIndexOf masking).
  *   2. Scrubbing is idempotent: a second pass never finds new work, so masked
  *      output can be re-scrubbed safely anywhere in the pipeline.
  *   3. scrubTail bounds its output and cannot resurrect a secret at any cap.

@@ -9,7 +9,7 @@ import type { EngineTransport } from "./jobs.js";
  * routing**, never a `GateReviewRequest` field. There is NO silent fallback to
  * the hosted engine: an in-VPC account's transport targets only the in-VPC
  * endpoint, so an outage surfaces an explicit error/not-reviewed and never leaks
- * data to the hosted engine. (No BYOK — Apature manages model serving; in-VPC
+ * data to the hosted engine. (No BYOK: Apature manages model serving; in-VPC
  * only relocates where the engine runs.)
  */
 export interface EngineAccountRouting {
@@ -45,7 +45,7 @@ export interface AccountEngineTransportOptions {
 
 /**
  * Build the engine transport for an account, routed to its in-VPC endpoint when
- * configured. The transport targets exactly one base URL — there is no path that
+ * configured. The transport targets exactly one base URL, and there is no path that
  * retries against the hosted engine, so data residency holds even on outage.
  */
 export function createAccountEngineTransport(

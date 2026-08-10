@@ -71,7 +71,7 @@ const NEUTRAL_TITLES: Record<DegradationReason, string> = {
 };
 
 function neutral(reason: DegradationReason, summary: string): DeliveryDecision {
-  // Never fail the PR — degraded states are always a neutral Check Run.
+  // Never fail the PR: degraded states are always a neutral Check Run.
   return {
     publishComment: false,
     reason,

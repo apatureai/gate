@@ -1,7 +1,7 @@
 import { formatReviewDemoResult, runReviewDemo } from "./review-demo.js";
 
 /**
- * `node packages/action/dist/review-demo-cli.js [outDir]` — runs the Action
+ * `node packages/action/dist/review-demo-cli.js [outDir]` runs the Action
  * path's review orchestration against a recorded engine response and writes the
  * sticky comment, Check Run and annotated screenshots to `out/`.
  */

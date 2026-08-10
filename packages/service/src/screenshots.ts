@@ -21,7 +21,7 @@ export type { ArtifactScope };
  * Stable annotated-screenshot route (TRD §7.1, §8, §15.4-§15.6).
  *
  * PR comments reference a permanent app route `/i/<finding_id>.png`, never a raw
- * expiring object URL — so historical comments never 404. The route 302s to a
+ * expiring object URL, so historical comments never 404. The route 302s to a
  * freshly-signed object URL each request and serves a 410 tombstone once the
  * retention window has passed. Gate owns this registry; the engine owns the
  * encrypted bucket.
@@ -38,7 +38,7 @@ export type ScreenshotVisibility = "public" | "private";
 export interface ScreenshotRecord {
   /** Gate-generated collision-safe id; the stable-route + authorization key. */
   artifactId: string;
-  /** Engine run-local finding id (reference/lineage only — not an auth key). */
+  /** Engine run-local finding id (reference/lineage only, not an auth key). */
   findingId: string;
   /** Owning run's head SHA (part of the artifact identity). */
   headSha: string;
@@ -46,7 +46,7 @@ export interface ScreenshotRecord {
   objectKey: string;
   /** Epoch ms after which the screenshot is gone (410). */
   expiresAt: number;
-  /** Owning installation (tenant) — the authorization scope. */
+  /** Owning installation (tenant): the authorization scope. */
   installationId: string;
   owner: string;
   name: string;
@@ -147,7 +147,7 @@ export function registerScreenshotRoute(app: FastifyInstance, options: Screensho
 
   app.get<{ Params: { id: string } }>("/i/:id.png", async (request, reply) => {
     const record = await options.registry.lookup(request.params.id);
-    // 404 for missing OR unauthorized — never disclose object keys / tenant existence.
+    // 404 for missing OR unauthorized; never disclose object keys / tenant existence.
     if (!record) return reply.code(404).send({ error: "not_found" });
     if (!(await isAuthorized(request, record))) {
       return reply.code(404).send({ error: "not_found" });
@@ -164,7 +164,7 @@ export interface ScreenshotOwnership {
   installationId: string;
   owner: string;
   name: string;
-  /** Owning run's head SHA — part of the collision-safe artifact identity (#71). */
+  /** Owning run's head SHA, part of the collision-safe artifact identity (#71). */
   headSha: string;
   visibility: ScreenshotVisibility;
 }

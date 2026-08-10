@@ -29,7 +29,7 @@ export async function loadRunResult(runId: string): Promise<GateReviewResult | n
   const res = await loadRunResultCore(storage, runId);
   if (res.ok) return res.result;
   if (res.reason !== "not_found") {
-    // A configured store returned a contract-incompatible object — surface the
+    // A configured store returned a contract-incompatible object. Surface the
     // safe "not available" state, but log so the stale-result alarm can fire.
     console.error(`loadRunResult(${runId}): ${res.reason}`, "detail" in res ? res.detail : res.issues);
   }

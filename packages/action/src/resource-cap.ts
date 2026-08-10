@@ -11,20 +11,20 @@ import { existsSync } from "node:fs";
  *   - **`ulimit` prologue (implemented here):** the supervisor spawns with
  *     `{ shell: true }`, so we prepend `ulimit` to the shell command; the limits
  *     are inherited by every process the dev server forks. Portable, no host
- *     privileges. Linux-only — `ulimit -v` (RLIMIT_AS) is unsupported/ineffective
+ *     privileges. Linux-only: `ulimit -v` (RLIMIT_AS) is unsupported/ineffective
  *     on macOS/Windows, so on those we leave the command unchanged (the runner is
  *     Linux in production; local dev just runs without the cap).
  *   - **cgroup v2 (deferred, ops):** a per-job cgroup with `pids.max` +
  *     `memory.max` is stricter (aggregate, not per-process) but needs host setup
- *     (systemd-run / cgroup fs write) — left to the live runner image.
+ *     (systemd-run / cgroup fs write), so it is left to the live runner image.
  *
  * Pure command construction; fully unit-testable. The kernel does the enforcing.
  */
 
 export interface ResourceLimits {
-  /** Max processes (RLIMIT_NPROC / `ulimit -u`) — the fork-bomb guard. */
+  /** Max processes (RLIMIT_NPROC / `ulimit -u`): the fork-bomb guard. */
   maxProcesses: number;
-  /** Max address space per process in MiB (RLIMIT_AS / `ulimit -v`) — the balloon guard. */
+  /** Max address space per process in MiB (RLIMIT_AS / `ulimit -v`), the balloon guard. */
   maxMemoryMb: number;
 }
 
@@ -59,7 +59,7 @@ export function buildResourceCappedCommand(
 
 /**
  * Shell the capped command must run in. `{ shell: true }` gives `/bin/sh`, which
- * on Debian/Ubuntu (every ubuntu-latest runner) is dash — and dash's `ulimit`
+ * on Debian/Ubuntu (every ubuntu-latest runner) is dash, and dash's `ulimit`
  * has no `-u`, so the pids cap silently does nothing there while `-v` still
  * applies. Selecting bash when it exists is what makes `ulimit -u` real; if bash
  * is missing we fall back to Node's default shell and keep the memory cap.

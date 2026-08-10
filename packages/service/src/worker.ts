@@ -12,7 +12,7 @@ import {
  * Queue abstraction (TRD §5, §12, §15.3; ARCHITECTURE §8 D2). Orchestration
  * (supersession, the publish-time SHA guard) depends only on this interface, so
  * BullMQ can be swapped for a durable-execution engine (Inngest) without a
- * rewrite — see "Deferred by design" in README.md. BullMQ cannot preempt active
+ * rewrite; see "Deferred by design" in README.md. BullMQ cannot preempt active
  * jobs, so cancellation is cooperative via an AbortSignal threaded into the
  * engine client; the publish-time SHA guard is the queue-agnostic backstop.
  */
@@ -142,7 +142,7 @@ export function createInMemoryReviewWorker(): ReviewJobWorker {
 
 /**
  * BullMQ adapter. enqueue uses repo#pr supersession; cancel removes a pending
- * job and aborts an in-flight one's signal (cooperative — BullMQ can't preempt).
+ * job and aborts an in-flight one's signal (cooperative, since BullMQ can't preempt).
  */
 export function createBullReviewWorker(redisUrl: string): ReviewJobWorker {
   // BullMQ treats injected ioredis clients as shared and therefore does not quit

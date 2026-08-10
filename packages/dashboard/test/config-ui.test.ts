@@ -34,7 +34,7 @@ describe("buildProposeConfigUrl (user-initiated, no contents:write)", () => {
     expect(url.origin + url.pathname).toBe("https://github.com/acme/web/new/main");
     expect(url.searchParams.get("filename")).toBe(".designreview.yml");
     expect(url.searchParams.get("value")).toBe("dark_mode: true");
-    // It's a deep-link the user acts on — Gate performs no write itself.
+    // It's a deep-link the user acts on; Gate performs no write itself.
     expect(url.hostname).toBe("github.com");
   });
 

@@ -4,7 +4,7 @@ import type { ProviderComment } from "./preview.js";
 
 /**
  * Thin GitHub REST adapter for the Action path, using the runner's GITHUB_TOKEN.
- * It only ever reads contents and writes issue comments + check runs — never
+ * It only ever reads contents and writes issue comments + check runs, never
  * `contents: write`. The same delivery components run on the App path with an
  * installation token injected instead.
  */

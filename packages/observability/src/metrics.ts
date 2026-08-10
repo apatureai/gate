@@ -61,7 +61,7 @@ export class GateMetrics {
       .addCallback((observer: ObservableResult) => observer.observe(this.queueDepthProvider()));
   }
 
-  /** A stale review reached publish — this must never happen. */
+  /** A stale review reached publish. This must never happen. */
   recordStalePublish(attributes?: Attributes): void {
     this.stalePublish.add(1, attributes);
   }

@@ -21,7 +21,7 @@ describe("selectNextJobs fairness", () => {
   it("round-robins across installations so one hot installation can't starve others", () => {
     const pending = jobs(["A", "a#1"], ["A", "a#2"], ["A", "a#3"], ["B", "b#1"]);
     const selected = selectNextJobs(pending, { perInstallationCap: 5, maxToStart: 2 });
-    // fair: one from A, one from B — not two from A
+    // fair: one from A, one from B, not two from A
     expect(selected.map((j) => j.installationId)).toEqual(["A", "B"]);
   });
 

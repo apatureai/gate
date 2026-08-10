@@ -5,7 +5,7 @@ import type { ReviewDepth } from "./depth.js";
  * Gate <-> judgment-engine review contract (TRD §6, amended by §15.1 and §15.2).
  *
  * This package is the single source of truth for the boundary. It deliberately
- * carries no engine implementation detail and no model-specific fields — the
+ * carries no engine implementation detail and no model-specific fields: the
  * default judge is Qwen3-VL through `judgment-engine`, and nothing here may
  * hard-code Claude or any other model.
  */
@@ -144,7 +144,7 @@ export type GateReviewResult = {
     /**
      * Engine-owned capture-health footnote (Judgment Engine #20): fixed aggregate
      * prose about console errors, failed requests, blocked/substituted fonts, or
-     * visual instability during capture. INFORMATIONAL ONLY — Gate renders it as a
+     * visual instability during capture. INFORMATIONAL ONLY: Gate renders it as a
      * caveat and never lets it change grade, severity, or the Check Run
      * conclusion. Treated as untrusted display text before GitHub publication.
      */

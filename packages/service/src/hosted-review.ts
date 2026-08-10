@@ -29,7 +29,7 @@ import {
 import { currentShaKey, guardPublish, recordEnqueue, type SupersessionStore } from "./supersession.js";
 
 /**
- * Hosted App-path orchestration (TRD §2, §5, §7; ARCHITECTURE §4) — the App
+ * Hosted App-path orchestration (TRD §2, §5, §7; ARCHITECTURE §4): the App
  * counterpart to the Action-path runAction (#22). It composes the M2 pieces:
  * verify preview source (#39) -> choose depth (#43) -> submit the engine job with
  * the supersession signal threaded in (#4/#45) -> publish-time SHA guard (#4) ->
@@ -254,7 +254,7 @@ interface WebhookRepoEnvelope {
 /**
  * Build the `deployment_status` webhook handler (#1 dispatches to it): resolve
  * the preview (#55), record `current_sha` (supersession), and enqueue the review.
- * Repo + installation are read from the payload — one handler serves every repo
+ * Repo + installation are read from the payload, so one handler serves every repo
  * the App is installed on.
  */
 export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {

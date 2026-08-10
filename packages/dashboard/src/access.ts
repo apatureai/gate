@@ -2,7 +2,7 @@ import type { DashboardSession } from "./session.js";
 
 /**
  * Installation-scoped access (TRD §13, §8): a session may only see data for the
- * installations the user belongs to. This complements Postgres RLS (#50) —
+ * installations the user belongs to. This complements Postgres RLS (#50) with
  * defense in depth at the dashboard edge.
  */
 export function canAccessInstallation(session: DashboardSession, installationId: number): boolean {

@@ -24,7 +24,7 @@ export default defineConfig({
     environment: "node",
     // Several suites boot PGlite (WASM Postgres) in the test body or in a
     // beforeEach hook, which can exceed vitest's 5s/10s defaults on a cold or
-    // loaded machine — including a slower CI runner on a fork.
+    // loaded machine, including a slower CI runner on a fork.
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
