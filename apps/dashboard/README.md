@@ -30,11 +30,12 @@ declare `postcss@8.4.31`, which is below the patched line for GHSA-qx2v-qp2m-jg9
 the override once Next depends on a patched PostCSS release directly and
 `npm audit --audit-level=moderate` remains clean.
 
-**Archived, unmaintained.** This app's dependency tree was frozen at the archive cut
-and `npm audit` reports known high-severity advisories (Next.js; postcss, which the override
-above now pins *below* the patched line; nanoid; and sharp via libvips). The root
-pnpm workspace is clean; this tree is not. Update before running it anywhere real, and
-do not blind-`npm audit fix` (it pulls a major Next bump).
+**Open advisories (roadmap item 5).** As of 2026-08-09 `npm audit --audit-level=moderate`
+in this directory reports 4 high-severity advisories: Next.js; postcss, which the override
+above now pins *below* the patched line; nanoid; and sharp via libvips. Bumping them is a
+wanted contribution. Update before running this anywhere real, and do not
+blind-`npm audit fix`: it pulls a major Next bump, and the postcss override has to be
+revisited in the same change.
 
 ## CI Wiring
 

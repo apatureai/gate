@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Apature Gate - judgment-only design review for GitHub PRs",
+  "description": "Runs a pull request's preview build inside a hardened sandbox and publishes a design review as a sticky PR comment plus a Check Run",
   "license": "MIT",
   "author": "Aditya Prathapa",
   "repository": {
