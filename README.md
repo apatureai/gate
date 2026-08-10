@@ -169,7 +169,7 @@ pnpm demo:review
 
 Gate review demo (recorded engine response, no model call, no network)
 
-  PR              apatureai/gate-demo#7 @ 0123456
+  PR              example-org/gate-demo#7 @ 0123456
   engine result   needs_work · 3 findings · 2 areas not reviewed
   action status   reviewed · comment created
   check run       neutral — Needs work

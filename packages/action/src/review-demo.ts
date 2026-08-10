@@ -150,8 +150,8 @@ export async function runReviewDemo(options: { outDir?: string } = {}): Promise<
     DEFAULT_CONFIG,
     { previewUrl: "https://gate-demo-pr7.example.dev", previewCommand: null },
     {
-      installationId: "apatureai/gate-demo",
-      repository: { owner: "apatureai", name: "gate-demo", defaultBranch: "main" },
+      installationId: "example-org/gate-demo",
+      repository: { owner: "example-org", name: "gate-demo", defaultBranch: "main" },
       pullRequest: { number: 7, headSha: HEAD_SHA, baseSha: "fedcba9876543210fedcba9876543210fedcba98", title: "Refresh the pricing page", body: null },
       isFork: false,
       previewComments: [],
@@ -198,7 +198,7 @@ export function formatReviewDemoResult(result: ReviewDemoResult, cwd = process.c
   const out: string[] = [];
   out.push("Gate review demo (recorded engine response, no model call, no network)");
   out.push("");
-  out.push(`  PR              apatureai/gate-demo#7 @ ${HEAD_SHA.slice(0, 7)}`);
+  out.push(`  PR              example-org/gate-demo#7 @ ${HEAD_SHA.slice(0, 7)}`);
   out.push(`  engine result   ${result.grade} · ${result.findingCount} findings · ${result.notReviewed.length} areas not reviewed`);
   out.push(`  action status   ${result.outcome.status} · comment ${result.outcome.commentAction ?? "none"}`);
   out.push(`  check run       ${result.checkRun.conclusion} — ${result.checkRun.title}`);
