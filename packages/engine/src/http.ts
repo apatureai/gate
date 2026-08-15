@@ -176,7 +176,9 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
           // Validate the contract before the result can ever reach publish (#46).
           const parsed = parseEngineResult(status.result, res.headers.get("x-schema-version"));
           if (!parsed.ok) {
-            throw new EngineJobError(`engine result contract violation: ${parsed.reason}`);
+            throw new EngineJobError(`engine result contract violation: ${parsed.reason}`, {
+              code: parsed.reason,
+            });
           }
           return { ...status, result: parsed.result };
         }

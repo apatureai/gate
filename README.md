@@ -255,7 +255,7 @@ node packages/serve/dist/main.js --port 8791 --model live
 and `out/live-review-comment.md` is a real review of the fixture page, with each finding linked to the screenshot region it came from:
 
 ```markdown
-## Apature Gate — design review
+## Apature Gate: design review
 
 **⚠️ Needs work** · reviewed `0123456`
 
@@ -264,7 +264,7 @@ The page has one heading and no visual hierarchy below it.
 <details>
 <summary>Should fix (1)</summary>
 
-- **Heading sits at default browser size** (`/`, desktop) — Apply the design system's display type token to the h1. · [Evidence](http://127.0.0.1:8791/artifacts/jobs/.../screenshots/index/desktop.png?token=...)
+- **Heading sits at default browser size** (`/`, desktop). Apply the design system's display type token to the h1. · [Evidence](http://127.0.0.1:8791/artifacts/jobs/.../screenshots/index/desktop.png?token=...)
 
 </details>
 ```

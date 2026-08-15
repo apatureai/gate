@@ -46,6 +46,16 @@ jobs:
   design-review:
     runs-on: ubuntu-latest
     steps:
+      # Required whenever you use config-path or preview-command: both read
+      # files from the workspace, and without a checkout the workspace is empty
+      # and .gate.yml is silently ignored.
+      - uses: actions/checkout@v5
+
+      # Your own deploy step, whatever it is. It has to expose the preview URL
+      # as an output for the next step to read.
+      - id: deploy
+        run: echo "preview-url=https://your-preview-host" >> "$GITHUB_OUTPUT"
+
       - uses: apatureai/gate@v1
         with:
           preview-url: ${{ steps.deploy.outputs.preview-url }}

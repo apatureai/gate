@@ -78,21 +78,21 @@ function screenshotLinks(result: GateReviewResult): Map<string, string> {
 
 function evidenceLink(finding: Finding, screenshots: Map<string, string>): string {
   const url = screenshots.get(finding.id);
-  return url ? `[Evidence](${url})` : "—";
+  return url ? `[Evidence](${url})` : "none";
 }
 
 function findingSummary(finding: Finding, screenshots: Map<string, string>): string {
   const evidence = screenshots.get(finding.id);
   return (
     `**${finding.title}** (\`${finding.route}\`, ${finding.viewport})` +
-    `${finding.suggestion ? ` — ${finding.suggestion}` : ""}` +
+    `${finding.suggestion ? `. ${finding.suggestion}` : ""}` +
     `${evidence ? ` · [Evidence](${evidence})` : ""}`
   );
 }
 
 function blockersTable(findings: Finding[], screenshots: Map<string, string>): string {
   const rows = findings
-    .map((f) => `| ${f.title} | \`${f.route}\` | ${f.viewport} | ${f.suggestion ?? "—"} | ${evidenceLink(f, screenshots)} |`)
+    .map((f) => `| ${f.title} | \`${f.route}\` | ${f.viewport} | ${f.suggestion ?? "none"} | ${evidenceLink(f, screenshots)} |`)
     .join("\n");
   return `### ⛔ Blockers\n\n| Finding | Route | Viewport | Suggestion | Evidence |\n| --- | --- | --- | --- | --- |\n${rows}`;
 }
@@ -132,7 +132,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   const parts: string[] = [STICKY_MARKER];
   if (graded) {
     parts.push(
-      "## Apature Gate — design review",
+      "## Apature Gate: design review",
       `**${GRADE_LABEL[result.grade]}** · reviewed \`${shortSha(ctx.headSha)}\``,
       result.overall,
     );

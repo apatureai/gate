@@ -184,9 +184,15 @@ export function classifyEngineFailure(err: unknown): EngineFailure {
   }
   if (err instanceof EngineJobError) {
     const status = err.status;
-    const rejected = status !== null && status >= 400 && status < 500 && status !== 429;
+    // Only a server error or a rate limit clears on its own. A 4xx, a success
+    // status that is not the job API's 202, and a contract violation carrying no
+    // status at all are all permanent until someone changes the configuration.
+    // Calling those "temporarily unavailable, Gate will retry" is a promise that
+    // never comes due, and a wrong endpoint or a version mismatch are the two
+    // likeliest first-run mistakes after a wrong secret.
+    const transient = status !== null && (status >= 500 || status === 429);
     return {
-      kind: rejected ? "engine_rejected" : "engine_unavailable",
+      kind: transient ? "engine_unavailable" : "engine_rejected",
       code: err.code,
       status,
       message,

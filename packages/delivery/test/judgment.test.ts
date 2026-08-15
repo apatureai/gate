@@ -161,7 +161,7 @@ describe("sticky comment for an unjudged result", () => {
 
   it("renders a judged result exactly as before", () => {
     const rendered = renderStickyComment(judged(), { headSha: "0".repeat(40) });
-    expect(rendered).toContain("## Apature Gate — design review");
+    expect(rendered).toContain("## Apature Gate: design review");
     expect(rendered).toContain(golden.overall);
     expect(rendered).toContain(`model ${golden.metadata.model}`);
   });

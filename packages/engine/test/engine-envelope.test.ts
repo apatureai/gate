@@ -65,6 +65,38 @@ describe("409 is two different answers on the engine's wire", () => {
   });
 });
 
+describe("only a server error or a rate limit is worth retrying", () => {
+  // A setup mistake reported as "temporarily unavailable, Gate will retry" is a
+  // promise that never comes due. These are the two likeliest first-run mistakes
+  // after a wrong secret, and both used to land in the transient handler because
+  // neither is a 4xx.
+  it("treats a success status that is not 202 as the endpoint being wrong, not an outage", async () => {
+    const transport = transportAnswering(() => new Response("<html>hello</html>", { status: 200 }));
+    const failure = classifyEngineFailure(
+      await transport.submit(SUBMISSION).catch((err: unknown) => err),
+    );
+    expect(failure.kind).toBe("engine_rejected");
+    expect(failure.status).toBe(200);
+  });
+
+  it("treats a contract violation as permanent, and carries its reason as a code", async () => {
+    const err = new EngineJobError("engine result contract violation: schema_version_mismatch", {
+      code: "schema_version_mismatch",
+    });
+    const failure = classifyEngineFailure(err);
+    expect(failure.kind).toBe("engine_rejected");
+    expect(failure.code).toBe("schema_version_mismatch");
+    expect(failure.status).toBeNull();
+  });
+
+  it("still treats a server error and a rate limit as transient", () => {
+    for (const status of [500, 502, 503, 429]) {
+      const failure = classifyEngineFailure(new EngineJobError(`engine submit failed: ${status}`, { status }));
+      expect(failure.kind).toBe("engine_unavailable");
+    }
+  });
+});
+
 describe("engine failures carry the engine's reason, not just its status", () => {
   it("names a signature mismatch on submit, in the message AND on the error", async () => {
     // The literal body a real verdict returns for a wrong GATE_ENGINE_HMAC_SECRET.

@@ -86,3 +86,23 @@ describe("decideDeliveryForError", () => {
     expect(cb.reason).toBe("circuit_open");
   });
 });
+
+describe("a permanent setup mistake never promises a retry", () => {
+  it("names the version mismatch instead of calling it an outage", () => {
+    const decision = decideDeliveryForError("engine_rejected", {
+      code: "schema_version_mismatch",
+      status: null,
+    });
+    expect(decision.checkRun.conclusion).toBe("neutral");
+    expect(decision.checkRun.summary).toContain("incompatible majors");
+    expect(decision.checkRun.summary).not.toContain("temporarily unavailable");
+    expect(decision.checkRun.summary).not.toContain("will retry");
+  });
+
+  it("tells an operator whose endpoint answers 200 that it is the wrong URL", () => {
+    const decision = decideDeliveryForError("engine_rejected", { code: null, status: 200 });
+    expect(decision.checkRun.summary).toContain("GATE_ENGINE_ENDPOINT");
+    expect(decision.checkRun.summary).toContain("not the critique service's base URL");
+    expect(decision.checkRun.summary).not.toContain("temporarily unavailable");
+  });
+});

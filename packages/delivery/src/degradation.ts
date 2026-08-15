@@ -182,10 +182,31 @@ const REJECTION_HINTS: Record<string, string> = {
     "The service rejected the request body as malformed, which means Gate and the service disagree about the contract. Check that both are on compatible versions.",
   invalid_json:
     "The service rejected the request body as malformed, which means Gate and the service disagree about the contract. Check that both are on compatible versions.",
+  schema_version_mismatch:
+    "The service returned a result on a schema version Gate does not accept, so Gate and the service are on incompatible majors. Upgrade whichever is older; a retry sends the same request and gets the same answer.",
+  missing_schema_version:
+    "The service returned a result with no schema version header, so Gate cannot tell whether the contract matches. Check that `GATE_ENGINE_ENDPOINT` points at a job API that stamps `x-schema-version`.",
 };
 
 const DEFAULT_REJECTION_HINT =
   "Check `GATE_ENGINE_ENDPOINT` and `GATE_ENGINE_HMAC_SECRET` on the workflow step.";
+
+/**
+ * A success status that is not the job API's 202 means the URL answered, but
+ * whatever answered is not a job API: a landing page, a proxy, a health check.
+ * That is the likeliest mistake after a wrong secret, and it used to be reported
+ * as a temporary outage because it is not a 4xx.
+ */
+const WRONG_ENDPOINT_HINT =
+  "The endpoint answered, but did not accept the job. `GATE_ENGINE_ENDPOINT` is probably not the critique service's base URL: a landing page, a proxy or a health check will answer without serving a job API.";
+
+function rejectionHint(facts: EngineErrorFacts): string {
+  const byCode = REJECTION_HINTS[facts.code ?? ""];
+  if (byCode) return byCode;
+  const status = facts.status ?? null;
+  if (status !== null && status >= 200 && status < 300) return WRONG_ENDPOINT_HINT;
+  return DEFAULT_REJECTION_HINT;
+}
 
 /** `HTTP 401 signature_mismatch`, sanitized, or nothing when the engine said neither. */
 function engineReply(facts: EngineErrorFacts): string | null {
@@ -221,7 +242,7 @@ export function decideDeliveryForError(
         reason,
         "Gate reached the critique service, and the service rejected the request. No review was " +
           `submitted and the PR is not blocked.${replyLine}\n\n` +
-          `${REJECTION_HINTS[facts.code ?? ""] ?? DEFAULT_REJECTION_HINT}\n\n` +
+          `${rejectionHint(facts)}\n\n` +
           "This one does not clear by itself: the next push sends the same request to the same " +
           "endpoint with the same credentials, so Gate is not promising a retry that would fix it.",
       );
