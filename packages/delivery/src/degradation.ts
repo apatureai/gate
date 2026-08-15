@@ -1,6 +1,7 @@
 import type { PollOutcome } from "@gate/engine";
 import type { Finding, GateMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
+import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
 import { renderStickyComment } from "./sticky-comment.js";
 
 /**
@@ -25,6 +26,12 @@ export interface DeliveryDecision {
   comment?: string;
   /** Confidence caveat surfaced to the user, if any. */
   caveat?: string;
+  /**
+   * Whether the engine says a model judged this page. Present on every completed
+   * outcome so the run record and the logs carry the same fact the comment does:
+   * a `reviewed` status with `judgment: "unjudged"` is not a review.
+   */
+  judgment?: JudgmentState;
 }
 
 export interface DegradationContext {
@@ -97,9 +104,13 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
   // Completed: publish only validated findings, with caveats when degraded.
   const { valid, dropped } = validateFindings(outcome.result.findings, ctx.isValidElement);
   const result = { ...outcome.result, findings: valid };
+  const judgment = judgmentState(result);
+  // An unjudged run publishes no findings at all, so "N findings were dropped"
+  // would be reporting on a list nobody is going to see.
+  const graded = !suppressesGrade(judgment);
 
   const caveats: string[] = [];
-  if (dropped > 0) {
+  if (graded && dropped > 0) {
     caveats.push(`${dropped} finding(s) referenced elements that couldn't be validated and were omitted.`);
   }
   if (ctx.captureUnstable) {
@@ -120,6 +131,7 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     publishComment: true,
     comment,
     caveat,
+    judgment,
     checkRun: { conclusion: checkRun.conclusion, title: checkRun.title, summary: checkRun.summary },
   };
 }

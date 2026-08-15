@@ -43,6 +43,13 @@ export {
 } from "./supervisor-demo.js";
 export { formatReviewDemoResult, renderFixturePage, runReviewDemo } from "./review-demo.js";
 export type { ReviewDemoResult, ReviewDemoScreenshot } from "./review-demo.js";
+export {
+  formatLiveReviewResult,
+  fixturePreviewCommand,
+  LiveReviewConfigError,
+  runLiveReview,
+} from "./live-review.js";
+export type { LiveReviewOptions, LiveReviewResult } from "./live-review.js";
 export type {
   CensusSample,
   ChildLimits,

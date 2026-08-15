@@ -1,4 +1,11 @@
 import type { GateMode, GateReviewResult, ReviewGrade } from "@gate/types";
+import {
+  judgmentCaveat,
+  judgmentDetail,
+  judgmentState,
+  judgmentTitle,
+  suppressesGrade,
+} from "./judgment.js";
 import { sanitizeDisplayText } from "./sanitize.js";
 
 /**
@@ -45,14 +52,48 @@ export interface CheckRun {
   detailsUrl?: string;
 }
 
-/** Build the design-review Check Run for a result under the repo's gate mode. */
+/**
+ * Build the design-review Check Run for a result under the repo's gate mode.
+ *
+ * The grade only reaches the conclusion when the engine says a model judged the
+ * page. An unjudged run (no model configured, so a deterministic stand-in filled
+ * the critique) still arrives carrying `grade: "ship"`; publishing that as a
+ * green ✅ would tell a reader their UI passed a review that never happened. Such
+ * a run is neutral, titled for what it is, and its summary opens with the
+ * engine's own disclosure instead of a grade.
+ */
 export function buildCheckRun(
   result: GateReviewResult,
   gate: GateMode,
   ctx: CheckRunContext = {},
 ): CheckRun {
-  const conclusion = mapCheckRunConclusion(result.grade, gate);
-  const summaryParts = [`**Grade:** ${GRADE_TITLE[result.grade]}`, result.overall];
+  const state = judgmentState(result);
+  const graded = !suppressesGrade(state);
+  // Never `success`, never `failure`: an ungraded run is not a pass, and it is
+  // not the repo's PR failing either.
+  const conclusion: CheckRunConclusion = graded
+    ? mapCheckRunConclusion(result.grade, gate)
+    : "neutral";
+  const title = graded ? GRADE_TITLE[result.grade] : judgmentTitle(state);
+
+  const summaryParts: string[] = [];
+  if (graded) {
+    summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, result.overall);
+  } else {
+    const detail = judgmentDetail(result);
+    summaryParts.push(
+      "**No grade.** Gate captured the page and the engine measured it, but nothing judged it, " +
+        "so this run is not a pass and not a failure.",
+    );
+    if (detail) summaryParts.push(sanitizeDisplayText(detail, 600));
+    summaryParts.push(
+      "The capture and the measured facts are real. The grade, the narrative and any findings " +
+        "the engine returned are not a judgment of this page and are withheld. Configure a model " +
+        "on your engine to get a reviewed run.",
+    );
+  }
+  const caveat = judgmentCaveat(state);
+  if (caveat) summaryParts.push(`⚠️ _${caveat}_`);
   // Informational capture-health caveat (Verdict #20), bounded + sanitized. Never
   // changes the conclusion; that is `mapCheckRunConclusion(grade)` alone.
   const health = result.artifacts.pageHealthFootnote;
@@ -63,7 +104,7 @@ export function buildCheckRun(
   return {
     name: "Apature Gate",
     conclusion,
-    title: GRADE_TITLE[result.grade],
+    title,
     summary: summaryParts.join("\n\n"),
     detailsUrl: ctx.detailsUrl,
   };

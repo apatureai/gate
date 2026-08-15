@@ -26,6 +26,36 @@ export interface HttpEngineTransportOptions {
   fetchImpl?: typeof fetch;
 }
 
+/** Read a JSON body without letting a non-JSON error page throw over the real failure. */
+async function parseJsonBody(res: Response): Promise<Record<string, unknown>> {
+  try {
+    const parsed: unknown = await res.json();
+    return parsed !== null && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The engine's own `{"error": "..."}` code, when it sent one. */
+function describeError(body: Record<string, unknown>): string | null {
+  const code = body["error"];
+  return typeof code === "string" && code.length > 0 ? code : null;
+}
+
+/**
+ * A failure message carrying the engine's reason, not just its status.
+ *
+ * The engine answers every rejection with a machine-readable code
+ * (`signature_mismatch`, `missing_installation`, `not_found`, ...). Swallowing it
+ * left an operator with `engine submit failed: 401` and no way to tell a wrong
+ * `GATE_ENGINE_HMAC_SECRET` from a missing one, which is the single most likely
+ * thing to be wrong the first time someone points Gate at their own engine.
+ */
+async function engineFailure(op: string, res: Response): Promise<string> {
+  const reason = describeError(await parseJsonBody(res));
+  return `engine ${op} failed: ${res.status}${reason ? ` (${reason})` : ""}`;
+}
+
 /**
  * HTTP transport for the engine `/jobs` API. Maps 202/409 to a SubmitResponse;
  * any other non-2xx is an EngineJobError. The body Gate sends is the
@@ -92,7 +122,21 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
           abortSignal,
         );
         if (res.status === 202 || res.status === 409) {
-          const responseBody = (await res.json()) as { jobId: string };
+          // 409 is TWO different answers on the engine's wire. An exact retry of
+          // a key already in flight returns `{jobId}` and means "poll that one".
+          // A DIFFERENT request reusing a key already spent returns
+          // `{error:"idempotency_conflict"}` with no handle, deliberately, so the
+          // engine does not disclose another intent's job id. Reading `jobId` off
+          // that second body yielded `undefined`, and Gate then polled
+          // `GET /jobs/undefined` and reported the engine as broken. A conflict is
+          // a caller error and says so here, at the call that caused it.
+          const responseBody = (await parseJsonBody(res)) as { jobId?: unknown };
+          if (typeof responseBody.jobId !== "string" || responseBody.jobId.length === 0) {
+            throw new EngineJobError(
+              `engine submit conflict: ${describeError(responseBody) ?? "idempotency_conflict"} ` +
+                "(the idempotency key is already in use by a different request)",
+            );
+          }
           return { status: res.status, jobId: responseBody.jobId };
         }
         if (res.status === 429 || res.status === 503) {
@@ -101,7 +145,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
             parseRetryAfterMs(res.headers.get("retry-after")),
           );
         }
-        throw new EngineJobError(`engine submit failed: ${res.status}`);
+        throw new EngineJobError(await engineFailure("submit", res));
       });
     },
 
@@ -116,7 +160,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
             }),
           abortSignal,
         );
-        if (!res.ok) throw new EngineJobError(`engine poll failed: ${res.status}`);
+        if (!res.ok) throw new EngineJobError(await engineFailure("poll", res));
         const status = (await res.json()) as JobStatus;
         if (status.state === "completed") {
           // Validate the contract before the result can ever reach publish (#46).
@@ -143,7 +187,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
         // Verdict returns 200 even when the job became terminal before
         // DELETE; that completion-vs-timeout race is an intentional no-op. Other
         // non-2xx responses are real cleanup failures and must reach diagnostics.
-        if (!res.ok) throw new EngineJobError(`engine cancel failed: ${res.status}`);
+        if (!res.ok) throw new EngineJobError(await engineFailure("cancel", res));
       });
     },
   };

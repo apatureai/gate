@@ -38,7 +38,18 @@ export interface ReviewIdentity {
   headSha: string;
 }
 
-export type JobState = "pending" | "running" | "completed" | "failed";
+/**
+ * The states `GET /jobs/:id` can report.
+ *
+ * `cancelling` is the transitional state the engine enters the moment a DELETE
+ * is accepted, before the work has actually stopped. It was missing from this
+ * union while the engine already emitted it, so the type claimed a poll could
+ * only return four values and the fifth reached the "not terminal yet" branch by
+ * accident rather than by decision. Continuing to poll IS the right response (a
+ * cancelling job settles into `failed` with `error: "canceled"`), but that is a
+ * choice, and it is written down here instead of inferred from a fall-through.
+ */
+export type JobState = "pending" | "running" | "cancelling" | "completed" | "failed";
 
 export interface JobStatus {
   jobId: string;

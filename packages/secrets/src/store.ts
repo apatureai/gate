@@ -124,6 +124,25 @@ export function resolveEngineClientEnv(env: NodeJS.ProcessEnv = process.env): En
   return { endpoint: endpoint ?? "", apiKey, hmacSecret, legacyNamesUsed };
 }
 
+/**
+ * The engine settings a run cannot proceed without, by canonical name.
+ *
+ * The endpoint is where to send the job; the HMAC secret is what signs it, and
+ * every engine request is signed (verdict refuses to start without
+ * `ENGINE_HMAC_SECRET` and answers 401 to anything unsigned), so an endpoint
+ * with no secret is a run that will be rejected on submit. The API key is
+ * genuinely optional: a self-hosted engine authenticates on the signature alone.
+ *
+ * Callers use this to fail a run visibly at setup rather than letting it die
+ * later as a generic "engine unavailable".
+ */
+export function missingEngineSettings(env: EngineClientEnv): string[] {
+  const missing: string[] = [];
+  if (env.endpoint.trim().length === 0) missing.push(ENV_VARS.engineEndpoint);
+  if ((env.hmacSecret ?? "").trim().length === 0) missing.push(ENV_VARS.engineHmacSecret);
+  return missing;
+}
+
 /** Env var names for every required app secret: the source of truth for the production-readiness check (#64). */
 export const APP_SECRET_ENV_VARS: readonly string[] = APP_SECRET_KEYS.map((k) => ENV_VARS[k]);
 

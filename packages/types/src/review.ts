@@ -166,6 +166,41 @@ export type GateReviewResult = {
     /** Version of the repo's UI DNA the critique was grounded in, or null. */
     uiDnaVersion: string | null;
   };
+  /**
+   * Whether anything actually judged the page, stated by the engine in the
+   * payload (additive + optional under schema v1, like `pageHealthFootnote`).
+   *
+   * A wire result always carries a `grade`, including on the paths where the
+   * critique came from a mock or canned client because no model was configured.
+   * Without this stamp those two cases are byte-identical to a clean review, and
+   * Gate would publish a green "Ship" for a page nothing looked at. Gate reads
+   * it in `judgmentState()` and refuses to render a grade unless
+   * `model_backed === true`.
+   */
+  provenance?: JudgmentProvenance;
+};
+
+/**
+ * The engine's in-band answer to "did a model judge this page?" Field names are
+ * snake_case because this object is emitted verbatim by the engine
+ * (apatureai/verdict `packages/types/src/provenance.ts`) and rides out to
+ * agent-facing consumers unchanged.
+ */
+export type JudgmentProvenance = {
+  /**
+   * `true` only when a model was called on a capture of the requested target;
+   * `false` when the producer knows nothing judged the page; `null` when it
+   * cannot tell. Anything other than `true` is "not judged" for Gate.
+   */
+  model_backed: boolean | null;
+  /** `model` (a model was called), `canned`/`fixture` (a stand-in), `unknown`. */
+  source: "model" | "canned" | "fixture" | "unknown";
+  /** Which engine surface produced the result, e.g. `verdict-http`. */
+  engine: string;
+  /** The judge model, when one was called. `null` on every other path. */
+  model: string | null;
+  /** One sentence a human can read in a log with no other context. */
+  detail: string;
 };
 
 const CONFIDENCE_SOURCES: readonly ConfidenceSource[] = [

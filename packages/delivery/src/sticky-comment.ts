@@ -1,4 +1,11 @@
 import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
+import {
+  footerModel,
+  judgmentBanner,
+  judgmentCaveat,
+  judgmentState,
+  suppressesGrade,
+} from "./judgment.js";
 import { sanitizeDisplayText } from "./sanitize.js";
 
 /** Severity ladder, lowest to highest (mirrors the `.gate.yml` enum). */
@@ -102,9 +109,19 @@ function detailsSection(title: string, findings: Finding[], screenshots: Map<str
   return `<details>\n<summary>${title} (${findings.length})</summary>\n\n${findingList(findings, screenshots)}\n\n</details>`;
 }
 
-/** Render the sticky comment markdown (pure). */
+/**
+ * Render the sticky comment markdown (pure).
+ *
+ * When the engine states that nothing judged the page, the grade, the narrative
+ * and the findings are all withheld and the comment leads with the disclosure
+ * instead. The heading also drops "design review", because no design review
+ * happened. What survives is what is actually true of such a run: the page was
+ * captured and measured, and the engine said so.
+ */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
   const screenshots = screenshotLinks(result);
+  const state = judgmentState(result);
+  const graded = !suppressesGrade(state);
   const findings = findingsAtOrAbove(
     suppressFindings(result.findings, ctx.suppress),
     ctx.minSeverityToComment,
@@ -113,18 +130,36 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   const shouldFix = findings.filter((f) => f.severity === "major" || f.severity === "minor");
   const nits = findings.filter((f) => f.severity === "nit");
 
-  const parts: string[] = [
-    STICKY_MARKER,
-    "## Apature Gate — design review",
-    `**${GRADE_LABEL[result.grade]}** · reviewed \`${shortSha(ctx.headSha)}\``,
-    result.overall,
-  ];
+  const parts: string[] = [STICKY_MARKER];
+  if (graded) {
+    parts.push(
+      "## Apature Gate — design review",
+      `**${GRADE_LABEL[result.grade]}** · reviewed \`${shortSha(ctx.headSha)}\``,
+      result.overall,
+    );
+  } else {
+    parts.push(
+      "## Apature Gate: no design review",
+      `${judgmentBanner(state)} · captured \`${shortSha(ctx.headSha)}\``,
+      "The page was captured and measured for real. Nothing critiqued it, so Gate is withholding " +
+        "the grade, the summary and any findings this run carried rather than showing them as a " +
+        "verdict on your UI. Point Gate at an engine with a model configured to get a review.",
+    );
+    if (result.findings.length > 0) {
+      parts.push(
+        `_${result.findings.length} unjudged finding(s) were returned and are not listed; ` +
+          "nothing produced them but a stand-in._",
+      );
+    }
+  }
 
-  if (blockers.length > 0) parts.push(blockersTable(blockers, screenshots));
-  const sf = detailsSection("Should fix", shouldFix, screenshots);
-  if (sf) parts.push(sf);
-  const nt = detailsSection("Nits", nits, screenshots);
-  if (nt) parts.push(nt);
+  if (graded) {
+    if (blockers.length > 0) parts.push(blockersTable(blockers, screenshots));
+    const sf = detailsSection("Should fix", shouldFix, screenshots);
+    if (sf) parts.push(sf);
+    const nt = detailsSection("Nits", nits, screenshots);
+    if (nt) parts.push(nt);
+  }
 
   // Always render "not reviewed" when anything was skipped; never silently drop.
   if (result.notReviewed.length > 0) {
@@ -132,6 +167,9 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   }
 
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);
+
+  const judgment = judgmentCaveat(state);
+  if (judgment) parts.push(`> ⚠️ ${judgment}`);
 
   // Capture-health caveat: the engine's page-health footnote (Verdict #20), rendered
   // as informational untrusted display text. It never changes grade, severity,
@@ -144,7 +182,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   // Version-lineage footer: engine/model/capture/dna stamps so every finding is traceable.
   const foot = [
     `engine ${result.metadata.engineVersion}`,
-    `model ${result.metadata.model}`,
+    `model ${footerModel(result)}`,
     `capture ${result.metadata.captureVersion}`,
   ];
   if (result.metadata.uiDnaVersion) foot.push(`ui-dna ${result.metadata.uiDnaVersion}`);

@@ -49,6 +49,28 @@ const findingSchema = z.object({
   confidence: confidenceSchema.optional(),
 });
 
+/**
+ * The engine's judgment provenance (verdict `packages/types/src/provenance.ts`).
+ *
+ * This has to be named in the schema, not merely in the TS type: the schema is
+ * deliberately not `.strict()`, so anything it does not name is STRIPPED. Before
+ * this field existed, verdict's `model_backed: false` stamp was parsed off the
+ * payload and thrown away, and Gate published the accompanying `grade: "ship"`
+ * as a green Check Run: exactly the claim the stamp exists to prevent.
+ *
+ * `source` is `catch`-guarded so a future engine value degrades to `unknown`
+ * instead of failing the whole parse and blocking publish. `model_backed` stays
+ * strict, because it is the field the publish decision turns on and a value Gate
+ * cannot read must never be guessed.
+ */
+const provenanceSchema = z.object({
+  model_backed: z.union([z.boolean(), z.null()]),
+  source: z.enum(["model", "canned", "fixture", "unknown"]).catch("unknown"),
+  engine: z.string(),
+  model: z.string().nullable(),
+  detail: z.string(),
+});
+
 export const GateReviewResultSchema = z.object({
   grade: z.enum(["ship", "ship_with_nits", "needs_work", "blocked"]),
   overall: z.string(),
@@ -82,6 +104,7 @@ export const GateReviewResultSchema = z.object({
     rubricVersion: z.string().optional(),
     uiDnaVersion: z.string().nullable(),
   }),
+  provenance: provenanceSchema.optional(),
 });
 
 // Compile-time guarantee that the schema output IS GateReviewResult.

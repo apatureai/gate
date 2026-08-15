@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import {
+  fixturePreviewCommand,
+  formatLiveReviewResult,
+  LiveReviewConfigError,
+  runLiveReview,
+  type LiveReviewResult,
+} from "../src/live-review.js";
+
+/**
+ * `demo:live` is the command the README tells a new installer to run before
+ * putting Gate in CI, so its refusal path matters as much as its happy path: an
+ * installer with no engine must be told what to set and where to get one, not
+ * dropped into a stack trace.
+ *
+ * The happy path is not unit-testable without a running engine and a browser, by
+ * design; it is exercised by hand against a real `verdict` and the transcript
+ * lives in the README.
+ */
+describe("runLiveReview with no engine configured", () => {
+  it("refuses before touching the network, naming what is missing", async () => {
+    await expect(runLiveReview({ env: {} })).rejects.toBeInstanceOf(LiveReviewConfigError);
+    const error = await runLiveReview({ env: {} }).catch((e: unknown) => e as LiveReviewConfigError);
+    expect(error.missing).toEqual(["GATE_ENGINE_ENDPOINT", "GATE_ENGINE_HMAC_SECRET"]);
+  });
+
+  it("tells the installer how to get an engine, with runnable commands", async () => {
+    const error = await runLiveReview({ env: {} }).catch((e: unknown) => e as LiveReviewConfigError);
+    expect(error.message).toContain("GATE_ENGINE_ENDPOINT");
+    expect(error.message).toContain("apatureai/verdict");
+    expect(error.message).toContain("ENGINE_HMAC_SECRET");
+    expect(error.message).toContain("packages/serve/dist/main.js");
+  });
+
+  it("names only the setting that is actually missing", async () => {
+    const error = await runLiveReview({ env: { GATE_ENGINE_ENDPOINT: "http://127.0.0.1:8791" } }).catch(
+      (e: unknown) => e as LiveReviewConfigError,
+    );
+    expect(error.missing).toEqual(["GATE_ENGINE_HMAC_SECRET"]);
+  });
+});
+
+describe("the preview it reviews", () => {
+  it("is the committed fixture app, resolved absolutely so cwd cannot change it", () => {
+    const command = fixturePreviewCommand();
+    expect(command.startsWith("node /")).toBe(true);
+    expect(command).toContain("fixtures/preview-app.mjs");
+    expect(command.endsWith(" serve")).toBe(true);
+  });
+});
+
+describe("the transcript", () => {
+  const base: LiveReviewResult = {
+    outDir: "/repo/out",
+    endpoint: "http://127.0.0.1:8791",
+    previewUrl: "http://127.0.0.1:3311",
+    outcome: { status: "not_judged", conclusion: "neutral", commentAction: "created", judgment: "unjudged" },
+    checkRun: { name: "Apature Gate", conclusion: "neutral", title: "Not judged", summary: "s" },
+    comment: "body",
+    commentPath: "/repo/out/live-review-comment.md",
+    checkRunPath: "/repo/out/live-check-run.json",
+  };
+
+  it("says in words that nothing judged the page", () => {
+    const text = formatLiveReviewResult(base, "/repo");
+    expect(text).toContain("NOTHING judged the page");
+    expect(text).toContain("Gate withheld the grade");
+  });
+
+  it("says a model judged it only when the engine attested that", () => {
+    const judged = formatLiveReviewResult(
+      {
+        ...base,
+        outcome: { status: "reviewed", conclusion: "neutral", commentAction: "created", judgment: "model_backed" },
+        checkRun: { ...base.checkRun, title: "Needs work" },
+      },
+      "/repo",
+    );
+    expect(judged).toContain("a model judged the page");
+    expect(judged).not.toContain("NOTHING judged");
+  });
+
+  it("does not claim a judgment an engine never made", () => {
+    const silent = formatLiveReviewResult(
+      { ...base, outcome: { status: "reviewed", conclusion: "success", commentAction: "created" } },
+      "/repo",
+    );
+    expect(silent).toContain("did not state whether a model judged the page");
+  });
+});

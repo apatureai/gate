@@ -19,6 +19,7 @@ export {
   legacySecretEnvVarName,
   resolveSecretEnv,
   resolveEngineClientEnv,
+  missingEngineSettings,
   EnvSecretStore,
 } from "./store.js";
 export { REDACTED, redact } from "./redact.js";

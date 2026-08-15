@@ -4,9 +4,11 @@
 
 **Gate runs a pull request's preview build inside a hardened sandbox, hands the verified preview URL to a critique service you supply, and publishes that service's design review back to GitHub as one sticky comment plus a Check Run.**
 
-**Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`verdict`](https://github.com/apatureai/verdict) is one; writing your own is [roadmap item 1](#roadmap). With no reachable critique service configured, every review ends in a neutral Check Run saying exactly that, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
+**Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`verdict`](https://github.com/apatureai/verdict) is one, and [one section below](#running-your-own-critique-service-and-pointing-gate-at-it) is the exact commands to run it and point Gate at it; writing your own is [roadmap item 1](#roadmap). With no critique service configured, every review ends in a neutral Check Run naming the variables you have to set, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
 
-**The half it does own, it owns end to end.** A sandbox that executes untrusted pull request code and cleans up after it, preview-URL discovery with provenance checks, fork gating, queue supersession, a publish-time SHA guard, version- and schema-checked results, annotated screenshots, sticky-comment upsert, and Check Run mapping. Every one of those runs from a clean clone with no credentials, and both demos below prove it on your machine.
+**Gate never shows a passing review for a page nothing judged.** A critique service with no model configured still returns a complete, well-formed result with a grade in it. Gate reads the service's own judgment stamp and, unless it says a model judged the capture, withholds the grade: the Check Run goes neutral and titled *Not judged*, and the comment says so instead of showing a green badge. That rule is the one thing this repository will not trade away for a nicer-looking demo.
+
+**The half it does own, it owns end to end.** A sandbox that executes untrusted pull request code and cleans up after it, preview-URL discovery with provenance checks, fork gating, queue supersession, a publish-time SHA guard, version- and schema-checked results, annotated screenshots, sticky-comment upsert, and Check Run mapping. Every one of those runs from a clean clone with no credentials, and the demos below prove it on your machine.
 
 **The strongest single piece is the sandbox supervisor** in `packages/action`, and it stands alone: no credentials, no network, no critique service, and no dependency on the rest of Gate. If you are writing any GitHub Action that has to execute untrusted pull request code inside a runner, that is the part worth stealing, and `pnpm demo` runs it against a fixture that actively fights teardown.
 
@@ -17,6 +19,7 @@ git clone https://github.com/apatureai/gate.git && cd gate
 pnpm install --frozen-lockfile
 pnpm demo          # the sandbox supervisor, live, against a hostile fixture app
 pnpm demo:review   # a full design review comment, from a recorded critique, written to ./out
+pnpm demo:live     # the whole chain against a critique service you are running (see below)
 ```
 
 <img src="gate_review_demo.png" alt="The review demo's annotated screenshot: a mobile pricing page with a red box and the label f_001 CTA off-palette around the primary call to action" width="300" align="right">
@@ -55,7 +58,7 @@ Three more ideas earn their keep beyond the sandbox:
 | macOS or Linux | n/a | verified on macOS 15.6 and Linux (`node:24-slim`); Windows is not supported yet |
 | Docker (optional) | `docker --version` | only for the Linux resource-cap check below |
 
-No credentials, API keys or network access are needed for anything in this section.
+No credentials, API keys or network access are needed for anything in this section, with one stated exception: `pnpm demo:live` needs a critique service, and the section that introduces it shows you how to run one locally.
 
 ### Install
 
@@ -170,24 +173,116 @@ Gate review demo (recorded engine response, no model call, no network)
   check run       neutral — Needs work
 
   wrote
-    ./out/review-comment.md  (1186 bytes — the sticky PR comment, verbatim)
+    ./out/review-comment.md  (1283 bytes — the sticky PR comment, verbatim)
     ./out/check-run.json  (the Check Run payload)
     ./out/annotated-f_001.png  (26154 bytes — finding f_001 boxed on the fixture page)
     ./out/annotated-f_002.png  (26878 bytes — finding f_002 boxed on the fixture page)
 ```
 
-**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`, byte-identical to [the image at the top of this file](gate_review_demo.png). Regenerate that committed copy with `cp out/annotated-f_001.png gate_review_demo.png`.
+**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. It also closes with a caveat that the recording never said whether a model judged the page, because it does not: the golden fixture predates the `provenance` field, and Gate reports that rather than assuming. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`, byte-identical to [the image at the top of this file](gate_review_demo.png). Regenerate that committed copy with `cp out/annotated-f_001.png gate_review_demo.png`.
 
 What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI; it replays a recorded judgment through the real delivery path.
 
 Both demos are covered by the test suite (`packages/action/test/supervisor-demo.test.ts`, `packages/action/test/review-demo.test.ts`), so they cannot rot silently while the tests stay green.
+
+### Running your own critique service, and pointing Gate at it
+
+The previous demo replays a recorded critique. This one runs the whole chain against a critique service that is genuinely running on your machine: real HMAC signing, a real `POST /jobs`, a real headless-Chromium capture of a page the sandbox supervisor really started, and the real schema check on the way back. Only GitHub is substituted, because publishing to a pull request needs an account and proves nothing about whether the two halves agree.
+
+**One terminal for the engine.** [`verdict`](https://github.com/apatureai/verdict) is the reference implementation of the contract:
+
+```bash
+git clone https://github.com/apatureai/verdict.git && cd verdict
+pnpm install --frozen-lockfile
+pnpm browser:install          # downloads the Chromium the capture needs
+pnpm build
+
+export ENGINE_HMAC_SECRET="$(openssl rand -hex 32)"   # required; never defaulted
+node packages/serve/dist/main.js --port 8791 --model mock
+```
+
+```
+judgment-engine-serve listening on http://127.0.0.1:8791
+  MOCK model client — deterministic, empty critique. No network call.
+  no model is configured, so every result will carry provenance saying nothing judged the page
+  artifacts: out/serve
+  POST /jobs to submit, GET /jobs/:id to poll, DELETE /jobs/:id to cancel
+```
+
+**A second terminal for Gate**, with the same secret:
+
+```bash
+cd gate
+export GATE_ENGINE_ENDPOINT=http://127.0.0.1:8791
+export GATE_ENGINE_HMAC_SECRET=<the same value you exported above>
+export GATE_LOCAL_SERVE_URL=http://127.0.0.1:3311
+pnpm demo:live
+```
+
+```
+Gate live review (real engine, real capture, GitHub substituted)
+
+  engine          http://127.0.0.1:8791
+  preview         http://127.0.0.1:3311  (fixture app, started by the supervisor)
+  action status   not_judged · comment created
+  check run       neutral, Not judged
+  judgment        unjudged: NOTHING judged the page; the engine has no model configured, and Gate withheld the grade
+
+  wrote
+    ./out/live-review-comment.md  (the sticky PR comment, verbatim)
+    ./out/live-check-run.json  (the Check Run payload)
+```
+
+`GATE_ENGINE_API_KEY` is optional and left unset above: a self-hosted engine authenticates on the HMAC signature alone. Set it if your service also wants a bearer token.
+
+**That "Not judged" is the point, not a failure.** The engine above has no model key, so it captured the page for real, measured contrast, overflow and touch targets for real, and then filled the critique from a deterministic stand-in. The result it returned still carries `grade: "ship"`, because a wire result always carries a grade. Gate reads the engine's `provenance` stamp, sees `model_backed: false`, and refuses to let that grade speak: the Check Run is neutral and titled *Not judged*, and the comment leads with the disclosure instead of a green badge. Nothing in this repository will show you a ✅ for a page nothing looked at.
+
+Give the engine a model and the same command produces a review:
+
+```bash
+# in the engine's terminal
+export MODEL_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1   # or your vLLM/SGLang endpoint
+export MODEL_API_KEY=<your key>
+node packages/serve/dist/main.js --port 8791 --model live
+```
+
+```
+  action status   reviewed · comment created
+  check run       neutral, Needs work
+  judgment        model_backed: a model judged the page; the grade above is a review
+```
+
+and `out/live-review-comment.md` is a real review of the fixture page, with each finding linked to the screenshot region it came from:
+
+```markdown
+## Apature Gate — design review
+
+**⚠️ Needs work** · reviewed `0123456`
+
+The page has one heading and no visual hierarchy below it.
+
+<details>
+<summary>Should fix (1)</summary>
+
+- **Heading sits at default browser size** (`/`, desktop) — Apply the design system's display type token to the h1. · [Evidence](http://127.0.0.1:8791/artifacts/jobs/.../screenshots/index/desktop.png?token=...)
+
+</details>
+```
+
+With no engine configured at all, `pnpm demo:live` refuses before touching the network and exits 2:
+
+```
+No engine to review against. Set GATE_ENGINE_ENDPOINT and GATE_ENGINE_HMAC_SECRET.
+```
+
+Once that command works, the same two variables are what the workflow needs; see [Using the Action in a workflow](#using-the-action-in-a-workflow). `demo:live`'s refusal path and its transcript are covered by `packages/action/test/live-review.test.ts`; its happy path needs a running engine and a browser, so it is exercised by hand and the transcripts above are from those runs.
 
 ## Who this is for
 
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 596 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 647 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -197,27 +292,27 @@ What runs today, from a clean clone, with no credentials:
 |---|---|---|
 | Sandbox supervisor | **Works** | `pnpm demo`; resource cap applies on Linux only |
 | Review delivery (comment, Check Run, annotation) | **Works** | `pnpm demo:review` |
-| Engine client (async jobs, HMAC, schema checks) | **Works** | Exercised against a mock engine |
+| Engine client (async jobs, HMAC, schema checks) | **Works** | Driven against a real `verdict` over HTTP; `pnpm demo:live` |
 | Action path orchestration (`runAction`) | **Works** | Covered end to end in `@gate/e2e` |
 | Preview login sealing (`gate auth`) | **Works** | Runs offline against a bundled fixture |
-| GitHub Action, live | **Needs an endpoint** | Code complete; needs a reachable critique service and a published action ref |
+| GitHub Action, live | **Needs an endpoint** | Code complete and proven against a locally run `verdict`; needs a critique service you host and a published action ref |
 | App path (webhooks, queue, Postgres, RLS) | **Needs provisioning** | Tested against PGlite and in-memory fakes |
 | Dashboard | **Builds** | Core logic tested; the Next.js shell is a thin renderer over it |
 | Billing | **Untested against Stripe** | Stripe plumbing and tier limits are unit-tested; no real charge has ever run |
-| Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; see roadmap item 1 |
+| Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; run [`verdict`](https://github.com/apatureai/verdict) or write your own, see roadmap item 1 |
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
 | Baseline before/after comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the pairs; nothing on the review path calls it |
 
-Verified on 2026-08-10, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
+Verified on 2026-08-15, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
 ```
 pnpm install --frozen-lockfile   lockfile up to date, exit 0
 pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
-pnpm test                        Test Files  94 passed (94)
-                                       Tests  596 passed (596)
-                                    Duration  13.62s
+pnpm test                        Test Files  99 passed (99)
+                                       Tests  647 passed (647)
+                                    Duration  13.24s
 pnpm audit                       No known vulnerabilities found
 ```
 
@@ -230,7 +325,7 @@ npm run typecheck                tsc --noEmit, exit 0
 npm audit                        found 0 vulnerabilities
 ```
 
-Both demos were re-run against this revision, and the transcripts above are from those runs.
+All three demos were re-run against this revision, and the transcripts above are from those runs. `pnpm demo:live` was run against a `verdict` built from its `f387f15` and served on `127.0.0.1:8791`.
 
 ## Roadmap
 
@@ -297,9 +392,18 @@ jobs:
           # or: preview-command: "pnpm build && pnpm preview"
           config-path: .gate.yml
           gate-mode: none   # none | nits | blockers
+        env:
+          # Where your critique service listens, and the secret it verifies
+          # signatures with (the same value as its own ENGINE_HMAC_SECRET).
+          # Both are required. Without them the step publishes a neutral
+          # "Engine not configured" Check Run and reviews nothing.
+          GATE_ENGINE_ENDPOINT: ${{ secrets.GATE_ENGINE_ENDPOINT }}
+          GATE_ENGINE_HMAC_SECRET: ${{ secrets.GATE_ENGINE_HMAC_SECRET }}
 ```
 
 `apatureai/gate@v1` does not resolve yet (roadmap item 8), so for now point `uses:` at your own fork or a commit SHA.
+
+**Before you add this to CI, run [`pnpm demo:live`](#running-your-own-critique-service-and-pointing-gate-at-it) against the same endpoint and secret.** It exercises the identical client, signing and parsing on your machine in about a minute, and tells you in one line whether a model actually judged the page. A workflow is a slow place to discover a wrong shared secret.
 
 ### Running the Action locally
 
@@ -408,7 +512,9 @@ On the Action path, capture runs inside **your** runner, which means attacker-au
 
 - **Async jobs, not a long-held call.** `POST /jobs` → `202` + job id, then `GET /jobs/:id` with depth-aware backoff to a 10-minute deadline. A proxy's idle timeout would kill a 90-second synchronous request, and the seam also means a restart mid-review loses only a poll loop.
 - **Idempotency.** Requests carry a repository-scoped key (`gate-review-v2:sha256:<digest>` over owner, name, PR number and head SHA), so a retry resumes the existing job instead of paying for a second capture.
-- **Versioned and parsed.** The service returns `x-schema-version`; Gate checks it, then Zod-parses the body. A drifted or malformed response produces a typed error and *no* published review.
+- **Versioned and parsed.** The service returns `x-schema-version`; Gate checks it, then Zod-parses the body. A drifted or malformed response produces a typed error and *no* published review. The schema is intentionally not strict, so an additive field from a newer service is tolerated; that also means an unnamed field is *stripped*, which is why `provenance` is named explicitly below.
+- **Judgment provenance, in the payload.** A result may carry `provenance: { model_backed, source, engine, model, detail }`. Gate treats anything other than `model_backed: true` as "not judged" and withholds the grade. A service that does not send the field at all keeps its grade, with a visible caveat that it never said. The prose form (`notReviewed` lines beginning `[verdict] no model judged this page`) is honoured too, so a service that discloses in only one of the two places is still believed.
+- **Error envelopes.** Every non-2xx carries `{"error": "<code>"}`; Gate puts that code in the thrown error, so a wrong shared secret reads `engine submit failed: 401 (signature_mismatch)` rather than a bare `401`.
 - **Two identities, deliberately different.** See [Why it is interesting](#why-it-is-interesting).
 - **A publish-time SHA guard that does not trust cancellation.** Same.
 - **Depth.** At most one *deep* review per PR per 10 minutes, tracked in Postgres (`runs.last_full_review_at`, not a Redis timer, so a restart cannot reset the cap); pushes inside that window get the cheaper *triage* pass.
@@ -419,11 +525,14 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 
 | Failure | Behaviour |
 |---|---|
+| No critique service configured | Neutral "Engine not configured" Check Run naming `GATE_ENGINE_ENDPOINT` / `GATE_ENGINE_HMAC_SECRET`; the review is never attempted, and the summary says in words that this is not a pass |
+| Service returned a result nothing judged | Neutral "Not judged" Check Run; the grade, the narrative and any findings are withheld, and the comment leads with the service's own disclosure |
 | No preview URL found | Neutral Check Run with setup guidance |
 | Unverified preview source | "not reviewed (unverified preview source)"; never forwarded |
 | Preview returns an auth wall | Not reviewed; link to bypass/auth setup |
 | Poll timeout (10 min) | Best-effort `DELETE`, then neutral Check Run, reason `review_timed_out` |
-| 409 on submit (duplicate idempotency key) | Poll the existing job; never re-run capture |
+| 409 on submit, with a job id (exact retry) | Poll the existing job; never re-run capture |
+| 409 on submit, with no job id (the key was reused by a *different* request) | Typed conflict error naming the caller's mistake; never a poll of `/jobs/undefined` |
 | 429/503 | Honour `Retry-After`; if the circuit is open, neutral "temporarily unavailable" |
 | Malformed result (schema or version mismatch) | Zod parse fails → do not publish; never post a null-grade review |
 | Invalid element refs in a result | Publish only validated findings; show a capture warning |
@@ -478,9 +587,9 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 
 | Variable | Required | Default | Effect |
 |---|---|---|---|
-| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → every review ends in a neutral "unavailable" Check Run. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
-| `GATE_ENGINE_API_KEY` | Action + App | none | Service auth. Unset → the job is rejected. Deprecated alias: `JUDGMENT_ENGINE_API_KEY`. |
-| `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests. Unset → requests are unsigned and refused. Deprecated alias: `JUDGMENT_ENGINE_HMAC_SECRET`. |
+| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → a neutral "Engine not configured" Check Run naming what to set; the review is not attempted. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
+| `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests; must equal the service's own `ENGINE_HMAC_SECRET`. Unset → same "Engine not configured" Check Run, because an unsigned job is refused with `401 signature_mismatch`. Deprecated alias: `JUDGMENT_ENGINE_HMAC_SECRET`. |
+| `GATE_ENGINE_API_KEY` | optional | none | Bearer token, when the service wants one on top of the signature. A self-hosted `verdict` authenticates on the HMAC alone, so this stays unset. Deprecated alias: `JUDGMENT_ENGINE_API_KEY`. |
 | `GITHUB_TOKEN` / `INPUT_GITHUB_TOKEN` | Action | none | Posts the sticky comment and Check Run. Unset → nothing is published. |
 | `GITHUB_REPOSITORY`, `GITHUB_EVENT_PATH` | Action | none | Runner-supplied context. Missing → the entrypoint throws `missing GitHub Action context`. |
 | `GITHUB_DEFAULT_BRANCH` | Action | `main` | Default branch reported with the request. |
@@ -589,7 +698,9 @@ More in [`CONTRIBUTING.md`](CONTRIBUTING.md): conventions, the three edits addin
 
 ## Running a live review
 
-The code seam is done; provisioning is an operator action. Beyond the environment variables above you need: a Postgres instance whose app role is a non-superuser without `BYPASSRLS` (otherwise the row-level-security tenant isolation is decorative), a Redis with `maxmemory-policy=noeviction`, a KMS key bound to the secret store, an object store for screenshots, a GitHub App created from `buildAppManifest` with its webhook pointed at your `/webhook`, and, above all, a reachable critique service implementing the job protocol above (roadmap item 1).
+**On the Action path, nothing else is needed.** A critique service, two environment variables, and a workflow: that is the whole list, and [`pnpm demo:live`](#running-your-own-critique-service-and-pointing-gate-at-it) proves the chain before you commit a workflow file. Everything below is the App path.
+
+**On the App path**, the code seam is done and provisioning is an operator action. Beyond the environment variables above you need: a Postgres instance whose app role is a non-superuser without `BYPASSRLS` (otherwise the row-level-security tenant isolation is decorative), a Redis with `maxmemory-policy=noeviction`, a KMS key bound to the secret store, an object store for screenshots, a GitHub App created from `buildAppManifest` with its webhook pointed at your `/webhook`, and, above all, a reachable critique service implementing the job protocol above (roadmap item 1).
 
 Enterprise-style accounts can route to an in-VPC service instead: each account has an optional KMS-encrypted `engineEndpoint`, and `createAccountEngineTransport` targets **only** that endpoint. There is no fallback path to a shared service, so an in-VPC outage surfaces as `not_reviewed` rather than sending screenshots to a third party.
 
@@ -597,7 +708,8 @@ Enterprise-style accounts can route to an in-VPC service instead: each account h
 
 Stated up front, because finding them after you have wired Gate in is worse.
 
-- **Half the system is behind an HTTP contract you have to implement.** Every claim about screenshot quality, model behaviour, prompt design or finding accuracy belongs to the critique service. Gate's tests prove Gate's orchestration and delivery against a *mock*; they prove nothing about review quality. Roadmap item 1.
+- **Half the system is behind an HTTP contract you have to implement.** Every claim about screenshot quality, model behaviour, prompt design or finding accuracy belongs to the critique service. Gate's tests prove Gate's orchestration and delivery; they prove nothing about review quality. There is a reference implementation to run ([`verdict`](https://github.com/apatureai/verdict)) and a command that drives the whole chain against it (`pnpm demo:live`), but the review itself is still someone else's half. Roadmap item 1.
+- **Review quality is entirely the service's, and Gate can only tell you whether a model was involved at all.** The `provenance` stamp answers "did anything judge this?", not "was the judgment any good?". A service that runs a real but bad model gets a real, bad review published verbatim.
 - **The Action path constrains hostile pull request code; it does not sandbox it.** The `ulimit` caps, environment allowlist, loopback-redirect refusal and fork gating are real mitigations. The aggregate cgroup-v2 caps that would make them airtight are roadmap item 6. Read the threat model before running the Action path on a repository that accepts fork pull requests.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.

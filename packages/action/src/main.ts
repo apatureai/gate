@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { CONFIG_FILENAME, loadDesignReviewConfig, resolveConfigPath } from "@gate/config";
+import { engineNotConfiguredCheckRun } from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
-import { resolveEngineClientEnv } from "@gate/secrets";
+import { missingEngineSettings, resolveEngineClientEnv } from "@gate/secrets";
 import type { GateMode } from "@gate/types";
 import { formatActionError } from "./action-error.js";
 import { createGitHubApi } from "./github.js";
@@ -82,6 +83,23 @@ async function main(): Promise<void> {
       `Apature Gate: ${legacyName} is deprecated and will be dropped; rename it to ${canonicalName}.`,
     );
   }
+
+  // Gate does not ship a critique engine, so a workflow that never set
+  // GATE_ENGINE_ENDPOINT is the single most likely first-run misconfiguration.
+  // Before this check it fell through to `fetch("/jobs")`, whose `TypeError:
+  // Failed to parse URL` was caught by the same handler as a real outage and
+  // published as "The design engine is temporarily unavailable ... Gate will
+  // retry", advice that can never come true. Naming the missing variable, once,
+  // is the difference between a fixable setup and a check run that lies quietly
+  // on every push.
+  const missing = missingEngineSettings(engineEnv);
+  if (missing.length > 0) {
+    const run = engineNotConfiguredCheckRun(missing);
+    console.error(`Apature Gate: ${run.title}. ${missing.join(", ")} not set.`);
+    if ((await gh.getCurrentHeadSha()) === pr.head.sha) await gh.publishCheckRun(run);
+    return;
+  }
+
   const engine = createJudgmentEngineClient(
     createHttpEngineTransport({
       baseUrl: engineEnv.endpoint,

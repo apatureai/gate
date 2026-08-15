@@ -4,11 +4,25 @@ The Gate **Action path**: a zero-infra GitHub Action that resolves a PR preview
 URL, submits a review job to the critique service you configure through
 `GATE_ENGINE_ENDPOINT` (the public `verdict` being one), and posts a
 sticky comment + advisory Check Run. No critique service ships in this
-repository, and with none reachable the run ends in a neutral Check Run saying
-so. Judgment-only: it never requests `contents: write`.
+repository; with none configured the run ends in a neutral "Engine not
+configured" Check Run naming the variables to set, and reviews nothing.
+Judgment-only: it never requests `contents: write`.
+
+Two variables are required and neither is defaulted: `GATE_ENGINE_ENDPOINT` and
+`GATE_ENGINE_HMAC_SECRET`, which must equal the service's own
+`ENGINE_HMAC_SECRET` because every job request is signed. `GATE_ENGINE_API_KEY`
+is optional, for a service that also wants a bearer token.
+
+**A run nothing judged is never published as a pass.** A critique service with
+no model configured still returns a complete result carrying a grade. `runAction`
+reads the service's `provenance` stamp and, unless it says a model judged the
+capture, returns status `not_judged`, publishes a neutral *Not judged* Check Run,
+and renders a comment that leads with the disclosure instead of a grade.
 
 The part that needs no service at all is the local-serve supervisor documented
-below; `pnpm demo` exercises it from a clean clone.
+below; `pnpm demo` exercises it from a clean clone. To drive the whole chain
+against a service you are running, `pnpm demo:live` (root
+[README](../../README.md#running-your-own-critique-service-and-pointing-gate-at-it)).
 
 ## Usage
 

@@ -4,6 +4,8 @@ import {
   decideDelivery,
   decideDeliveryForError,
   type GitHubCommentsApi,
+  type JudgmentState,
+  suppressesGrade,
   upsertStickyComment,
 } from "@gate/delivery";
 import { assertReviewOutcomeIdentity, type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
@@ -93,6 +95,13 @@ export interface ActionRunDeps {
 
 export type ActionStatus =
   | "reviewed"
+  /**
+   * The engine returned a complete result and stated that nothing judged the
+   * page (no model configured, so a deterministic stand-in filled the critique).
+   * Distinct from `reviewed` on purpose: the run log, the Check Run and the
+   * sticky comment must not all call this a review when it was not one.
+   */
+  | "not_judged"
   | "no_preview"
   | "unverified_preview"
   | "engine_error"
@@ -103,6 +112,8 @@ export interface ActionOutcome {
   conclusion: CheckRunConclusion;
   commentAction?: "created" | "updated" | "skipped_stale";
   notReviewed?: string;
+  /** Engine's judgment attestation for a completed result (`decideDelivery`). */
+  judgment?: JudgmentState;
 }
 
 function neutralCheckRun(title: string, summary: string): CheckRun {
@@ -255,7 +266,13 @@ export async function runAction(
     }
     await deps.publishCheckRun({ name: "Apature Gate", ...decision.checkRun });
 
-    return { status: "reviewed", conclusion: decision.checkRun.conclusion, commentAction };
+    const judged = !decision.judgment || !suppressesGrade(decision.judgment);
+    return {
+      status: judged ? "reviewed" : "not_judged",
+      conclusion: decision.checkRun.conclusion,
+      commentAction,
+      ...(decision.judgment ? { judgment: decision.judgment } : {}),
+    };
   } finally {
     // Always tear down the local server (every return path above + any throw).
     if (server) await server.stop();

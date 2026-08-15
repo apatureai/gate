@@ -16,6 +16,7 @@ export type {
   Finding,
   GateReviewRequest,
   GateReviewResult,
+  JudgmentProvenance,
   ConfidenceSource,
   ConfidenceCalibrationReference,
   ConfidenceUnavailableReason,
