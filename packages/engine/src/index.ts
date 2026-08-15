@@ -2,7 +2,9 @@ export {
   REVIEW_DEADLINE_MS,
   EngineJobError,
   EngineAbortedError,
+  EngineIdempotencyConflictError,
   RetryableEngineError,
+  classifyEngineFailure,
   GATE_REVIEW_INTENT_NAMESPACE,
   parseRetryAfterMs,
   canonicalReviewIdentity,
@@ -14,6 +16,9 @@ export {
   cancelEngineJob,
 } from "./jobs.js";
 export type {
+  EngineErrorDetails,
+  EngineFailure,
+  EngineFailureKind,
   JobState,
   JobStatus,
   JobSubmission,

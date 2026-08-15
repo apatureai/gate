@@ -19,7 +19,8 @@ export {
   judgmentDetail,
   judgmentTitle,
   judgmentBanner,
-  judgmentCaveat,
+  judgmentNoGradeReason,
+  judgmentRemedy,
   footerModel,
 } from "./judgment.js";
 export type { JudgmentState } from "./judgment.js";
@@ -28,7 +29,14 @@ export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.
 export { setupFailureCheckRun, engineNotConfiguredCheckRun } from "./setup-failure.js";
 export { sanitizeDisplayText } from "./sanitize.js";
 export { validateFindings, decideDelivery, decideDeliveryForError } from "./degradation.js";
-export type { DegradationReason, DeliveryDecision, DegradationContext, FindingValidation } from "./degradation.js";
+export type {
+  DegradationReason,
+  DeliveryDecision,
+  DegradationContext,
+  EngineErrorFacts,
+  FindingValidation,
+  PreResultFailureReason,
+} from "./degradation.js";
 export { buildAnnotationSvg, annotateScreenshot } from "./annotate.js";
 export type { Rect, Annotation } from "./annotate.js";
 export {

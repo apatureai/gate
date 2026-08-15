@@ -85,10 +85,29 @@ export interface EngineTransport {
   cancel(jobId: string, installationId: string): Promise<void>;
 }
 
+/** What the engine said, beyond the message, when a call was rejected. */
+export interface EngineErrorDetails {
+  /** The engine's machine-readable `{"error": "..."}` code, when it sent one. */
+  code?: string | null;
+  /** HTTP status of the rejected call, when the failure was an HTTP response. */
+  status?: number | null;
+}
+
 export class EngineJobError extends Error {
-  constructor(message: string) {
+  /**
+   * The engine's own error code. Carried as a field, not only inside the
+   * message, because the delivery layer has to decide whether the condition can
+   * clear on a retry, and parsing prose to find that out is not a decision
+   * anyone should make.
+   */
+  readonly code: string | null;
+  /** HTTP status, when there was one. `null` for local/transport failures. */
+  readonly status: number | null;
+  constructor(message: string, details: EngineErrorDetails = {}) {
     super(message);
     this.name = "EngineJobError";
+    this.code = details.code ?? null;
+    this.status = details.status ?? null;
   }
 }
 
@@ -102,6 +121,18 @@ export class EngineAbortedError extends EngineJobError {
   }
 }
 
+/**
+ * A key already spent on a DIFFERENT request. Its own class because its own
+ * remedy: nothing about waiting fixes it, and the caller, not the engine, is the
+ * one that has to change something.
+ */
+export class EngineIdempotencyConflictError extends EngineJobError {
+  constructor(message: string, code: string) {
+    super(message, { code, status: 409 });
+    this.name = "EngineIdempotencyConflictError";
+  }
+}
+
 /** A transient engine error (429/503) carrying an optional Retry-After delay. */
 export class RetryableEngineError extends EngineJobError {
   readonly retryAfterMs: number | null;
@@ -110,6 +141,58 @@ export class RetryableEngineError extends EngineJobError {
     this.name = "RetryableEngineError";
     this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * How a failed engine call should be reported to the operator.
+ *
+ * `engine_unavailable` is the only one of these that "Gate will retry" is true
+ * of. The other two are permanent until a human changes something, and telling
+ * someone with a wrong `GATE_ENGINE_HMAC_SECRET` to wait is a promise that can
+ * never come true.
+ */
+export type EngineFailureKind =
+  /** The engine rejected the request itself: wrong secret, unknown installation, bad route. */
+  | "engine_rejected"
+  /** The idempotency key was already spent on a different request body. */
+  | "idempotency_conflict"
+  /** The engine could not be reached, or failed in a way a retry can clear. */
+  | "engine_unavailable";
+
+export interface EngineFailure {
+  kind: EngineFailureKind;
+  /** The engine's machine-readable code, when it sent one. */
+  code: string | null;
+  /** HTTP status, when there was one. */
+  status: number | null;
+  /** The thrown message, which already names the status and the code. */
+  message: string;
+}
+
+/**
+ * Classify a thrown engine error for delivery. A 4xx that is not a documented
+ * transient (429) is the caller's problem and stays the caller's problem until
+ * the caller changes: it is reported as a rejection, not as an outage.
+ */
+export function classifyEngineFailure(err: unknown): EngineFailure {
+  const message = err instanceof Error ? err.message : String(err);
+  if (err instanceof EngineIdempotencyConflictError) {
+    return { kind: "idempotency_conflict", code: err.code, status: err.status, message };
+  }
+  if (err instanceof RetryableEngineError) {
+    return { kind: "engine_unavailable", code: err.code, status: err.status, message };
+  }
+  if (err instanceof EngineJobError) {
+    const status = err.status;
+    const rejected = status !== null && status >= 400 && status < 500 && status !== 429;
+    return {
+      kind: rejected ? "engine_rejected" : "engine_unavailable",
+      code: err.code,
+      status,
+      message,
+    };
+  }
+  return { kind: "engine_unavailable", code: null, status: null, message };
 }
 
 /** Parse an HTTP `Retry-After` header (delta-seconds or HTTP-date) to ms. */

@@ -19,6 +19,14 @@ reads the service's `provenance` stamp and, unless it says a model judged the
 capture, returns status `not_judged`, publishes a neutral *Not judged* Check Run,
 and renders a comment that leads with the disclosure instead of a grade.
 
+**A result that says nothing about its own judgment is treated the same way.** A
+service that omits `provenance` entirely gets a neutral *Judgment not stated*
+Check Run, not a green one. If you are writing a critique service, stamp
+`provenance: { model_backed: true, source: "model", engine, model, detail }` on
+results a model actually produced; that one additive field is the whole
+difference between a graded review and a withheld one, and the Check Run names
+it.
+
 The part that needs no service at all is the local-serve supervisor documented
 below; `pnpm demo` exercises it from a clean clone. To drive the whole chain
 against a service you are running, `pnpm demo:live` (root
@@ -44,7 +52,23 @@ jobs:
           # or: preview-command: "pnpm build && pnpm preview"
           config-path: .gate.yml
           gate-mode: none   # none | nits | blockers
+        env:
+          # Where your critique service listens, and the secret it verifies
+          # signatures with (the same value as its own ENGINE_HMAC_SECRET).
+          # Both are required, and neither is defaulted. Without them the step
+          # publishes a neutral "Engine not configured" Check Run and reviews
+          # nothing.
+          GATE_ENGINE_ENDPOINT: ${{ secrets.GATE_ENGINE_ENDPOINT }}
+          GATE_ENGINE_HMAC_SECRET: ${{ secrets.GATE_ENGINE_HMAC_SECRET }}
 ```
+
+**Before you put this in CI, run [`pnpm demo:live`](../../README.md#running-your-own-critique-service-and-pointing-gate-at-it)
+against the same endpoint and secret.** A workflow is a slow place to discover a
+wrong shared secret. If one does reach CI, the step says so in words: the
+critique service's rejection is published as a neutral *Review not submitted*
+Check Run carrying its own `HTTP 401 signature_mismatch`, and it does not promise
+a retry, because a wrong secret is not an outage and will not clear on the next
+push.
 
 ## Local preview (`preview-command`)
 

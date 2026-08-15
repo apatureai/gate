@@ -173,13 +173,13 @@ Gate review demo (recorded engine response, no model call, no network)
   check run       neutral — Needs work
 
   wrote
-    ./out/review-comment.md  (1283 bytes — the sticky PR comment, verbatim)
+    ./out/review-comment.md  (1186 bytes — the sticky PR comment, verbatim)
     ./out/check-run.json  (the Check Run payload)
     ./out/annotated-f_001.png  (26154 bytes — finding f_001 boxed on the fixture page)
     ./out/annotated-f_002.png  (26878 bytes — finding f_002 boxed on the fixture page)
 ```
 
-**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. It also closes with a caveat that the recording never said whether a model judged the page, because it does not: the golden fixture predates the `provenance` field, and Gate reports that rather than assuming. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`, byte-identical to [the image at the top of this file](gate_review_demo.png). Regenerate that committed copy with `cp out/annotated-f_001.png gate_review_demo.png`.
+**Success looks like:** four files in `out/`. `out/review-comment.md` opens with the hidden sticky marker `<!-- apature-gate:sticky -->` and lists *"Primary CTA uses an off-brand color on mobile"*. It shows a grade because the golden fixture carries `provenance.model_backed: true`, which is what a critique service stamps on a result a model actually produced; strip that block out of the fixture and the same command writes a *Judgment not stated* Check Run with no grade instead. `out/annotated-f_001.png` is a 390x844 fixture pricing page with a red box drawn around the call-to-action button and the label `f_001 CTA off-palette`, byte-identical to [the image at the top of this file](gate_review_demo.png). Regenerate that committed copy with `cp out/annotated-f_001.png gate_review_demo.png`.
 
 What is real in that run: `runAction`, the engine client and its schema checking, finding validation and degradation, the sticky-comment renderer, the Check Run mapping, and `annotateScreenshot`'s SVG compositing. What is substituted: the engine's HTTP responses (replayed), the base screenshot (drawn locally from an SVG), and the element geometry the boxes come from (a real run gets it from the engine's capture geometry map). Nothing in the demo judges a UI; it replays a recorded judgment through the real delivery path.
 
@@ -275,6 +275,41 @@ With no engine configured at all, `pnpm demo:live` refuses before touching the n
 No engine to review against. Set GATE_ENGINE_ENDPOINT and GATE_ENGINE_HMAC_SECRET.
 ```
 
+**With the wrong shared secret**, which is the mistake to expect, the same command reaches the service, is rejected, and says which variable is wrong:
+
+```
+[gate] engine call failed (engine_rejected): engine submit failed: 401 (signature_mismatch)
+
+  action status   engine_rejected · comment none
+  check run       neutral, Review not submitted
+```
+
+`out/live-check-run.json` carries what the pull request would have shown:
+
+```
+Gate reached the critique service, and the service rejected the request. No review was
+submitted and the PR is not blocked.
+
+The critique service answered `HTTP 401 signature_mismatch`.
+
+`GATE_ENGINE_HMAC_SECRET` does not match the critique service's own `ENGINE_HMAC_SECRET`.
+The two values have to be identical.
+
+This one does not clear by itself: the next push sends the same request to the same
+endpoint with the same credentials, so Gate is not promising a retry that would fix it.
+```
+
+**With a preview that redeployed at a new URL under an unchanged head SHA**, the idempotency key for that `(pr, head_sha)` has already been spent on a different request body, so the service answers `409 idempotency_conflict` and Gate gives it its own Check Run rather than calling it an outage:
+
+```
+[gate] engine call failed (idempotency_conflict): engine submit conflict: idempotency_conflict (the idempotency key is already in use by a different request)
+
+  action status   idempotency_conflict · comment none
+  check run       neutral, Review not submitted (duplicate key)
+```
+
+Its summary names the cause and the remedy: push a commit, or re-run once the preview URL has settled. Neither of these two ever fails the pull request, and neither pretends a retry will help.
+
 Once that command works, the same two variables are what the workflow needs; see [Using the Action in a workflow](#using-the-action-in-a-workflow). `demo:live`'s refusal path and its transcript are covered by `packages/action/test/live-review.test.ts`; its happy path needs a running engine and a browser, so it is exercised by hand and the transcripts above are from those runs.
 
 ## Who this is for
@@ -282,7 +317,7 @@ Once that command works, the same two variables are what the workflow needs; see
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 647 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 658 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -295,7 +330,7 @@ What runs today, from a clean clone, with no credentials:
 | Engine client (async jobs, HMAC, schema checks) | **Works** | Driven against a real `verdict` over HTTP; `pnpm demo:live` |
 | Action path orchestration (`runAction`) | **Works** | Covered end to end in `@gate/e2e` |
 | Preview login sealing (`gate auth`) | **Works** | Runs offline against a bundled fixture |
-| GitHub Action, live | **Needs an endpoint** | Code complete and proven against a locally run `verdict`; needs a critique service you host and a published action ref |
+| GitHub Action, live | **Needs an endpoint** | Code complete and proven against a locally run `verdict`; `Dockerfile.action` builds and the image has been driven against a running service. Needs a critique service you host; `apatureai/gate@v1` resolves |
 | App path (webhooks, queue, Postgres, RLS) | **Needs provisioning** | Tested against PGlite and in-memory fakes |
 | Dashboard | **Builds** | Core logic tested; the Next.js shell is a thin renderer over it |
 | Billing | **Untested against Stripe** | Stripe plumbing and tier limits are unit-tested; no real charge has ever run |
@@ -311,7 +346,7 @@ pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
 pnpm test                        Test Files  99 passed (99)
-                                       Tests  647 passed (647)
+                                       Tests  658 passed (658)
                                     Duration  13.24s
 pnpm audit                       No known vulnerabilities found
 ```
@@ -338,7 +373,7 @@ Concrete, pickup-able work. Each one names the seam it plugs into.
 5. **Keep the dependency tree clean.** Both trees audit clean as of 2026-08-10, and staying there is the ongoing job. The eleven advisories that were open the day before are cleared in [SECURITY.md](SECURITY.md#dependency-advisories), which also records the one pinned override holding a fix in place. Dependabot opens the bumps; what is missing is a CI job that fails on a new advisory rather than leaving it to whoever next runs `pnpm audit` by hand. That job is the pickup-able piece, and it wants the same drift policy as item 10.
 6. **Aggregate cgroup-v2 caps for the supervisor.** The `ulimit` caps are per-process. `pids.max` and `memory.max` on a cgroup would make containment aggregate rather than per-process, which is the difference between a mitigation and a sandbox. Needs host setup, so it wants a design discussion first.
 7. **Windows support.** The supervisor relies on POSIX process groups. A Job Object based implementation behind the same `startLocalServer` signature would be a substantial and self-contained contribution.
-8. **Publish the Action.** `uses: apatureai/gate@v1` does not resolve yet; the Action is a Docker action defined by `action.yml` and `Dockerfile.action`, so this is a release-tag and Marketplace step.
+8. **List the Action on the Marketplace.** The moving major tag `v1` is cut and pushed, so `uses: apatureai/gate@v1` resolves and the Docker action (`action.yml` + `Dockerfile.action`) builds and runs. What is left is the Marketplace listing itself, which is a repository-owner step from the Releases page.
 9. **A scheduled live-pipeline smoke test.** `packages/e2e/test/golden-path.test.ts` asserts the full Action path against a mock engine. The scheduled variant that runs it against a real deployment was specified and never wired.
 10. **Restore the image-and-SBOM CI job.** Both Dockerfiles build today, but the job that built them, generated SBOMs and failed on fixable medium-or-higher vulnerabilities is not in `.github/workflows/ci.yml`. It needs a policy for base-image CVE drift so it does not go permanently red.
 
@@ -401,7 +436,7 @@ jobs:
           GATE_ENGINE_HMAC_SECRET: ${{ secrets.GATE_ENGINE_HMAC_SECRET }}
 ```
 
-`apatureai/gate@v1` does not resolve yet (roadmap item 8), so for now point `uses:` at your own fork or a commit SHA.
+`apatureai/gate@v1` is a moving major tag, per the Actions convention: it is re-pointed at each `v1.x` release rather than pinned to one. Pin a commit SHA instead if you want the reference to be immutable.
 
 **Before you add this to CI, run [`pnpm demo:live`](#running-your-own-critique-service-and-pointing-gate-at-it) against the same endpoint and secret.** It exercises the identical client, signing and parsing on your machine in about a minute, and tells you in one line whether a model actually judged the page. A workflow is a slow place to discover a wrong shared secret.
 
@@ -513,8 +548,8 @@ On the Action path, capture runs inside **your** runner, which means attacker-au
 - **Async jobs, not a long-held call.** `POST /jobs` → `202` + job id, then `GET /jobs/:id` with depth-aware backoff to a 10-minute deadline. A proxy's idle timeout would kill a 90-second synchronous request, and the seam also means a restart mid-review loses only a poll loop.
 - **Idempotency.** Requests carry a repository-scoped key (`gate-review-v2:sha256:<digest>` over owner, name, PR number and head SHA), so a retry resumes the existing job instead of paying for a second capture.
 - **Versioned and parsed.** The service returns `x-schema-version`; Gate checks it, then Zod-parses the body. A drifted or malformed response produces a typed error and *no* published review. The schema is intentionally not strict, so an additive field from a newer service is tolerated; that also means an unnamed field is *stripped*, which is why `provenance` is named explicitly below.
-- **Judgment provenance, in the payload.** A result may carry `provenance: { model_backed, source, engine, model, detail }`. Gate treats anything other than `model_backed: true` as "not judged" and withholds the grade. A service that does not send the field at all keeps its grade, with a visible caveat that it never said. The prose form (`notReviewed` lines beginning `[verdict] no model judged this page`) is honoured too, so a service that discloses in only one of the two places is still believed.
-- **Error envelopes.** Every non-2xx carries `{"error": "<code>"}`; Gate puts that code in the thrown error, so a wrong shared secret reads `engine submit failed: 401 (signature_mismatch)` rather than a bare `401`.
+- **Judgment provenance, in the payload.** A result may carry `provenance: { model_backed, source, engine, model, detail }`. Gate treats anything other than `model_backed: true` as "not judged" and withholds the grade, **and that includes a result that omits the field**. Silence is read as "not stated", not as "probably fine": the older rule let an unstamped result keep its grade, which meant the no-green-Ship guarantee held only for the one service that stamps, and inverted for every third-party service implementing the same published contract. A service that judges with a model states so with `provenance.model_backed: true`, and the neutral Check Run names that field. The prose form (`notReviewed` lines beginning `[verdict] no model judged this page`) is honoured too, so a service that discloses in only one of the two places is still believed; it is a refinement of the disclosure, never the thing that catches a silent service.
+- **Error envelopes.** Every non-2xx carries `{"error": "<code>"}`; Gate puts that code on the thrown error and then **on the Check Run**, so a wrong shared secret reads `Review not submitted ... HTTP 401 signature_mismatch` on the pull request rather than a bare `401` in a log nobody opened. A 4xx that is not a 429 is reported as a rejection, which does not promise a retry, because nothing about the next push would be different.
 - **Two identities, deliberately different.** See [Why it is interesting](#why-it-is-interesting).
 - **A publish-time SHA guard that does not trust cancellation.** Same.
 - **Depth.** At most one *deep* review per PR per 10 minutes, tracked in Postgres (`runs.last_full_review_at`, not a Redis timer, so a restart cannot reset the cap); pushes inside that window get the cheaper *triage* pass.
@@ -527,12 +562,14 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 |---|---|
 | No critique service configured | Neutral "Engine not configured" Check Run naming `GATE_ENGINE_ENDPOINT` / `GATE_ENGINE_HMAC_SECRET`; the review is never attempted, and the summary says in words that this is not a pass |
 | Service returned a result nothing judged | Neutral "Not judged" Check Run; the grade, the narrative and any findings are withheld, and the comment leads with the service's own disclosure |
+| Service returned a result with no judgment stamp at all | Neutral "Judgment not stated" Check Run; same withholding, and the summary names `provenance.model_backed` as the field that would restore the grade |
+| Service rejected the request (wrong shared secret, unknown installation, wrong endpoint) | Neutral "Review not submitted" Check Run carrying the service's own `HTTP <status> <code>`, what to check for that code, and no promise of a retry |
 | No preview URL found | Neutral Check Run with setup guidance |
 | Unverified preview source | "not reviewed (unverified preview source)"; never forwarded |
 | Preview returns an auth wall | Not reviewed; link to bypass/auth setup |
 | Poll timeout (10 min) | Best-effort `DELETE`, then neutral Check Run, reason `review_timed_out` |
 | 409 on submit, with a job id (exact retry) | Poll the existing job; never re-run capture |
-| 409 on submit, with no job id (the key was reused by a *different* request) | Typed conflict error naming the caller's mistake; never a poll of `/jobs/undefined` |
+| 409 on submit, with no job id (the key was reused by a *different* request) | Typed conflict error naming the caller's mistake; never a poll of `/jobs/undefined`. Neutral "Review not submitted (duplicate key)" Check Run whose remedy is a push, not a wait: the usual cause is a preview redeploying at a new URL under an unchanged head SHA, and the key stays spent until the SHA changes |
 | 429/503 | Honour `Retry-After`; if the circuit is open, neutral "temporarily unavailable" |
 | Malformed result (schema or version mismatch) | Zod parse fails → do not publish; never post a null-grade review |
 | Invalid element refs in a result | Publish only validated findings; show a capture warning |

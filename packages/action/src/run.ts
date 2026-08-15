@@ -8,7 +8,13 @@ import {
   suppressesGrade,
   upsertStickyComment,
 } from "@gate/delivery";
-import { assertReviewOutcomeIdentity, type JudgmentEngineClient, verifyPreviewHandoff } from "@gate/engine";
+import {
+  assertReviewOutcomeIdentity,
+  classifyEngineFailure,
+  type EngineFailureKind,
+  type JudgmentEngineClient,
+  verifyPreviewHandoff,
+} from "@gate/engine";
 import { scrubTail } from "@gate/secrets";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { PreviewBuildFact } from "@gate/types";
@@ -104,7 +110,16 @@ export type ActionStatus =
   | "not_judged"
   | "no_preview"
   | "unverified_preview"
+  /** The engine could not be reached, or failed in a way a retry can clear. */
   | "engine_error"
+  /**
+   * The engine answered and refused the request: wrong shared secret, unknown
+   * installation, wrong endpoint. Separate from `engine_error` because nothing
+   * about waiting fixes it, and the operator has to be told which.
+   */
+  | "engine_rejected"
+  /** The idempotency key for this (pr, head_sha) was spent on a different request. */
+  | "idempotency_conflict"
   | "stale_discarded";
 
 export interface ActionOutcome {
@@ -115,6 +130,13 @@ export interface ActionOutcome {
   /** Engine's judgment attestation for a completed result (`decideDelivery`). */
   judgment?: JudgmentState;
 }
+
+/** One engine-failure kind, one run status, so the log says what the Check Run says. */
+const ENGINE_FAILURE_STATUS: Record<EngineFailureKind, ActionStatus> = {
+  engine_unavailable: "engine_error",
+  engine_rejected: "engine_rejected",
+  idempotency_conflict: "idempotency_conflict",
+};
 
 function neutralCheckRun(title: string, summary: string): CheckRun {
   return { name: "Apature Gate", conclusion: "neutral", title, summary };
@@ -234,14 +256,24 @@ export async function runAction(
         ...(previewBuildFacts ? { previewBuildFacts } : {}),
       });
       assertReviewOutcomeIdentity(outcome, ctx);
-    } catch {
-      // Engine unavailable / contract violation: neutral Check Run, never fail the PR.
+    } catch (err) {
+      // Engine unavailable / rejected / contract violation: neutral Check Run,
+      // never fail the PR. The engine's own reason is logged AND published: the
+      // bare `catch {}` that used to be here threw away
+      // `engine submit failed: 401 (signature_mismatch)` one line before the
+      // handler told the operator to wait for an outage that was never going to
+      // end.
+      const failure = classifyEngineFailure(err);
+      console.error(`[gate] engine call failed (${failure.kind}): ${failure.message}`);
       if (!(await isCurrentHead(ctx, deps))) {
         return { status: "stale_discarded", conclusion: "neutral" };
       }
-      const failure = decideDeliveryForError("engine_unavailable");
-      await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
-      return { status: "engine_error", conclusion: failure.checkRun.conclusion };
+      const delivery = decideDeliveryForError(failure.kind, {
+        code: failure.code,
+        status: failure.status,
+      });
+      await deps.publishCheckRun({ name: "Apature Gate", ...delivery.checkRun });
+      return { status: ENGINE_FAILURE_STATUS[failure.kind], conclusion: delivery.checkRun.conclusion };
     }
 
     // 4. Map the outcome to a safe, non-blocking delivery decision.

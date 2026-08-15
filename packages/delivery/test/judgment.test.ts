@@ -47,6 +47,12 @@ function unjudgedResult(overrides: Partial<GateReviewResult> = {}): GateReviewRe
   };
 }
 
+/** The pre-stamp wire shape: a conforming result that says nothing about judgment. */
+function unstamped(): GateReviewResult {
+  const { provenance: _omitted, ...rest } = golden;
+  return rest;
+}
+
 const judged = (): GateReviewResult => ({
   ...golden,
   provenance: { model_backed: true, source: "model", engine: "verdict-http", model: "qwen3-vl-plus", detail: "a model judged it" },
@@ -78,11 +84,10 @@ describe("judgmentState", () => {
   });
 
   it("calls a result with no stamp at all unattested, not unjudged", () => {
-    // The pre-provenance wire shape. Gate's schema contract is additive-only, so
-    // silence cannot be read as a confession without neutralizing every
-    // conforming engine that has not adopted the field.
-    expect(golden.provenance).toBeUndefined();
-    expect(judgmentState(golden)).toBe("unattested");
+    // Silence is its own state: the engine did not say a model judged the page,
+    // and did not say one did not. Distinct from `unjudged` because the two get
+    // different prose, even though both now withhold the grade.
+    expect(judgmentState(unstamped())).toBe("unattested");
   });
 });
 
@@ -182,12 +187,70 @@ describe("decideDelivery on an unjudged completed outcome", () => {
   });
 });
 
-describe("an unattested result keeps its grade but says so", () => {
-  it("publishes the grade with a visible caveat", () => {
-    const run = buildCheckRun(golden, "none");
-    expect(run.summary).toContain("**Grade:**");
-    expect(run.summary).toContain("did not state whether a model judged this page");
-    const body = renderStickyComment(golden, { headSha: "0".repeat(40) });
-    expect(body).toContain("did not state whether a model judged this page");
+/**
+ * The rule that used to be here said the opposite: an unattested result kept its
+ * grade and carried a caveat. It was reversed on 2026-08-15.
+ *
+ * The reversal is not cosmetic. The only thing that had ever caught a silent
+ * engine was the prose fallback, and that fallback matches
+ * `[verdict] no model judged this page`: the reference engine's own brand
+ * string. A third-party engine implementing the same published contract emits
+ * neither that sentence nor a `provenance` block, so it landed in `unattested`,
+ * kept its grade, and published a green Ship. Gate's headline promise held for
+ * exactly one engine and inverted for every other one.
+ */
+describe("an engine that never adopted the stamp does not get a green Ship", () => {
+  /** A conforming third-party engine: no `provenance`, no verdict-branded prose. */
+  const thirdPartyShip = (): GateReviewResult => ({
+    ...unstamped(),
+    grade: "ship",
+    overall: "No issues found.",
+    findings: [],
+    notReviewed: [],
+    metadata: { ...golden.metadata, engineVersion: "acme-critique@3", model: "acme-vision-1" },
+  });
+
+  it("publishes neutral, not success, and never says Ship", () => {
+    const run = buildCheckRun(thirdPartyShip(), "none");
+    expect(run.conclusion).not.toBe("success");
+    expect(run.conclusion).toBe("neutral");
+    expect(run.title).not.toContain("Ship");
+    expect(run.title).toBe("Judgment not stated");
+  });
+
+  it("withholds the grade and names the field that would restore it", () => {
+    const run = buildCheckRun(thirdPartyShip(), "none");
+    expect(run.summary).not.toContain("**Grade:**");
+    expect(run.summary).toContain("did not state whether a model judged it");
+    expect(run.summary).toContain("provenance.model_backed");
+  });
+
+  it("does not accuse a silent engine of having judged nothing", () => {
+    // The engine may well have run a model. Gate does not know, and says that.
+    const run = buildCheckRun(thirdPartyShip(), "none");
+    expect(run.summary).not.toContain("nothing judged it");
+  });
+
+  it("says the same thing in the sticky comment", () => {
+    const body = renderStickyComment(thirdPartyShip(), { headSha: "0".repeat(40) });
+    expect(body).toContain("Judgment not stated");
+    expect(body).toContain("provenance.model_backed");
+    expect(body).toContain("## Apature Gate: no design review");
+  });
+
+  it("still grades the same engine once it stamps the field", () => {
+    const stamped: GateReviewResult = {
+      ...thirdPartyShip(),
+      provenance: {
+        model_backed: true,
+        source: "model",
+        engine: "acme-critique",
+        model: "acme-vision-1",
+        detail: "acme-vision-1 judged the captures for this target",
+      },
+    };
+    const run = buildCheckRun(stamped, "none");
+    expect(run.conclusion).toBe("success");
+    expect(run.title).toBe("Ship");
   });
 });

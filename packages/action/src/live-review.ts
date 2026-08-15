@@ -163,7 +163,13 @@ export async function runLiveReview(options: LiveReviewOptions = {}): Promise<Li
   };
 }
 
-/** One line saying what the run proved, in the vocabulary of the judgment stamp. */
+/**
+ * One line saying what the run proved, in the vocabulary of the judgment stamp.
+ *
+ * `undefined` means no result existed at all, which is a different sentence from
+ * any of the states: an engine that never answered did not "not state" anything,
+ * and printing it that way blamed the engine's stamp for a failed call.
+ */
 function verdictLine(judgment: JudgmentState | undefined): string {
   switch (judgment) {
     case "model_backed":
@@ -172,8 +178,10 @@ function verdictLine(judgment: JudgmentState | undefined): string {
       return "NOTHING judged the page; the engine has no model configured, and Gate withheld the grade";
     case "unconfirmed":
       return "the engine could not confirm a model judged the page; Gate withheld the grade";
+    case "unattested":
+      return "the engine did not state whether a model judged the page, so Gate withheld the grade";
     default:
-      return "the engine did not state whether a model judged the page";
+      return "no result: the engine call did not produce one, so there was nothing to judge";
   }
 }
 
@@ -187,7 +195,7 @@ export function formatLiveReviewResult(result: LiveReviewResult, cwd = process.c
     `  preview         ${result.previewUrl}  (fixture app, started by the supervisor)`,
     `  action status   ${result.outcome.status} · comment ${result.outcome.commentAction ?? "none"}`,
     `  check run       ${result.checkRun.conclusion}, ${result.checkRun.title}`,
-    `  judgment        ${result.outcome.judgment ?? "not stated"}: ${verdictLine(result.outcome.judgment)}`,
+    `  judgment        ${result.outcome.judgment ?? "none"}: ${verdictLine(result.outcome.judgment)}`,
     "",
     "  wrote",
     `    ${rel(result.commentPath)}  (the sticky PR comment, verbatim)`,

@@ -82,9 +82,32 @@ describe("the transcript", () => {
 
   it("does not claim a judgment an engine never made", () => {
     const silent = formatLiveReviewResult(
-      { ...base, outcome: { status: "reviewed", conclusion: "success", commentAction: "created" } },
+      {
+        ...base,
+        outcome: { status: "not_judged", conclusion: "neutral", commentAction: "created", judgment: "unattested" },
+        checkRun: { ...base.checkRun, title: "Judgment not stated" },
+      },
       "/repo",
     );
     expect(silent).toContain("did not state whether a model judged the page");
+    expect(silent).toContain("Gate withheld the grade");
+    expect(silent).not.toContain("NOTHING judged");
+  });
+
+  it("blames a failed call on the call, not on the engine's stamp", () => {
+    // No `judgment` at all means no result existed. An engine that never
+    // answered did not "not state" anything, and saying so read as the engine's
+    // fault for a rejected request.
+    const failed = formatLiveReviewResult(
+      {
+        ...base,
+        outcome: { status: "engine_rejected", conclusion: "neutral" },
+        checkRun: { ...base.checkRun, title: "Review not submitted" },
+        comment: null,
+      },
+      "/repo",
+    );
+    expect(failed).toContain("no result");
+    expect(failed).not.toContain("did not state whether a model judged the page");
   });
 });

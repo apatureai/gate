@@ -1,6 +1,13 @@
 import { loadGoldenReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
-import { createHttpEngineTransport, EngineJobError, parseEngineResult, SCHEMA_VERSION } from "../src/index.js";
+import {
+  classifyEngineFailure,
+  createHttpEngineTransport,
+  EngineIdempotencyConflictError,
+  EngineJobError,
+  parseEngineResult,
+  SCHEMA_VERSION,
+} from "../src/index.js";
 
 /**
  * What the engine's wire actually answers, and what Gate makes of it.
@@ -41,6 +48,15 @@ describe("409 is two different answers on the engine's wire", () => {
     await expect(transport.submit(SUBMISSION)).rejects.toThrow(EngineJobError);
     await expect(transport.submit(SUBMISSION)).rejects.toThrow(/idempotency_conflict/);
     await expect(transport.submit(SUBMISSION)).rejects.toThrow(/already in use by a different request/);
+    // Its own type, because it needs its own Check Run: no retry clears a spent
+    // key, so it must never be routed into the "temporarily unavailable" handler.
+    await expect(transport.submit(SUBMISSION)).rejects.toBeInstanceOf(
+      EngineIdempotencyConflictError,
+    );
+    const failure = classifyEngineFailure(
+      await transport.submit(SUBMISSION).catch((err: unknown) => err),
+    );
+    expect(failure.kind).toBe("idempotency_conflict");
   });
 
   it("never returns an undefined job id to poll", async () => {
@@ -50,14 +66,29 @@ describe("409 is two different answers on the engine's wire", () => {
 });
 
 describe("engine failures carry the engine's reason, not just its status", () => {
-  it("names a signature mismatch on submit", async () => {
+  it("names a signature mismatch on submit, in the message AND on the error", async () => {
     // The literal body a real verdict returns for a wrong GATE_ENGINE_HMAC_SECRET.
+    //
+    // The message alone was never enough: it was thrown, caught by a bare
+    // `catch {}`, and discarded before anything could publish it. The code and
+    // the status ride on the error object so the delivery layer can tell a
+    // permanent rejection from an outage without parsing prose. What the
+    // operator ends up reading is asserted in
+    // packages/action/test/run.test.ts, "runAction engine-failure reporting".
     const transport = transportAnswering(() =>
       new Response(JSON.stringify({ error: "signature_mismatch" }), { status: 401 }),
     );
     await expect(transport.submit(SUBMISSION)).rejects.toThrow(
       "engine submit failed: 401 (signature_mismatch)",
     );
+    await expect(transport.submit(SUBMISSION)).rejects.toMatchObject({
+      code: "signature_mismatch",
+      status: 401,
+    });
+    const failure = classifyEngineFailure(
+      await transport.submit(SUBMISSION).catch((err: unknown) => err),
+    );
+    expect(failure.kind).toBe("engine_rejected");
   });
 
   it("distinguishes an unsigned request from a mis-signed one", async () => {
@@ -116,7 +147,12 @@ describe("judgment provenance survives the contract parser", () => {
   });
 
   it("keeps the omitted case parseable (the pre-stamp wire shape)", () => {
-    const out = parseEngineResult(golden, SCHEMA_VERSION);
+    // Parsing and publishing are different questions. A result with no stamp is
+    // still a valid result and must survive the parser intact; what delivery
+    // then does with it (withhold the grade) is `suppressesGrade`'s call, not
+    // the schema's.
+    const { provenance: _omitted, ...unstamped } = golden;
+    const out = parseEngineResult(unstamped, SCHEMA_VERSION);
     expect(out.ok).toBe(true);
     if (out.ok) expect(out.result.provenance).toBeUndefined();
   });

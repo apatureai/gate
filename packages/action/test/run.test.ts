@@ -1,6 +1,12 @@
 import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
-import { canonicalReviewIdentity, type JudgmentEngineClient, type PollOutcome } from "@gate/engine";
+import {
+  canonicalReviewIdentity,
+  EngineIdempotencyConflictError,
+  EngineJobError,
+  type JudgmentEngineClient,
+  type PollOutcome,
+} from "@gate/engine";
 import { loadGoldenReviewResult } from "@gate/types";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import { describe, expect, it, vi } from "vitest";
@@ -284,5 +290,127 @@ describe("runAction local-serve (#70 Part 4)", () => {
     expect(summary).toContain("[REDACTED secret]");
     expect(summary).not.toContain("s3cr3tLeakedValue"); // the secret never reaches the PR
     expect(summary).toContain("build failed"); // ordinary output is preserved for DX
+  });
+});
+
+/**
+ * What the operator sees when the engine says no.
+ *
+ * The bare `catch {}` this replaces bound nothing and logged nothing, so
+ * `engine submit failed: 401 (signature_mismatch)` was constructed, thrown, and
+ * discarded one line before the handler published "temporarily unavailable ...
+ * Gate will retry". A wrong shared secret is the single most likely installer
+ * mistake and the least likely condition to clear on its own, so that Check Run
+ * was a promise that could never come true.
+ */
+describe("runAction engine-failure reporting", () => {
+  const rejecting = (err: unknown): JudgmentEngineClient => ({
+    review: vi.fn(async () => {
+      throw err;
+    }),
+    cancel: vi.fn(async () => {}),
+  });
+
+  async function publishedFor(err: unknown) {
+    const d = deps(rejecting(err));
+    const outcome = await runAction(
+      DEFAULT_CONFIG,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx(),
+      d,
+    );
+    return { outcome, run: d._published[0] };
+  }
+
+  it("names the engine's own code on the Check Run for a wrong shared secret", async () => {
+    // The literal error a real critique service returns for a mismatched
+    // GATE_ENGINE_HMAC_SECRET, produced by createHttpEngineTransport.
+    const { outcome, run } = await publishedFor(
+      new EngineJobError("engine submit failed: 401 (signature_mismatch)", {
+        code: "signature_mismatch",
+        status: 401,
+      }),
+    );
+
+    expect(outcome.status).toBe("engine_rejected");
+    expect(outcome.conclusion).toBe("neutral");
+    expect(run?.title).toBe("Review not submitted");
+    expect(run?.summary).toContain("HTTP 401");
+    expect(run?.summary).toContain("signature_mismatch");
+    expect(run?.summary).toContain("GATE_ENGINE_HMAC_SECRET");
+    // The false promise, gone: nothing about the next push is different.
+    expect(run?.summary).not.toContain("temporarily unavailable");
+    expect(run?.summary).not.toContain("Gate will retry");
+    expect(run?.summary).toContain("does not clear by itself");
+  });
+
+  it("does not publish a comment, and never fails the PR, on a rejection", async () => {
+    const d = deps(
+      rejecting(
+        new EngineJobError("engine submit failed: 401 (signature_mismatch)", {
+          code: "signature_mismatch",
+          status: 401,
+        }),
+      ),
+    );
+    const outcome = await runAction(
+      configBlockers,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx(),
+      d,
+    );
+    expect(outcome.conclusion).toBe("neutral");
+    expect(d.comments.createComment).not.toHaveBeenCalled();
+  });
+
+  it("gives an idempotency conflict its own Check Run and its own remedy", async () => {
+    const { outcome, run } = await publishedFor(
+      new EngineIdempotencyConflictError(
+        "engine submit conflict: idempotency_conflict (the idempotency key is already in use by a different request)",
+        "idempotency_conflict",
+      ),
+    );
+
+    expect(outcome.status).toBe("idempotency_conflict");
+    expect(outcome.conclusion).toBe("neutral");
+    expect(run?.title).toBe("Review not submitted (duplicate key)");
+    expect(run?.summary).toContain("idempotency_conflict");
+    // The condition is permanent until the head SHA changes, so the remedy is a
+    // push, not a wait.
+    expect(run?.summary).toContain("preview URL");
+    expect(run?.summary).toContain("Push a commit");
+    expect(run?.summary).not.toContain("Gate will retry");
+  });
+
+  it("still calls a real outage an outage, and still promises the retry it will make", async () => {
+    const { outcome, run } = await publishedFor(new Error("fetch failed"));
+    expect(outcome.status).toBe("engine_error");
+    expect(run?.title).toBe("Review unavailable");
+    expect(run?.summary).toContain("Gate will retry");
+  });
+
+  it("reports a 5xx as an outage, not as a rejection", async () => {
+    const { outcome } = await publishedFor(
+      new EngineJobError("engine submit failed: 500 (internal)", { code: "internal", status: 500 }),
+    );
+    expect(outcome.status).toBe("engine_error");
+  });
+
+  it("logs the engine's message for the Action log, not only the Check Run", async () => {
+    const logged: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    try {
+      await publishedFor(
+        new EngineJobError("engine submit failed: 401 (signature_mismatch)", {
+          code: "signature_mismatch",
+          status: 401,
+        }),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(logged.join("\n")).toContain("engine submit failed: 401 (signature_mismatch)");
   });
 });

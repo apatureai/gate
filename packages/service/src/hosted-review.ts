@@ -8,7 +8,9 @@ import {
 } from "@gate/delivery";
 import {
   assertReviewOutcomeIdentity,
+  classifyEngineFailure,
   EngineAbortedError,
+  type EngineFailureKind,
   type JudgmentEngineClient,
   verifyPreviewHandoff,
 } from "@gate/engine";
@@ -73,7 +75,19 @@ export type HostedReviewStatus =
   | "superseded"
   | "stale_discarded"
   | "unverified_preview"
-  | "engine_error";
+  /** The engine could not be reached, or failed in a way a retry can clear. */
+  | "engine_error"
+  /** The engine answered and refused the request; waiting does not fix it. */
+  | "engine_rejected"
+  /** The idempotency key for this (pr, head_sha) was spent on a different request. */
+  | "idempotency_conflict";
+
+/** One engine-failure kind, one run status, so the log says what the Check Run says. */
+const ENGINE_FAILURE_STATUS: Record<EngineFailureKind, HostedReviewStatus> = {
+  engine_unavailable: "engine_error",
+  engine_rejected: "engine_rejected",
+  idempotency_conflict: "idempotency_conflict",
+};
 
 export interface HostedReviewResult {
   status: HostedReviewStatus;
@@ -147,15 +161,23 @@ export async function runHostedReview(
       await deps.engine.cancel(err.jobId, ctx.installationId).catch(() => undefined);
       return { status: "superseded" }; // newer push won
     }
-    // Engine unavailable / contract violation: neutral Check Run, never crash the
-    // worker or block the PR (#38). Guard the Check Run too: an older failed job
-    // must not publish any delivery after a newer push supersedes it.
+    // Engine unavailable / rejected / contract violation: neutral Check Run,
+    // never crash the worker or block the PR (#38). The engine's own reason is
+    // logged and published: a rejected request never clears on a retry, so it
+    // must not be reported as an outage that will. Guard the Check Run too: an
+    // older failed job must not publish any delivery after a newer push
+    // supersedes it.
+    const failure = classifyEngineFailure(err);
+    console.error(`[gate] engine call failed (${failure.kind}): ${failure.message}`);
     if (!(await guardPublish(deps.supersession, key, ctx.pullRequest.headSha))) {
       return { status: "stale_discarded" };
     }
-    const failure = decideDeliveryForError("engine_unavailable");
-    await deps.publishCheckRun({ name: "Apature Gate", ...failure.checkRun });
-    return { status: "engine_error", conclusion: failure.checkRun.conclusion };
+    const delivery = decideDeliveryForError(failure.kind, {
+      code: failure.code,
+      status: failure.status,
+    });
+    await deps.publishCheckRun({ name: "Apature Gate", ...delivery.checkRun });
+    return { status: ENGINE_FAILURE_STATUS[failure.kind], conclusion: delivery.checkRun.conclusion };
   }
 
   // Publish-time guard: never overwrite a newer review with a stale result.

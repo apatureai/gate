@@ -2,7 +2,6 @@ import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/typ
 import {
   footerModel,
   judgmentBanner,
-  judgmentCaveat,
   judgmentState,
   suppressesGrade,
 } from "./judgment.js";
@@ -112,11 +111,11 @@ function detailsSection(title: string, findings: Finding[], screenshots: Map<str
 /**
  * Render the sticky comment markdown (pure).
  *
- * When the engine states that nothing judged the page, the grade, the narrative
- * and the findings are all withheld and the comment leads with the disclosure
- * instead. The heading also drops "design review", because no design review
- * happened. What survives is what is actually true of such a run: the page was
- * captured and measured, and the engine said so.
+ * When the engine does not state that a model judged the page, the grade, the
+ * narrative and the findings are all withheld and the comment leads with the
+ * disclosure instead. The heading also drops "design review", because Gate
+ * cannot say a design review happened. What survives is what is actually true of
+ * such a run: the page was captured and measured.
  */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
   const screenshots = screenshotLinks(result);
@@ -141,14 +140,22 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
     parts.push(
       "## Apature Gate: no design review",
       `${judgmentBanner(state)} · captured \`${shortSha(ctx.headSha)}\``,
-      "The page was captured and measured for real. Nothing critiqued it, so Gate is withholding " +
-        "the grade, the summary and any findings this run carried rather than showing them as a " +
-        "verdict on your UI. Point Gate at an engine with a model configured to get a review.",
+      state === "unattested"
+        ? "The page was captured and measured for real. The engine did not state whether a model " +
+            "judged it, so Gate is withholding the grade, the summary and any findings this run " +
+            "carried rather than showing them as a verdict on your UI. An engine that did call a " +
+            "model says so on the result, with `provenance.model_backed: true`."
+        : "The page was captured and measured for real. Nothing critiqued it, so Gate is withholding " +
+            "the grade, the summary and any findings this run carried rather than showing them as a " +
+            "verdict on your UI. Point Gate at an engine with a model configured to get a review.",
     );
     if (result.findings.length > 0) {
       parts.push(
-        `_${result.findings.length} unjudged finding(s) were returned and are not listed; ` +
-          "nothing produced them but a stand-in._",
+        state === "unattested"
+          ? `_${result.findings.length} finding(s) were returned and are not listed; the engine ` +
+              "did not state what produced them._"
+          : `_${result.findings.length} unjudged finding(s) were returned and are not listed; ` +
+              "nothing produced them but a stand-in._",
       );
     }
   }
@@ -167,9 +174,6 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   }
 
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);
-
-  const judgment = judgmentCaveat(state);
-  if (judgment) parts.push(`> ⚠️ ${judgment}`);
 
   // Capture-health caveat: the engine's page-health footnote (Verdict #20), rendered
   // as informational untrusted display text. It never changes grade, severity,

@@ -2,6 +2,7 @@ import { injectTraceContext, SPAN_NAMES, withSpan } from "@gate/observability";
 import { parseEngineResult } from "./contract.js";
 import { signEngineRequest } from "./hmac.js";
 import {
+  EngineIdempotencyConflictError,
   EngineJobError,
   type EngineTransport,
   type JobStatus,
@@ -43,17 +44,24 @@ function describeError(body: Record<string, unknown>): string | null {
 }
 
 /**
- * A failure message carrying the engine's reason, not just its status.
+ * A failure carrying the engine's reason, not just its status.
  *
  * The engine answers every rejection with a machine-readable code
  * (`signature_mismatch`, `missing_installation`, `not_found`, ...). Swallowing it
  * left an operator with `engine submit failed: 401` and no way to tell a wrong
  * `GATE_ENGINE_HMAC_SECRET` from a missing one, which is the single most likely
  * thing to be wrong the first time someone points Gate at their own engine.
+ *
+ * The code and the status ride on the error object as well as in the message, so
+ * the delivery layer can tell a rejection (permanent) from an outage (retryable)
+ * without reading prose.
  */
-async function engineFailure(op: string, res: Response): Promise<string> {
+async function engineFailure(op: string, res: Response): Promise<EngineJobError> {
   const reason = describeError(await parseJsonBody(res));
-  return `engine ${op} failed: ${res.status}${reason ? ` (${reason})` : ""}`;
+  return new EngineJobError(`engine ${op} failed: ${res.status}${reason ? ` (${reason})` : ""}`, {
+    code: reason,
+    status: res.status,
+  });
 }
 
 /**
@@ -132,9 +140,11 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
           // a caller error and says so here, at the call that caused it.
           const responseBody = (await parseJsonBody(res)) as { jobId?: unknown };
           if (typeof responseBody.jobId !== "string" || responseBody.jobId.length === 0) {
-            throw new EngineJobError(
-              `engine submit conflict: ${describeError(responseBody) ?? "idempotency_conflict"} ` +
+            const code = describeError(responseBody) ?? "idempotency_conflict";
+            throw new EngineIdempotencyConflictError(
+              `engine submit conflict: ${code} ` +
                 "(the idempotency key is already in use by a different request)",
+              code,
             );
           }
           return { status: res.status, jobId: responseBody.jobId };
@@ -145,7 +155,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
             parseRetryAfterMs(res.headers.get("retry-after")),
           );
         }
-        throw new EngineJobError(await engineFailure("submit", res));
+        throw await engineFailure("submit", res);
       });
     },
 
@@ -160,7 +170,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
             }),
           abortSignal,
         );
-        if (!res.ok) throw new EngineJobError(await engineFailure("poll", res));
+        if (!res.ok) throw await engineFailure("poll", res);
         const status = (await res.json()) as JobStatus;
         if (status.state === "completed") {
           // Validate the contract before the result can ever reach publish (#46).
@@ -187,7 +197,7 @@ export function createHttpEngineTransport(options: HttpEngineTransportOptions): 
         // Verdict returns 200 even when the job became terminal before
         // DELETE; that completion-vs-timeout race is an intentional no-op. Other
         // non-2xx responses are real cleanup failures and must reach diagnostics.
-        if (!res.ok) throw new EngineJobError(await engineFailure("cancel", res));
+        if (!res.ok) throw await engineFailure("cancel", res);
       });
     },
   };

@@ -1,7 +1,8 @@
 import type { GateMode, GateReviewResult, ReviewGrade } from "@gate/types";
 import {
-  judgmentCaveat,
   judgmentDetail,
+  judgmentNoGradeReason,
+  judgmentRemedy,
   judgmentState,
   judgmentTitle,
   suppressesGrade,
@@ -60,7 +61,8 @@ export interface CheckRun {
  * the critique) still arrives carrying `grade: "ship"`; publishing that as a
  * green ✅ would tell a reader their UI passed a review that never happened. Such
  * a run is neutral, titled for what it is, and its summary opens with the
- * engine's own disclosure instead of a grade.
+ * engine's own disclosure instead of a grade. A run whose engine said nothing at
+ * all about its judgment is treated the same way, for the same reason.
  */
 export function buildCheckRun(
   result: GateReviewResult,
@@ -81,19 +83,10 @@ export function buildCheckRun(
     summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, result.overall);
   } else {
     const detail = judgmentDetail(result);
-    summaryParts.push(
-      "**No grade.** Gate captured the page and the engine measured it, but nothing judged it, " +
-        "so this run is not a pass and not a failure.",
-    );
+    summaryParts.push(judgmentNoGradeReason(state));
     if (detail) summaryParts.push(sanitizeDisplayText(detail, 600));
-    summaryParts.push(
-      "The capture and the measured facts are real. The grade, the narrative and any findings " +
-        "the engine returned are not a judgment of this page and are withheld. Configure a model " +
-        "on your engine to get a reviewed run.",
-    );
+    summaryParts.push(judgmentRemedy(state));
   }
-  const caveat = judgmentCaveat(state);
-  if (caveat) summaryParts.push(`⚠️ _${caveat}_`);
   // Informational capture-health caveat (Verdict #20), bounded + sanitized. Never
   // changes the conclusion; that is `mapCheckRunConclusion(grade)` alone.
   const health = result.artifacts.pageHealthFootnote;

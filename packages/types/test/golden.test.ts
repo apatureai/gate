@@ -17,8 +17,9 @@ import type {
 
 const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"];
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
-// Re-pinned for the CalibrationReportV1 provenance contract (#166 / Verdict #160).
-const GATE_ENGINE_GOLDEN_BLOB = "54a7add15f3431964f092f9795af2a72800d33a0";
+// Re-pinned on 2026-08-15: the golden result now carries the judgment-provenance
+// stamp a conforming engine emits, because silence is no longer published as a grade.
+const GATE_ENGINE_GOLDEN_BLOB = "a51239fd22ba0341bc4672b2d30df2bf7e3d363e";
 const GATE_ENGINE_PRE_CALIBRATION_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
 
 describe("golden GateReviewResult fixture", () => {

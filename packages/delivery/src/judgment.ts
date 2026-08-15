@@ -19,6 +19,9 @@ import type { GateReviewResult } from "@gate/types";
  * capture, the geometry map and the measured contrast/overflow/touch-target
  * facts in it are real. Only the grade, the narrative and the findings are not a
  * judgment of the page, and only those are suppressed.
+ *
+ * A result that says NOTHING about its own judgment is treated the same way, as
+ * of 2026-08-15. See `suppressesGrade` for why that reversed.
  */
 
 /** The stable prefix verdict puts on its own "nothing judged this" disclosure. */
@@ -39,6 +42,11 @@ export type JudgmentState =
  * prose disclosure, which verdict documents as a stable grep target: a producer
  * that emits the sentence but not the struct is still telling Gate the truth,
  * and Gate is not entitled to ignore it because it arrived in the other field.
+ *
+ * That fallback matches one vendor's literal sentence, so it can only ever
+ * REFINE `unattested` into the more specific `unjudged`. It is not what keeps a
+ * silent engine from publishing a green Ship; `suppressesGrade` is, and it turns
+ * on the contract-level `provenance` field alone.
  */
 export function judgmentState(result: GateReviewResult): JudgmentState {
   const disclosed = result.notReviewed.some((line) =>
@@ -59,16 +67,33 @@ export function isJudged(result: GateReviewResult): boolean {
 }
 
 /**
- * True when the grade must be suppressed: the engine either knows nothing judged
- * the page, or ran something it cannot attribute to this target. `unattested`
- * is deliberately NOT in this set. It is the pre-stamp wire shape, indistinguish-
- * able from a legacy engine that judges perfectly well, and Gate's schema
- * contract is additive-only, so treating silence as a confession would neutralize
- * every conforming engine that has not adopted the field yet. Silence still gets
- * a visible caveat (see `judgmentCaveat`); it just does not eat the grade.
+ * True when the grade must be suppressed: the engine did not state, in a way
+ * Gate can read, that a model judged this page.
+ *
+ * `unattested` is in this set as of 2026-08-15, reversing the earlier rule that
+ * let silence keep its grade.
+ *
+ * The old rule read silence as "probably a pre-stamp engine that judges fine"
+ * and published the grade with a caveat. That was only ever safe because the
+ * fallback below also matched the reference engine's prose disclosure, whose
+ * literal text begins `[verdict] no model judged this page`: a brand string.
+ * Every OTHER contract-conforming engine, having no `provenance` field and no
+ * reason to emit another vendor's sentence, landed in `unattested`, kept its
+ * grade, and published `conclusion: "success"`, `title: "Ship"`. So the
+ * repository's stated non-negotiable, that a run nothing judged is never shown
+ * as a pass, held only for the one engine written alongside Gate, and inverted
+ * for every third party. A guarantee with that shape is not a guarantee.
+ *
+ * Silence is now read as "not stated", which is what it is. The cost is real
+ * and accepted: an engine that judges with a model but does not stamp
+ * `provenance` gets a neutral Check Run instead of a green one. That is the
+ * recoverable direction of the error, it is one additive field to fix, and the
+ * Check Run says exactly which field. Being wrong the other way publishes a
+ * green Ship over a page nothing looked at, which is not recoverable at all
+ * because nobody goes back to check a passing review.
  */
 export function suppressesGrade(state: JudgmentState): boolean {
-  return state === "unjudged" || state === "unconfirmed";
+  return state === "unjudged" || state === "unconfirmed" || state === "unattested";
 }
 
 /** Engine's own sentence about the run, when it supplied one. */
@@ -80,24 +105,63 @@ export function judgmentDetail(result: GateReviewResult): string | undefined {
 
 /** Title for a Check Run whose grade was suppressed. */
 export function judgmentTitle(state: JudgmentState): string {
-  return state === "unconfirmed" ? "Judgment unconfirmed" : "Not judged";
+  switch (state) {
+    case "unconfirmed":
+      return "Judgment unconfirmed";
+    case "unattested":
+      return "Judgment not stated";
+    default:
+      return "Not judged";
+  }
 }
 
 /** One-line banner replacing the grade wherever a grade would have been shown. */
 export function judgmentBanner(state: JudgmentState): string {
-  return state === "unconfirmed"
-    ? "⚠️ **Judgment unconfirmed**: the engine could not confirm that a model judged this page, so no grade is shown."
-    : "⚠️ **Not judged**: no model judged this page, so there is no grade and no findings to trust.";
+  switch (state) {
+    case "unconfirmed":
+      return "⚠️ **Judgment unconfirmed**: the engine could not confirm that a model judged this page, so no grade is shown.";
+    case "unattested":
+      return "⚠️ **Judgment not stated**: the engine did not say whether a model judged this page, so no grade is shown.";
+    default:
+      return "⚠️ **Not judged**: no model judged this page, so there is no grade and no findings to trust.";
+  }
 }
 
 /**
- * The caveat a published result carries about its own judgment. `unattested`
- * is the only state that reaches the comment with its grade intact, so it is the
- * only state that needs a caveat rather than a banner.
+ * Why there is no grade, and what would change that, in the engine's terms.
+ *
+ * Split by state because the three suppressed states are three different facts,
+ * and collapsing them into "nothing judged it" would tell an operator whose
+ * engine simply omits one field that their model never ran.
  */
-export function judgmentCaveat(state: JudgmentState): string | undefined {
-  if (state !== "unattested") return undefined;
-  return "The engine did not state whether a model judged this page, so its grade is unverified.";
+export function judgmentNoGradeReason(state: JudgmentState): string {
+  switch (state) {
+    case "unattested":
+      return (
+        "**No grade.** Gate captured the page and the engine measured it, but the engine did not " +
+        "state whether a model judged it, so this run is not a pass and not a failure."
+      );
+    case "unconfirmed":
+      return (
+        "**No grade.** Gate captured the page and the engine measured it, but the engine could " +
+        "not confirm that what it ran judged this target, so this run is not a pass and not a failure."
+      );
+    default:
+      return (
+        "**No grade.** Gate captured the page and the engine measured it, but nothing judged it, " +
+        "so this run is not a pass and not a failure."
+      );
+  }
+}
+
+/** The remedy line that closes a no-grade Check Run summary. */
+export function judgmentRemedy(state: JudgmentState): string {
+  const withheld =
+    "The capture and the measured facts are real. The grade, the narrative and any findings " +
+    "the engine returned are withheld, because Gate cannot show them as a judgment of this page. ";
+  return state === "unattested"
+    ? `${withheld}An engine that did call a model states so in band, with \`provenance.model_backed: true\` on the result; Gate publishes a grade once it does.`
+    : `${withheld}Configure a model on your engine to get a reviewed run.`;
 }
 
 /**
@@ -110,5 +174,8 @@ export function footerModel(result: GateReviewResult): string {
   const state = judgmentState(result);
   if (!suppressesGrade(state)) return result.metadata.model;
   const configured = result.metadata.model;
-  return `${configured} (not called; nothing judged this page)`;
+  // Silence is not evidence the model was skipped, only that nobody said.
+  return state === "unattested"
+    ? `${configured} (configured; the engine did not state whether it was called)`
+    : `${configured} (not called; nothing judged this page)`;
 }

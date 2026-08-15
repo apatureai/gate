@@ -2,6 +2,7 @@ import type { PollOutcome } from "@gate/engine";
 import type { Finding, GateMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
 import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
+import { sanitizeDisplayText } from "./sanitize.js";
 import { renderStickyComment } from "./sticky-comment.js";
 
 /**
@@ -15,7 +16,11 @@ export type DegradationReason =
   | "review_timed_out"
   | "engine_failed"
   | "engine_unavailable"
-  | "circuit_open";
+  | "circuit_open"
+  /** The critique service rejected the request itself (auth, tenant, route). */
+  | "engine_rejected"
+  /** The idempotency key was already spent on a different request body. */
+  | "idempotency_conflict";
 
 export interface DeliveryDecision {
   /** Whether to publish a findings comment (false for degraded states). */
@@ -75,6 +80,8 @@ const NEUTRAL_TITLES: Record<DegradationReason, string> = {
   engine_failed: "Review unavailable",
   engine_unavailable: "Review unavailable",
   circuit_open: "Review paused",
+  engine_rejected: "Review not submitted",
+  idempotency_conflict: "Review not submitted (duplicate key)",
 };
 
 function neutral(reason: DegradationReason, summary: string): DeliveryDecision {
@@ -136,17 +143,105 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
   };
 }
 
+/** Reasons that exist before any result does, so they never carry a comment. */
+export type PreResultFailureReason =
+  | "engine_unavailable"
+  | "circuit_open"
+  | "engine_rejected"
+  | "idempotency_conflict";
+
 /**
- * Map an engine error raised before a result exists (unavailable, circuit-breaker
- * open) to a neutral, retry-guidance Check Run. The PR is never failed.
+ * What the engine itself said, when it said anything. Only the machine-readable
+ * code and the HTTP status cross into the Check Run: both are short, both are
+ * Gate-formatted, and neither carries engine prose onto a pull request.
+ */
+export interface EngineErrorFacts {
+  code?: string | null;
+  status?: number | null;
+}
+
+/**
+ * What to check, per engine error code. Every one of these is a real code from
+ * the reference service's wire (`packages/api/src/hmac.ts`, `server.ts`), so the
+ * advice names the variable that is actually wrong rather than guessing.
+ */
+const REJECTION_HINTS: Record<string, string> = {
+  signature_mismatch:
+    "`GATE_ENGINE_HMAC_SECRET` does not match the critique service's own `ENGINE_HMAC_SECRET`. The two values have to be identical.",
+  missing_signature:
+    "The request reached the service unsigned. Set `GATE_ENGINE_HMAC_SECRET` on the workflow step.",
+  missing_installation:
+    "The request reached the service without its installation header, so it was not signed. Set `GATE_ENGINE_HMAC_SECRET` on the workflow step.",
+  timestamp_skew:
+    "The signature timestamp was outside the service's accepted window. Check the clock on the runner and on the service.",
+  not_found:
+    "The endpoint answered, but serves no job API at that path. Check that `GATE_ENGINE_ENDPOINT` is the service's base URL.",
+  method_not_allowed:
+    "The endpoint answered, but serves no job API at that path. Check that `GATE_ENGINE_ENDPOINT` is the service's base URL.",
+  invalid_submission:
+    "The service rejected the request body as malformed, which means Gate and the service disagree about the contract. Check that both are on compatible versions.",
+  invalid_json:
+    "The service rejected the request body as malformed, which means Gate and the service disagree about the contract. Check that both are on compatible versions.",
+};
+
+const DEFAULT_REJECTION_HINT =
+  "Check `GATE_ENGINE_ENDPOINT` and `GATE_ENGINE_HMAC_SECRET` on the workflow step.";
+
+/** `HTTP 401 signature_mismatch`, sanitized, or nothing when the engine said neither. */
+function engineReply(facts: EngineErrorFacts): string | null {
+  const parts: string[] = [];
+  if (typeof facts.status === "number") parts.push(`HTTP ${facts.status}`);
+  if (facts.code) parts.push(sanitizeDisplayText(facts.code, 120));
+  return parts.length > 0 ? parts.join(" ") : null;
+}
+
+/**
+ * Map an engine error raised before a result exists to a neutral Check Run.
+ *
+ * The PR is never failed, but "Gate will retry" is only said where it is true.
+ * A rejected request and a spent idempotency key are permanent until a human
+ * changes something, and the summary for those names the engine's own code and
+ * what to do about it, because the operator is the only one who can clear it.
  */
 export function decideDeliveryForError(
-  reason: "engine_unavailable" | "circuit_open",
+  reason: PreResultFailureReason,
+  facts: EngineErrorFacts = {},
 ): DeliveryDecision {
-  return neutral(
-    reason,
-    reason === "circuit_open"
-      ? "The design engine is temporarily unavailable and Gate has paused calls; it will retry automatically."
-      : "The design engine is temporarily unavailable. The PR is not blocked; Gate will retry.",
-  );
+  const reply = engineReply(facts);
+  const replyLine = reply ? `\n\nThe critique service answered \`${reply}\`.` : "";
+
+  switch (reason) {
+    case "circuit_open":
+      return neutral(
+        reason,
+        "The design engine is temporarily unavailable and Gate has paused calls; it will retry automatically.",
+      );
+    case "engine_rejected":
+      return neutral(
+        reason,
+        "Gate reached the critique service, and the service rejected the request. No review was " +
+          `submitted and the PR is not blocked.${replyLine}\n\n` +
+          `${REJECTION_HINTS[facts.code ?? ""] ?? DEFAULT_REJECTION_HINT}\n\n` +
+          "This one does not clear by itself: the next push sends the same request to the same " +
+          "endpoint with the same credentials, so Gate is not promising a retry that would fix it.",
+      );
+    case "idempotency_conflict":
+      return neutral(
+        reason,
+        "Gate reached the critique service, and the service refused the job because the " +
+          "idempotency key for this pull request and head SHA was already spent on a " +
+          `different request. No review was submitted and the PR is not blocked.${replyLine}\n\n` +
+          "The usual cause is a preview redeploy: the head SHA did not change, but the preview " +
+          "URL did, so the request body no longer matches the one the key was issued for. Push a " +
+          "commit to review the new preview, or re-run once the preview URL has settled.\n\n" +
+          "This one does not clear by itself either: the key stays spent until the head SHA " +
+          "changes.",
+      );
+    case "engine_unavailable":
+    default:
+      return neutral(
+        reason,
+        `The design engine is temporarily unavailable. The PR is not blocked; Gate will retry.${replyLine}`,
+      );
+  }
 }
