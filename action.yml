@@ -7,7 +7,7 @@
 #     pull-requests: write
 #     checks: write
 name: "Apature Gate"
-description: "Judgment-only design review for your PR preview deployments."
+description: "Judgment-only design review for your PR preview deployments. Requires a critique service you host; none ships here, and without one this action reviews nothing and says so."
 author: "Apature"
 branding:
   icon: "eye"
