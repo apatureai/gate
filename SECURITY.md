@@ -124,9 +124,21 @@ Check Run) is neutralized before it is rendered:
   character that can end one, and they are replaced rather than escaped, because
   a backslash inside a code span is literal.
 - **Link destinations are validated, not escaped.** An evidence URL has to parse
-  as an absolute `http`/`https` URL. Anything else, `javascript:` and `data:`
-  included, is published as inert text saying the evidence is not linkable, and
-  never as a link.
+  as an absolute `http`/`https` URL with no credentials in the authority.
+  Anything else, `javascript:` and `data:` included, and
+  `https://github.com@attacker.example/x.png` with it, is published as inert text
+  saying the evidence is not linkable, and never as a link. That last shape reads
+  as one host and resolves to another, and it would carry Gate's own "Evidence"
+  anchor text.
+- **Bare `www.` hosts are defanged too.** GitHub autolinks them with no scheme
+  present, so a rule anchored on `https?://` cannot see them. This was claimed
+  here before it was true; it is covered now, and tested.
+
+Invisible formatting is dropped rather than escaped: bidirectional controls such
+as U+202E reorder what a reviewer reads without changing the bytes, so a
+suggestion could display as "This PR is approved" while its source says the
+opposite. Escaping does not help against a character whose whole effect is on
+rendering, so those are removed.
 
 The cost is real and accepted: the transform is lossy. A suggestion that arrives
 with backticked code renders with the backticks visible rather than as a code

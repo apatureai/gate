@@ -144,6 +144,15 @@ export function buildCheckRun(
   if (skipped) summaryParts.push(skipped);
   // Informational capture-health caveat (Verdict #20), bounded + sanitized. Never
   // changes the conclusion; that is `mapCheckRunConclusion(grade)` alone.
+  // "Zero findings" and "three findings, none of which could be grounded" both
+  // arrive as an empty list under a `ship` grade. Only the engine knows which
+  // happened, so say it rather than letting the reader assume the first.
+  if (result.hallucinationDrops !== undefined && result.hallucinationDrops > 0) {
+    summaryParts.push(
+      `🧹 _Grounding:_ ${result.hallucinationDrops} model finding(s) were deleted for citing a route ` +
+        "or element the capture never produced, so they are not shown above.",
+    );
+  }
   const health = result.artifacts.pageHealthFootnote;
   if (health !== undefined && health.trim().length > 0) {
     summaryParts.push(`🩺 _Capture health:_ ${sanitizeDisplayText(health, 280)}`);

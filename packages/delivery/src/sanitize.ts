@@ -27,6 +27,14 @@ const DEFAULT_MAX_LENGTH = 500;
 // eslint-disable-next-line no-control-regex -- intentionally matches control chars to strip them
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 /**
+ * Bidirectional and invisible formatting controls. U+202E and friends reorder
+ * what a human reads without changing the bytes, so a suggestion can display as
+ * "This PR is approved" while the source says the opposite (the Trojan Source
+ * trick). The C0 filter above does not reach them because they are not control
+ * characters in the ASCII sense.
+ */
+const BIDI_AND_INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g;
+/**
  * Every metacharacter that can open a Markdown or HTML construct in INLINE
  * position: a link or image (`[ ] ( ) !`), a raw tag or autolink (`< >`), a code
  * span (`` ` ``), a table cell (`|`), emphasis or a forged bold verdict line
@@ -58,14 +66,17 @@ const ELLIPSIS = "\u2026";
  * `<details>` block, a bold run, or a list item, without changing its shape.
  */
 export function sanitizeDisplayText(text: string, maxLength = DEFAULT_MAX_LENGTH): string {
-  let s = text.replace(CONTROL_CHARS, "").replace(/\s+/g, " ").trim();
+  let s = text.replace(CONTROL_CHARS, "").replace(BIDI_AND_INVISIBLE, "").replace(/\s+/g, " ").trim();
   if (s.length > maxLength) s = `${s.slice(0, Math.max(0, maxLength - 1)).trimEnd()}${ELLIPSIS}`;
   return s
     .replace(MARKDOWN_META, (c) => `\\${c}`)
     .replace(LEADING_BULLET, "\\$1")
     .replace(LEADING_ORDERED, "$1\\.")
     .replace(/@/g, `@${ZERO_WIDTH}`) // neutralize @mentions
-    .replace(/(https?):\/\//gi, `$1${ZERO_WIDTH}://`); // defang bare autolinks
+    .replace(/(https?):\/\//gi, `$1${ZERO_WIDTH}://`) // defang bare autolinks
+    // GFM autolinks a bare `www.` host with no scheme at all, so the rule above
+    // cannot see it. Without this, engine prose can publish a live link.
+    .replace(/\bwww\./gi, `www${ZERO_WIDTH}.`);
 }
 
 const CODE_SPAN_MAX_LENGTH = 200;
@@ -131,6 +142,11 @@ export function safeLinkUrl(raw: string): string | null {
     return null;
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+  // Credentials in the authority are the classic phishing shape:
+  // `https://github.com@attacker.example/x.png` reads as github.com and resolves
+  // to the attacker. Nothing legitimate needs them in an evidence URL, and this
+  // link is rendered under Gate's own anchor text.
+  if (parsed.username.length > 0 || parsed.password.length > 0) return null;
   const serialized = parsed.toString();
   // Belt and braces: the parser should have encoded all of these already.
   if (/[\s<>"`\\]/.test(serialized)) return null;

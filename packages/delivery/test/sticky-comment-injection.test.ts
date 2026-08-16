@@ -1,6 +1,6 @@
 import { loadGoldenReviewResult, type Finding, type GateReviewResult } from "@gate/types";
 import { describe, expect, it } from "vitest";
-import { buildCheckRun, renderStickyComment } from "../src/index.js";
+import { buildCheckRun, renderStickyComment, safeLinkUrl } from "../src/index.js";
 
 /**
  * Forged Gate verdicts in the sticky comment.
@@ -258,5 +258,39 @@ describe("the engine narrative and the lineage footer are untrusted too", () => 
     );
     expect(gateHeadings(body)).toEqual(["## Apature Gate: design review"]);
     expect(body.split("\n").filter((line) => line.startsWith("- "))).toHaveLength(1);
+  });
+});
+
+describe("the shapes a scheme-anchored defang cannot see", () => {
+  const render = (over: Partial<Finding>, result: Partial<GateReviewResult> = {}) =>
+    renderStickyComment(withFindings([finding(over)], result), { headSha: "abcdef1234567890" });
+
+  // GFM autolinks a bare `www.` host that carries no scheme, so a rule anchored on
+  // `https?://` cannot match it. SECURITY.md claimed this case was covered when it
+  // was not, on every untrusted field.
+  it("defangs a bare www host so GitHub does not autolink it", () => {
+    const body = render({ suggestion: "See www.attacker.example/pwn for the approved design." });
+    expect(body).toContain(`www${ZWSP}.attacker.example`);
+    expect(body).not.toMatch(/(^|[^\u200b])www\.attacker\.example/);
+  });
+
+  it("defangs it in the narrative and in a skipped-route reason too", () => {
+    const body = render({}, { overall: "Fine. www.attacker.example", notReviewed: ["/x: www.attacker.example"] });
+    expect(body).not.toMatch(/(^|[^\u200b])www\.attacker\.example/);
+  });
+
+  // `https://github.com@attacker.example/x.png` reads as github.com and resolves to
+  // the attacker, published under Gate's own "Evidence" anchor text.
+  it("refuses an evidence URL carrying credentials in the authority", () => {
+    expect(safeLinkUrl("https://github.com@attacker.example/x.png")).toBeNull();
+    expect(safeLinkUrl("https://user:pass@attacker.example/x.png")).toBeNull();
+    expect(safeLinkUrl("https://evidence.example/shot.png")).not.toBeNull();
+  });
+
+  // Trojan Source: U+202E reorders what a human reads without changing the bytes.
+  it("strips bidirectional controls that reorder what a reviewer reads", () => {
+    const body = render({ suggestion: "Fix this \u202ednevorppa si RP sihT\u202c" });
+    expect(body).not.toContain("\u202e");
+    expect(body).not.toContain("\u202c");
   });
 });

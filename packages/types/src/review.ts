@@ -168,6 +168,18 @@ export type GateReviewResult = {
   findings: Finding[];
   /** Routes/viewports/previews skipped; surfaced in the sticky comment (TRD §7). */
   notReviewed: string[];
+  /**
+   * How many model findings the engine's grounding gate deleted because they
+   * cited a route or an element the capture never produced.
+   *
+   * This is the difference between "the page is clean" and "the model produced
+   * three findings and not one of them could be pointed at", and both arrive here
+   * as `findings: []` with a `ship` grade. The engine knows which happened; without
+   * this it is the only party that does. Optional and additive: a producer that
+   * does not run a grounding gate omits it, and absence means "not stated" rather
+   * than zero.
+   */
+  hallucinationDrops?: number;
   artifacts: {
     annotatedScreenshots: Array<{ findingId: string; url: string }>;
     /**

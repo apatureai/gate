@@ -119,7 +119,10 @@ function evidenceHref(finding: Finding, screenshots: Map<string, string>): strin
 function evidenceCell(finding: Finding, screenshots: Map<string, string>): string {
   if (!screenshots.has(finding.id)) return "none";
   const href = evidenceHref(finding, screenshots);
-  return href ? `[Evidence](${href})` : EVIDENCE_NOT_LINKABLE;
+  // WHATWG URL does not percent-encode `|` in a path, and GFM ends a cell at an
+  // unescaped pipe, so an evidence URL containing one used to break the row and
+  // lose the link entirely. Escaping it keeps the link intact and the row square.
+  return href ? `[Evidence](${escapeTableCell(href)})` : EVIDENCE_NOT_LINKABLE;
 }
 
 function findingSummary(finding: Finding, screenshots: Map<string, string>): string {

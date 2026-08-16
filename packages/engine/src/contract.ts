@@ -108,6 +108,7 @@ export const GateReviewResultSchema = z.object({
     .optional(),
   findings: z.array(findingSchema),
   notReviewed: z.array(z.string()),
+  hallucinationDrops: z.number().int().nonnegative().optional(),
   artifacts: z.object({
     annotatedScreenshots: z.array(z.object({ findingId: z.string(), url: z.string() })),
     engineDebugUrl: z.string().optional(),
