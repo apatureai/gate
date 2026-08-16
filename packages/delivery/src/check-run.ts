@@ -101,7 +101,12 @@ export function buildCheckRun(
   const state = judgmentState(result);
   const coverage = coverageState(result);
   const nothingReviewed = suppressesGradeForCoverage(coverage);
-  const graded = !suppressesGrade(state) && !nothingReviewed;
+  // The engine can retract its own grade for a reason coverage cannot express.
+  // The case that reached a pull request as a green Ship: every model finding
+  // deleted before it could be reported, on a route that WAS reviewed, so
+  // coverage is full and truthful while the grade means nothing.
+  const gradeRetracted = (result.gradeUnavailableReason ?? "").length > 0;
+  const graded = !suppressesGrade(state) && !nothingReviewed && !gradeRetracted;
   // Never `success`, never `failure`: an ungraded run is not a pass, and it is
   // not the repo's PR failing either.
   const conclusion: CheckRunConclusion = graded
@@ -114,13 +119,26 @@ export function buildCheckRun(
     ? GRADE_TITLE[result.grade]
     : nothingReviewed
       ? NOTHING_REVIEWED_TITLE
-      : judgmentTitle(state);
+      : gradeRetracted
+        ? "No usable grade"
+        : judgmentTitle(state);
 
   const summaryParts: string[] = [];
   if (graded) {
     // The narrative is model prose, and a Check Run summary is Markdown too: it
     // is sanitized here for the same reason the sticky comment sanitizes it.
     summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, sanitizeDisplayText(result.overall, OVERALL_MAX));
+  } else if (gradeRetracted && !nothingReviewed) {
+    // Say what the engine said, not a paraphrase: it knows why it retracted and
+    // Gate does not enumerate the reasons.
+    summaryParts.push(
+      "**No grade.** The engine reported that its grade is not a verdict about this page " +
+        `(\`${sanitizeDisplayText(result.gradeUnavailableReason ?? "", 120)}\`). ` +
+        "This run is not a pass and not a failure.",
+    );
+    if (result.overall.trim().length > 0) {
+      summaryParts.push(sanitizeDisplayText(result.overall, OVERALL_MAX));
+    }
   } else if (nothingReviewed) {
     summaryParts.push(nothingReviewedReason(result));
     // When the engine ALSO could not attest a judgment, say so: it is the more

@@ -232,3 +232,45 @@ describe("renderStickyComment: agrees with the Check Run", () => {
     expect(buildCheckRun(result, "none").conclusion).toBe("success");
   });
 });
+
+describe("an engine can retract its own grade", () => {
+  // The case that reached a pull request as a green Ship: every model finding was
+  // deleted before it could be reported, on a route that WAS reviewed. Coverage is
+  // full and truthful, `grade` floors to `ship` because the field is required, and
+  // only the engine knows the value means nothing. Gate used to strip the field at
+  // parse and publish the green tick.
+  const retracted = (over: Partial<GateReviewResult> = {}): GateReviewResult => ({
+    ...loadGoldenReviewResult(),
+    grade: "ship",
+    findings: [],
+    overall: "No finding in this review survived validation.",
+    gradeUnavailableReason: "nothing_survived_validation",
+    ...over,
+  });
+
+  it("does not publish a green check for a grade the engine retracted", () => {
+    const run = buildCheckRun(retracted(), "none");
+    expect(run.conclusion).toBe("neutral");
+    expect(run.title).not.toBe("Ship");
+    expect(run.summary).toContain("not a verdict about this page");
+  });
+
+  it("suppresses in blocking mode too, not only advisory", () => {
+    for (const mode of ["none", "nits", "blockers"] as const) {
+      expect(buildCheckRun(retracted(), mode).conclusion).toBe("neutral");
+    }
+  });
+
+  it("treats a reason it has never heard of as a retraction", () => {
+    // Gate deliberately does not enumerate the reasons. An engine that retracts
+    // for a cause Gate has not been taught must not get a green tick by default.
+    const run = buildCheckRun(retracted({ gradeUnavailableReason: "some_future_reason" }), "none");
+    expect(run.conclusion).toBe("neutral");
+  });
+
+  it("still publishes a grade when the engine did not retract it", () => {
+    const clean = { ...loadGoldenReviewResult(), grade: "ship" as const, findings: [], overall: "Clean." };
+    expect(buildCheckRun(clean, "none").conclusion).toBe("success");
+    expect(buildCheckRun({ ...clean, gradeUnavailableReason: "" }, "none").conclusion).toBe("success");
+  });
+});

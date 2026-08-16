@@ -180,6 +180,20 @@ export type GateReviewResult = {
    * than zero.
    */
   hallucinationDrops?: number;
+  /**
+   * The engine retracting its own grade, in its own words.
+   *
+   * `grade` is a required field, so an engine that reviewed nothing, or whose
+   * every finding was deleted before it could be reported, still has to put
+   * something there. It floors to `ship`. This field is how the engine says
+   * that value is not a verdict about the page, and it is not derivable from
+   * anything else on the result: coverage can be full and truthful on a run
+   * where nothing survived validation.
+   *
+   * Any non-empty value means the grade is unusable. Gate does not enumerate
+   * the reasons, because a reason it has not heard of is still a retraction.
+   */
+  gradeUnavailableReason?: string;
   artifacts: {
     annotatedScreenshots: Array<{ findingId: string; url: string }>;
     /**

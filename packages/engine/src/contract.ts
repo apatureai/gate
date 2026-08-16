@@ -109,6 +109,11 @@ export const GateReviewResultSchema = z.object({
   findings: z.array(findingSchema),
   notReviewed: z.array(z.string()),
   hallucinationDrops: z.number().int().nonnegative().optional(),
+  // The engine retracting its own grade. Left open rather than enumerated:
+  // an unrecognized reason still means the grade is not usable, and a
+  // consumer that rejected an unknown value would turn an honest engine
+  // into a parse failure.
+  gradeUnavailableReason: z.string().min(1).optional(),
   artifacts: z.object({
     annotatedScreenshots: z.array(z.object({ findingId: z.string(), url: z.string() })),
     engineDebugUrl: z.string().optional(),
