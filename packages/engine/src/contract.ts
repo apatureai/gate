@@ -63,6 +63,26 @@ const findingSchema = z.object({
  * strict, because it is the field the publish decision turns on and a value Gate
  * cannot read must never be guessed.
  */
+/**
+ * What the run actually looked at (verdict#165).
+ *
+ * Named in the schema for the same reason `provenance` is: the schema is
+ * deliberately not `.strict()`, so anything it does not name is STRIPPED, and a
+ * coverage field that never survives parsing cannot stop a green Check Run from
+ * being published over a review that touched nothing.
+ *
+ * Every member is required WITHIN the object even though the object itself is
+ * optional. Half-stated coverage is not a weaker claim, it is an unreadable one:
+ * `routesReviewed` without `routesRequested` cannot tell partial from full.
+ * Omitting the object entirely is the supported way to say nothing.
+ */
+const coverageSchema = z.object({
+  routesRequested: z.array(z.string()),
+  routesReviewed: z.array(z.string()),
+  viewportsRequested: z.array(z.enum(["mobile", "tablet", "desktop"])),
+  viewportsReviewed: z.array(z.enum(["mobile", "tablet", "desktop"])),
+});
+
 const provenanceSchema = z.object({
   model_backed: z.union([z.boolean(), z.null()]),
   source: z.enum(["model", "canned", "fixture", "unknown"]).catch("unknown"),
@@ -104,6 +124,9 @@ export const GateReviewResultSchema = z.object({
     rubricVersion: z.string().optional(),
     uiDnaVersion: z.string().nullable(),
   }),
+  // Additive engine field (verdict#165). Preserved through parsing; the Check
+  // Run refuses to publish a grade when it says nothing was reviewed.
+  coverage: coverageSchema.optional(),
   provenance: provenanceSchema.optional(),
 });
 

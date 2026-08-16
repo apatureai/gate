@@ -24,6 +24,16 @@ export {
   footerModel,
 } from "./judgment.js";
 export type { JudgmentState } from "./judgment.js";
+export {
+  coverageState,
+  suppressesGradeForCoverage,
+  coverageCaveat,
+  notReviewedSection,
+  nothingReviewedReason,
+  NOTHING_REVIEWED_TITLE,
+  NOTHING_REVIEWED_REMEDY,
+} from "./coverage.js";
+export type { CoverageState } from "./coverage.js";
 export { mapCheckRunConclusion, buildCheckRun } from "./check-run.js";
 export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.js";
 export { setupFailureCheckRun, engineNotConfiguredCheckRun } from "./setup-failure.js";

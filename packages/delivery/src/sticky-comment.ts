@@ -1,4 +1,5 @@
 import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
+import { coverageState, suppressesGradeForCoverage } from "./coverage.js";
 import {
   footerModel,
   judgmentBanner,
@@ -116,11 +117,17 @@ function detailsSection(title: string, findings: Finding[], screenshots: Map<str
  * disclosure instead. The heading also drops "design review", because Gate
  * cannot say a design review happened. What survives is what is actually true of
  * such a run: the page was captured and measured.
+ *
+ * The same withholding applies when the engine states it reviewed NOTHING
+ * (verdict#165), and for the same reason. It is applied here as well as in
+ * `buildCheckRun` so the two surfaces published side by side on one PR always
+ * say the same thing about the same run.
  */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
   const screenshots = screenshotLinks(result);
   const state = judgmentState(result);
-  const graded = !suppressesGrade(state);
+  const nothingReviewed = suppressesGradeForCoverage(coverageState(result));
+  const graded = !suppressesGrade(state) && !nothingReviewed;
   const findings = findingsAtOrAbove(
     suppressFindings(result.findings, ctx.suppress),
     ctx.minSeverityToComment,
@@ -135,6 +142,15 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
       "## Apature Gate: design review",
       `**${GRADE_LABEL[result.grade]}** · reviewed \`${shortSha(ctx.headSha)}\``,
       result.overall,
+    );
+  } else if (nothingReviewed) {
+    parts.push(
+      "## Apature Gate: no design review",
+      `⚠️ **Nothing reviewed**: the engine judged none of the requested routes, so there is no grade. ` +
+        `· captured \`${shortSha(ctx.headSha)}\``,
+      "A result with no findings grades `ship` by construction, so the grade this run carried " +
+        "says nothing about your UI and Gate is withholding it along with the summary. What was " +
+        "skipped, and why, is listed below.",
     );
   } else {
     parts.push(

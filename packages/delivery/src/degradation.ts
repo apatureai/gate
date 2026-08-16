@@ -1,6 +1,7 @@
 import type { PollOutcome } from "@gate/engine";
 import type { Finding, GateMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
+import { coverageState, suppressesGradeForCoverage, type CoverageState } from "./coverage.js";
 import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
 import { sanitizeDisplayText } from "./sanitize.js";
 import { renderStickyComment } from "./sticky-comment.js";
@@ -37,6 +38,14 @@ export interface DeliveryDecision {
    * a `reviewed` status with `judgment: "unjudged"` is not a review.
    */
   judgment?: JudgmentState;
+  /**
+   * How much of the requested review actually happened (verdict#165). Present on
+   * every completed outcome, for the same reason `judgment` is: a `reviewed`
+   * status logged beside a neutral Check Run would be the very
+   * two-surfaces-disagree bug this field exists to close, so the run record
+   * carries the fact as well as the comment.
+   */
+  coverage?: CoverageState;
 }
 
 export interface DegradationContext {
@@ -112,9 +121,10 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
   const { valid, dropped } = validateFindings(outcome.result.findings, ctx.isValidElement);
   const result = { ...outcome.result, findings: valid };
   const judgment = judgmentState(result);
-  // An unjudged run publishes no findings at all, so "N findings were dropped"
-  // would be reporting on a list nobody is going to see.
-  const graded = !suppressesGrade(judgment);
+  const coverage = coverageState(result);
+  // An unjudged run, or one that reviewed nothing, publishes no findings at all,
+  // so "N findings were dropped" would be reporting on a list nobody will see.
+  const graded = !suppressesGrade(judgment) && !suppressesGradeForCoverage(coverage);
 
   const caveats: string[] = [];
   if (graded && dropped > 0) {
@@ -139,6 +149,7 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     comment,
     caveat,
     judgment,
+    coverage,
     checkRun: { conclusion: checkRun.conclusion, title: checkRun.title, summary: checkRun.summary },
   };
 }

@@ -1,11 +1,13 @@
 import {
   type CheckRun,
   type CheckRunConclusion,
+  type CoverageState,
   decideDelivery,
   decideDeliveryForError,
   type GitHubCommentsApi,
   type JudgmentState,
   suppressesGrade,
+  suppressesGradeForCoverage,
   upsertStickyComment,
 } from "@gate/delivery";
 import {
@@ -108,6 +110,15 @@ export type ActionStatus =
    * sticky comment must not all call this a review when it was not one.
    */
   | "not_judged"
+  /**
+   * The engine returned a complete result and stated that it reviewed NOTHING:
+   * no requested route reached a judgment (verdict#165). Distinct from
+   * `not_judged`, which is about whether a MODEL ran; this is about whether it
+   * ran on anything. An empty capture yields an honest `model_backed: true` and
+   * a `ship` grade over zero pages, and logging that as `reviewed` while the
+   * Check Run goes neutral is exactly the disagreement Gate is closing.
+   */
+  | "nothing_reviewed"
   | "no_preview"
   | "unverified_preview"
   /** The engine could not be reached, or failed in a way a retry can clear. */
@@ -129,6 +140,8 @@ export interface ActionOutcome {
   notReviewed?: string;
   /** Engine's judgment attestation for a completed result (`decideDelivery`). */
   judgment?: JudgmentState;
+  /** How much of the requested review actually happened (verdict#165). */
+  coverage?: CoverageState;
 }
 
 /** One engine-failure kind, one run status, so the log says what the Check Run says. */
@@ -298,12 +311,24 @@ export async function runAction(
     }
     await deps.publishCheckRun({ name: "Apature Gate", ...decision.checkRun });
 
+    // The run log states what the Check Run states. `nothing_reviewed` is
+    // reported ahead of `not_judged` for the same reason the Check Run titles it
+    // first: it is the stronger fact, and an operator whose capture produced no
+    // pages is not helped by hearing about a missing stamp instead.
     const judged = !decision.judgment || !suppressesGrade(decision.judgment);
+    const reviewedNothing =
+      decision.coverage !== undefined && suppressesGradeForCoverage(decision.coverage);
+    const status: ActionStatus = reviewedNothing
+      ? "nothing_reviewed"
+      : judged
+        ? "reviewed"
+        : "not_judged";
     return {
-      status: judged ? "reviewed" : "not_judged",
+      status,
       conclusion: decision.checkRun.conclusion,
       commentAction,
       ...(decision.judgment ? { judgment: decision.judgment } : {}),
+      ...(decision.coverage ? { coverage: decision.coverage } : {}),
     };
   } finally {
     // Always tear down the local server (every return path above + any throw).

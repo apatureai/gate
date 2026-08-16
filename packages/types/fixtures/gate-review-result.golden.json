@@ -76,6 +76,24 @@
     "rubricVersion": "design-rubric@1",
     "uiDnaVersion": "ui-dna@2026.06.12"
   },
+  "coverage": {
+    "routesRequested": [
+      "/pricing",
+      "/checkout"
+    ],
+    "routesReviewed": [
+      "/pricing"
+    ],
+    "viewportsRequested": [
+      "mobile",
+      "tablet",
+      "desktop"
+    ],
+    "viewportsReviewed": [
+      "mobile",
+      "desktop"
+    ]
+  },
   "provenance": {
     "model_backed": true,
     "source": "model",

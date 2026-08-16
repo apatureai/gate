@@ -19,7 +19,10 @@ const GRADES: ReviewGrade[] = ["ship", "ship_with_nits", "needs_work", "blocked"
 const SEVERITIES: Severity[] = ["nit", "minor", "major", "blocker"];
 // Re-pinned on 2026-08-15: the golden result now carries the judgment-provenance
 // stamp a conforming engine emits, because silence is no longer published as a grade.
-const GATE_ENGINE_GOLDEN_BLOB = "a51239fd22ba0341bc4672b2d30df2bf7e3d363e";
+// Re-pinned again the same day for `coverage` (verdict#165): the fixture is now
+// also the cross-repo PARTIAL-coverage anchor, stating on the contract what its
+// `notReviewed` lines already said in prose.
+const GATE_ENGINE_GOLDEN_BLOB = "73825892bf4bfd17f2e156ceb74d1340674fdf92";
 const GATE_ENGINE_PRE_CALIBRATION_BLOB = "7d1c7e4780b5967c1df937f12667875e4d38ffb8";
 
 describe("golden GateReviewResult fixture", () => {
@@ -71,6 +74,23 @@ describe("golden GateReviewResult fixture", () => {
       expect(f.suggestion === null || typeof f.suggestion === "string").toBe(true);
       expect(f.confidence === undefined || (f.confidence >= 0 && f.confidence <= 1)).toBe(true);
     }
+  });
+
+  it("states coverage, and is the cross-repo PARTIAL-coverage anchor (verdict#165)", () => {
+    const coverage = golden.coverage;
+    if (!coverage) throw new Error("the golden fixture must state coverage");
+    expect(coverage.routesRequested).toEqual(["/pricing", "/checkout"]);
+    expect(coverage.routesReviewed).toEqual(["/pricing"]);
+    expect(coverage.viewportsRequested).toEqual(["mobile", "tablet", "desktop"]);
+    expect(coverage.viewportsReviewed).toEqual(["mobile", "desktop"]);
+    // The fixture is the counterexample to the naive fix: a real, partial review
+    // whose skipped items appear BOTH structurally and in the prose. Once its
+    // findings are fixed it legitimately becomes `ship` with zero findings and a
+    // non-empty `notReviewed`, and that run must still pass.
+    expect(coverage.routesReviewed.length).toBeGreaterThan(0);
+    expect(golden.findings.length).toBeGreaterThan(0);
+    expect(golden.notReviewed.some((line) => line.includes("/checkout"))).toBe(true);
+    expect(golden.notReviewed.some((line) => line.includes("tablet"))).toBe(true);
   });
 
   it("exposes notReviewed as an array of strings", () => {

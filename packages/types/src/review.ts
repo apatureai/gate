@@ -117,6 +117,40 @@ export type GateReviewRequest = {
   previewBuildFacts?: PreviewBuildFact[];
 };
 
+/**
+ * What the engine's run actually looked at (verdict#165), stated structurally.
+ *
+ * Gate needs this because a wire result always carries a `grade`, and a result
+ * with zero surviving findings always grades `ship` (verdict floors the grade to
+ * what the surviving findings support, and nothing supports better than `ship`).
+ * That is correct for a genuinely clean page and INDISTINGUISHABLE, field for
+ * field, from a run that judged nothing: an empty capture, or a run where every
+ * route's critique failed validation. Mapped through `buildCheckRun` all of them
+ * become a green ✅ on the merge-gating surface.
+ *
+ * `notReviewed` cannot close that gap, and the golden fixture is the proof: it
+ * skips `/checkout` and the tablet viewport while carrying real findings on what
+ * it did review. A rule of "zero findings plus a non-empty `notReviewed` is not
+ * a pass" would punish that run for being honest about a partial, and
+ * `notReviewed` is free prose a producer may leave empty besides. Coverage is a
+ * different question, asked of the contract rather than inferred from prose.
+ *
+ * Identifiers rather than counts, so the Check Run can NAME what was skipped.
+ * Optional and additive under schema v1 (like `pageHealthFootnote` and
+ * `provenance`): a producer that cannot answer honestly omits the field, and
+ * Gate must read absence as "not stated", never as "everything was reviewed".
+ */
+export type ReviewCoverage = {
+  /** Routes the review was asked to cover. */
+  routesRequested: string[];
+  /** Routes the run actually formed a judgment about. Empty ⇒ nothing was reviewed. */
+  routesReviewed: string[];
+  /** Viewports the review was asked to cover. */
+  viewportsRequested: Viewport[];
+  /** Viewports actually captured and judged, across the reviewed routes. */
+  viewportsReviewed: Viewport[];
+};
+
 export type GateReviewResult = {
   grade: ReviewGrade;
   overall: string;
@@ -166,6 +200,13 @@ export type GateReviewResult = {
     /** Version of the repo's UI DNA the critique was grounded in, or null. */
     uiDnaVersion: string | null;
   };
+  /**
+   * What the run actually looked at (verdict#165), additive + optional under
+   * schema v1. Absent means "this producer does not report coverage", never
+   * "everything was reviewed". Gate reads it in `coverageState()` and refuses to
+   * render a grade when nothing was reviewed. See `ReviewCoverage`.
+   */
+  coverage?: ReviewCoverage;
   /**
    * Whether anything actually judged the page, stated by the engine in the
    * payload (additive + optional under schema v1, like `pageHealthFootnote`).

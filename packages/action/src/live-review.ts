@@ -2,7 +2,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { DEFAULT_CONFIG } from "@gate/config";
-import type { CheckRun, GitHubCommentsApi, IssueComment, JudgmentState } from "@gate/delivery";
+import type {
+  CheckRun,
+  CoverageState,
+  GitHubCommentsApi,
+  IssueComment,
+  JudgmentState,
+} from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
 import { missingEngineSettings, resolveEngineClientEnv } from "@gate/secrets";
 import { buildAllowlistedEnv, startLocalServer } from "./local-serve.js";
@@ -185,6 +191,27 @@ function verdictLine(judgment: JudgmentState | undefined): string {
   }
 }
 
+/**
+ * One line saying what the run actually looked at (verdict#165). Printed next to
+ * the judgment line because they answer different halves of one question, and a
+ * transcript that prints only "a model judged the page" over an empty capture is
+ * the same overstatement on a third surface.
+ */
+function coverageLine(coverage: CoverageState | undefined): string {
+  switch (coverage) {
+    case "full":
+      return "every requested route and viewport was reviewed";
+    case "partial":
+      return "some of the requested routes or viewports were reviewed; the rest are listed in the comment";
+    case "nothing":
+      return "NOTHING was reviewed; no requested route reached a judgment, and Gate withheld the grade";
+    case "unstated":
+      return "the engine did not report what it reviewed";
+    default:
+      return "no result: the engine call did not produce one, so there was nothing to cover";
+  }
+}
+
 /** Render the run as the transcript the CLI prints. Pure. */
 export function formatLiveReviewResult(result: LiveReviewResult, cwd = process.cwd()): string {
   const rel = (path: string): string => (path.startsWith(cwd) ? `.${path.slice(cwd.length)}` : path);
@@ -196,6 +223,7 @@ export function formatLiveReviewResult(result: LiveReviewResult, cwd = process.c
     `  action status   ${result.outcome.status} · comment ${result.outcome.commentAction ?? "none"}`,
     `  check run       ${result.checkRun.conclusion}, ${result.checkRun.title}`,
     `  judgment        ${result.outcome.judgment ?? "none"}: ${verdictLine(result.outcome.judgment)}`,
+    `  coverage        ${result.outcome.coverage ?? "none"}: ${coverageLine(result.outcome.coverage)}`,
     "",
     "  wrote",
     `    ${rel(result.commentPath)}  (the sticky PR comment, verbatim)`,

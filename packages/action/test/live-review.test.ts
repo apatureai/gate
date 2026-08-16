@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   fixturePreviewCommand,
@@ -92,6 +94,64 @@ describe("the transcript", () => {
     expect(silent).toContain("did not state whether a model judged the page");
     expect(silent).toContain("Gate withheld the grade");
     expect(silent).not.toContain("NOTHING judged");
+  });
+
+  it("says what the run actually covered, not only whether a model ran (verdict#165)", () => {
+    const nothing = formatLiveReviewResult(
+      {
+        ...base,
+        outcome: {
+          status: "nothing_reviewed",
+          conclusion: "neutral",
+          commentAction: "created",
+          judgment: "model_backed",
+          coverage: "nothing",
+        },
+        checkRun: { ...base.checkRun, title: "Nothing reviewed" },
+      },
+      "/repo",
+    );
+    // The judgment stamp on this run is an honest `model_backed`, so a transcript
+    // printing only that line would say "a model judged the page" over zero pages.
+    expect(nothing).toContain("a model judged the page");
+    expect(nothing).toContain("NOTHING was reviewed");
+    expect(nothing).toContain("Gate withheld the grade");
+  });
+
+  it("does not report coverage the engine never stated", () => {
+    const silent = formatLiveReviewResult(
+      {
+        ...base,
+        outcome: {
+          status: "reviewed",
+          conclusion: "success",
+          commentAction: "created",
+          judgment: "model_backed",
+        },
+      },
+      "/repo",
+    );
+    expect(silent).toContain("coverage        none");
+  });
+
+  it("the README's demo:live transcript prints the line this formatter prints", () => {
+    const readme = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
+    const rendered = formatLiveReviewResult(
+      {
+        ...base,
+        outcome: {
+          status: "not_judged",
+          conclusion: "neutral",
+          commentAction: "created",
+          judgment: "unjudged",
+          coverage: "full",
+        },
+      },
+      "/repo",
+    );
+    const coverageLine = rendered.split("\n").find((line) => line.trimStart().startsWith("coverage "));
+    if (!coverageLine) throw new Error("the transcript must carry a coverage line");
+    expect(readme).toContain(coverageLine.trim());
   });
 
   it("blames a failed call on the call, not on the engine's stamp", () => {

@@ -109,6 +109,39 @@ describe("GateReviewResult contract", () => {
     if (out.ok) expect("futureField" in out.result).toBe(false); // stripped
   });
 
+  it("preserves coverage through parsing instead of stripping it (verdict#165)", () => {
+    // The schema is not `.strict()`, so a field it does not NAME is silently
+    // dropped. Coverage that never survives the parse cannot stop a green Check
+    // Run from being published over a review that touched nothing.
+    const out = parseEngineResult(golden, SCHEMA_VERSION);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.result.coverage).toEqual(golden.coverage);
+  });
+
+  it("accepts a result with no coverage at all (older / third-party engine)", () => {
+    const { coverage: _drop, ...withoutCoverage } = golden;
+    const out = parseEngineResult(withoutCoverage, SCHEMA_VERSION);
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.result.coverage).toBeUndefined();
+  });
+
+  it("rejects HALF-stated coverage rather than reading it as a weaker claim", () => {
+    // `routesReviewed` with no `routesRequested` cannot tell partial from full.
+    const out = parseEngineResult(
+      { ...golden, coverage: { routesReviewed: ["/pricing"] } },
+      SCHEMA_VERSION,
+    );
+    expect(out).toMatchObject({ ok: false, reason: "schema_parse_error" });
+  });
+
+  it("rejects a coverage viewport outside the closed enum", () => {
+    const out = parseEngineResult(
+      { ...golden, coverage: { ...golden.coverage, viewportsReviewed: ["watch"] } },
+      SCHEMA_VERSION,
+    );
+    expect(out).toMatchObject({ ok: false, reason: "schema_parse_error" });
+  });
+
   it("rejects an unsupported major version (degrade gracefully)", () => {
     const out = parseEngineResult(golden, "2");
     expect(out).toMatchObject({ ok: false, reason: "schema_version_mismatch" });

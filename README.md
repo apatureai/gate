@@ -6,7 +6,7 @@
 
 **Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`verdict`](https://github.com/apatureai/verdict) is one, and [one section below](#running-your-own-critique-service-and-pointing-gate-at-it) is the exact commands to run it and point Gate at it; writing your own is [roadmap item 1](#roadmap). With no critique service configured, every review ends in a neutral Check Run naming the variables you have to set, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
 
-**Gate never shows a passing review for a page nothing judged.** A critique service with no model configured still returns a complete, well-formed result with a grade in it. Gate reads the service's own judgment stamp and, unless it says a model judged the capture, withholds the grade: the Check Run goes neutral and titled *Not judged*, and the comment says so instead of showing a green badge. That rule is the one thing this repository will not trade away for a nicer-looking demo.
+**Gate never shows a passing review for a page nothing judged.** A critique service with no model configured still returns a complete, well-formed result with a grade in it. Gate reads the service's own judgment stamp and, unless it says a model judged the capture, withholds the grade: the Check Run goes neutral and titled *Not judged*, and the comment says so instead of showing a green badge. The same rule covers the other half of the question: the service also reports which routes and viewports it actually reviewed, and a run that reviewed **none** of them gets a neutral Check Run titled *Nothing reviewed* rather than the `ship` grade an empty result always carries. A partial review stays green and names what it skipped, on the Check Run as well as in the comment, so the two surfaces can never disagree. That rule is the one thing this repository will not trade away for a nicer-looking demo.
 
 **The half it does own, it owns end to end.** A sandbox that executes untrusted pull request code and cleans up after it, preview-URL discovery with provenance checks, fork gating, queue supersession, a publish-time SHA guard, version- and schema-checked results, annotated screenshots, sticky-comment upsert, and Check Run mapping. Every one of those runs from a clean clone with no credentials, and the demos below prove it on your machine.
 
@@ -227,6 +227,7 @@ Gate live review (real engine, real capture, GitHub substituted)
   action status   not_judged · comment created
   check run       neutral, Not judged
   judgment        unjudged: NOTHING judged the page; the engine has no model configured, and Gate withheld the grade
+  coverage        full: every requested route and viewport was reviewed
 
   wrote
     ./out/live-review-comment.md  (the sticky PR comment, verbatim)
@@ -250,6 +251,7 @@ node packages/serve/dist/main.js --port 8791 --model live
   action status   reviewed · comment created
   check run       neutral, Needs work
   judgment        model_backed: a model judged the page; the grade above is a review
+  coverage        full: every requested route and viewport was reviewed
 ```
 
 and `out/live-review-comment.md` is a real review of the fixture page, with each finding linked to the screenshot region it came from:
