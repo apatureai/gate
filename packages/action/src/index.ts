@@ -47,6 +47,7 @@ export {
   formatLiveReviewResult,
   fixturePreviewCommand,
   LiveReviewConfigError,
+  LiveReviewEndpointError,
   runLiveReview,
 } from "./live-review.js";
 export type { LiveReviewOptions, LiveReviewResult } from "./live-review.js";

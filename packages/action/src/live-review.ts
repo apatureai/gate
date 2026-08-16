@@ -10,7 +10,12 @@ import type {
   JudgmentState,
 } from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
-import { missingEngineSettings, resolveEngineClientEnv } from "@gate/secrets";
+import {
+  malformedEngineEndpoint,
+  missingEngineSettings,
+  resolveEngineClientEnv,
+  type MalformedEngineEndpoint,
+} from "@gate/secrets";
 import { buildAllowlistedEnv, startLocalServer } from "./local-serve.js";
 import { runAction, type ActionOutcome } from "./run.js";
 
@@ -70,6 +75,26 @@ export class LiveReviewConfigError extends Error {
   }
 }
 
+/**
+ * The endpoint is set and is not a URL Gate can send a job to.
+ *
+ * `demo:live` exists so a wrong shared secret is found on a laptop instead of in
+ * CI. A bare hostname pasted out of a hosting dashboard is the same class of
+ * mistake, so it is named here too, before the network, instead of surfacing as
+ * a failed fetch two minutes later.
+ */
+export class LiveReviewEndpointError extends Error {
+  constructor(readonly endpoint: MalformedEngineEndpoint) {
+    super(
+      `${endpoint.variableName} is set to "${endpoint.value}", and ${endpoint.reason}.\n\n` +
+        (endpoint.suggestion ? `Did you mean "${endpoint.suggestion}"?\n\n` : "") +
+        "An engine endpoint has to be an absolute http or https URL, scheme included, pointing\n" +
+        "at the root of the critique service; Gate appends /jobs to it.",
+    );
+    this.name = "LiveReviewEndpointError";
+  }
+}
+
 /** In-memory stand-in for the GitHub REST surface, so no account is needed. */
 function inMemoryGitHub() {
   const store: IssueComment[] = [];
@@ -98,6 +123,8 @@ export async function runLiveReview(options: LiveReviewOptions = {}): Promise<Li
   const engineEnv = resolveEngineClientEnv(env);
   const missing = missingEngineSettings(engineEnv);
   if (missing.length > 0) throw new LiveReviewConfigError(missing);
+  const malformed = malformedEngineEndpoint(engineEnv);
+  if (malformed) throw new LiveReviewEndpointError(malformed);
 
   const outDir = resolve(options.outDir ?? "out");
   await mkdir(outDir, { recursive: true });

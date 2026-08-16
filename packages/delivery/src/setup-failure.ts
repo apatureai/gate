@@ -42,6 +42,72 @@ export function engineNotConfiguredCheckRun(missing: readonly string[]): CheckRu
   };
 }
 
+/** How a malformed endpoint is described to the operator. Structural, so `@gate/secrets` owns the detection and this owns the wording. */
+export interface MalformedEndpointFacts {
+  /** The variable the value arrived under, canonical or deprecated. */
+  variableName: string;
+  /** The value as configured. */
+  value: string;
+  /** One clause naming what is wrong with it. */
+  reason: string;
+  /** A corrected form, when one could be derived. */
+  suggestion: string | null;
+}
+
+const ENDPOINT_DISPLAY_LIMIT = 200;
+
+/**
+ * Render a configured value inside a code span without letting it escape one.
+ *
+ * Deliberately not `sanitizeDisplayText`: that one defangs `https://` with a
+ * zero-width space, which is right for engine prose and wrong here, because the
+ * whole point of printing the value is that the operator can compare it to what
+ * they pasted, and the suggestion next to it has to survive being copied. So the
+ * transform is the minimum that keeps a code span closed: no control characters,
+ * no newlines, no backticks, and a length cap.
+ */
+function codeSpan(value: string): string {
+  // eslint-disable-next-line no-control-regex -- intentionally matches control chars to strip them
+  const stripped = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
+  const capped =
+    stripped.length > ENDPOINT_DISPLAY_LIMIT
+      ? `${stripped.slice(0, ENDPOINT_DISPLAY_LIMIT - 1)}\u2026`
+      : stripped;
+  return `\`${capped.replace(/`/g, "'")}\``;
+}
+
+/**
+ * A configured endpoint Gate cannot send a job to.
+ *
+ * This is the same class of problem as an unset endpoint, and until it was
+ * checked here it was reported as the opposite: the value passed the blank test,
+ * failed at `fetch`, and arrived in `classifyEngineFailure` with no HTTP status,
+ * so it was published as "temporarily unavailable ... Gate will retry" on every
+ * push, forever. A bare hostname is not an outage. It is one variable, and the
+ * summary shows the value it could not parse (an endpoint is an address, not a
+ * credential) next to a form that would work.
+ */
+export function engineEndpointInvalidCheckRun(facts: MalformedEndpointFacts): CheckRun {
+  const suggestion = facts.suggestion
+    ? `Did you mean ${codeSpan(facts.suggestion)}?\n\n`
+    : "";
+  return {
+    name: "Apature Gate",
+    conclusion: "neutral",
+    title: "Engine endpoint invalid",
+    summary: capText(
+      `Gate could not use the engine endpoint it was given, so no review ran. **This is not a pass.**\n\n` +
+        `\`${facts.variableName}\` is set to ${codeSpan(facts.value)}, and ${facts.reason}.\n\n` +
+        suggestion +
+        "An endpoint has to be an absolute http or https URL, scheme included, pointing at the " +
+        "root of the critique service: Gate appends `/jobs` to it. A hosting dashboard that shows " +
+        "you a bare hostname is showing you the host, not the URL.\n\n" +
+        "This one does not clear by itself: the next push reads the same value, so Gate is not " +
+        "promising a retry that would fix it.",
+    ),
+  };
+}
+
 export function setupFailureCheckRun(error: unknown, surface: "Action" | "App" = "Action"): CheckRun {
   const issues = configIssues(error);
   if (issues) {

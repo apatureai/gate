@@ -5,6 +5,7 @@ import {
   fixturePreviewCommand,
   formatLiveReviewResult,
   LiveReviewConfigError,
+  LiveReviewEndpointError,
   runLiveReview,
   type LiveReviewResult,
 } from "../src/live-review.js";
@@ -39,6 +40,44 @@ describe("runLiveReview with no engine configured", () => {
       (e: unknown) => e as LiveReviewConfigError,
     );
     expect(error.missing).toEqual(["GATE_ENGINE_HMAC_SECRET"]);
+  });
+});
+
+/**
+ * `demo:live` exists so a wrong shared secret is found on a laptop rather than in
+ * CI, and a bare hostname pasted out of a hosting dashboard is the same class of
+ * mistake. Before this, it was the one setup error `demo:live` could not help
+ * with: it passed the missing-settings check, spent two minutes starting a
+ * browser and a fixture server, and then failed with `Failed to parse URL`.
+ */
+describe("runLiveReview with an endpoint that is not a URL", () => {
+  const env = { GATE_ENGINE_ENDPOINT: "verdict-acme.fly.dev", GATE_ENGINE_HMAC_SECRET: "s" };
+
+  it("refuses before starting a browser or a server", async () => {
+    await expect(runLiveReview({ env })).rejects.toBeInstanceOf(LiveReviewEndpointError);
+  });
+
+  it("shows the value it could not parse and a form that would work", async () => {
+    const error = await runLiveReview({ env }).catch((e: unknown) => e as LiveReviewEndpointError);
+    expect(error.endpoint.value).toBe("verdict-acme.fly.dev");
+    expect(error.message).toContain("GATE_ENGINE_ENDPOINT");
+    expect(error.message).toContain("verdict-acme.fly.dev");
+    expect(error.message).toContain("https://verdict-acme.fly.dev");
+  });
+
+  it("is a different error from the missing-settings one, since the fix differs", async () => {
+    const error = await runLiveReview({ env }).catch((e: unknown) => e as Error);
+    expect(error).not.toBeInstanceOf(LiveReviewConfigError);
+    expect(error.name).toBe("LiveReviewEndpointError");
+  });
+
+  it("still leaves a genuinely unset endpoint to the missing-settings error", async () => {
+    // Order matters: reporting "not a URL" for an empty string would be the
+    // worse first message for a brand-new install.
+    const error = await runLiveReview({ env: { GATE_ENGINE_HMAC_SECRET: "s" } }).catch(
+      (e: unknown) => e as Error,
+    );
+    expect(error).toBeInstanceOf(LiveReviewConfigError);
   });
 });
 

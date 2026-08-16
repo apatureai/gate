@@ -36,7 +36,12 @@ export {
 export type { CoverageState } from "./coverage.js";
 export { mapCheckRunConclusion, buildCheckRun } from "./check-run.js";
 export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.js";
-export { setupFailureCheckRun, engineNotConfiguredCheckRun } from "./setup-failure.js";
+export {
+  setupFailureCheckRun,
+  engineNotConfiguredCheckRun,
+  engineEndpointInvalidCheckRun,
+} from "./setup-failure.js";
+export type { MalformedEndpointFacts } from "./setup-failure.js";
 export { sanitizeDisplayText } from "./sanitize.js";
 export { validateFindings, decideDelivery, decideDeliveryForError } from "./degradation.js";
 export type {

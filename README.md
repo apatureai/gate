@@ -423,6 +423,16 @@ jobs:
   design-review:
     runs-on: ubuntu-latest
     steps:
+      # Required whenever you use config-path or preview-command: both read
+      # files from the workspace, and without a checkout the workspace is empty
+      # and .gate.yml is silently ignored.
+      - uses: actions/checkout@v5
+
+      # Your own deploy step, whatever it is. It has to expose the preview URL
+      # as an output for the next step to read.
+      - id: deploy
+        run: echo "preview-url=https://your-preview-host" >> "$GITHUB_OUTPUT"
+
       - uses: apatureai/gate@v1
         with:
           preview-url: ${{ steps.deploy.outputs.preview-url }}
@@ -563,6 +573,7 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 | Failure | Behaviour |
 |---|---|
 | No critique service configured | Neutral "Engine not configured" Check Run naming `GATE_ENGINE_ENDPOINT` / `GATE_ENGINE_HMAC_SECRET`; the review is never attempted, and the summary says in words that this is not a pass |
+| `GATE_ENGINE_ENDPOINT` set to something that is not a URL | Neutral "Engine endpoint invalid" Check Run showing the value it could not parse and a corrected form; no promise of a retry, because a bare hostname does not become a URL on the next push |
 | Service returned a result nothing judged | Neutral "Not judged" Check Run; the grade, the narrative and any findings are withheld, and the comment leads with the service's own disclosure |
 | Service returned a result with no judgment stamp at all | Neutral "Judgment not stated" Check Run; same withholding, and the summary names `provenance.model_backed` as the field that would restore the grade |
 | Service rejected the request (wrong shared secret, unknown installation, wrong endpoint) | Neutral "Review not submitted" Check Run carrying the service's own `HTTP <status> <code>`, what to check for that code, and no promise of a retry |
@@ -601,7 +612,7 @@ preview:
 
 routes:
   always: ["/"]
-  max_per_pr: 5
+  max_per_pr: 5           # cost ceiling; routes over it are reported as skipped, never silently dropped
   map: {}                 # glob -> route, to review the pages a diff actually touches
 
 viewports: [mobile, desktop]   # mobile | tablet | desktop
@@ -626,7 +637,7 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 
 | Variable | Required | Default | Effect |
 |---|---|---|---|
-| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service `/jobs` base URL. Unset → a neutral "Engine not configured" Check Run naming what to set; the review is not attempted. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
+| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service base URL, scheme included: Gate appends `/jobs` to it. Unset → a neutral "Engine not configured" Check Run naming what to set. Set but not an absolute http/https URL (a bare `verdict-acme.fly.dev`, the form a hosting dashboard shows you) → a neutral "Engine endpoint invalid" Check Run showing the value and a corrected one. Either way the review is not attempted and neither is called an outage. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
 | `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests; must equal the service's own `ENGINE_HMAC_SECRET`. Unset → same "Engine not configured" Check Run, because an unsigned job is refused with `401 signature_mismatch`. Deprecated alias: `JUDGMENT_ENGINE_HMAC_SECRET`. |
 | `GATE_ENGINE_API_KEY` | optional | none | Bearer token, when the service wants one on top of the signature. A self-hosted `verdict` authenticates on the HMAC alone, so this stays unset. Deprecated alias: `JUDGMENT_ENGINE_API_KEY`. |
 | `GITHUB_TOKEN` / `INPUT_GITHUB_TOKEN` | Action | none | Posts the sticky comment and Check Run. Unset → nothing is published. |

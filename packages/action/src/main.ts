@@ -1,8 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
 import { CONFIG_FILENAME, loadDesignReviewConfig, resolveConfigPath } from "@gate/config";
-import { engineNotConfiguredCheckRun } from "@gate/delivery";
+import { engineEndpointInvalidCheckRun, engineNotConfiguredCheckRun } from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
-import { missingEngineSettings, resolveEngineClientEnv } from "@gate/secrets";
+import {
+  malformedEngineEndpoint,
+  missingEngineSettings,
+  resolveEngineClientEnv,
+} from "@gate/secrets";
 import type { GateMode } from "@gate/types";
 import { formatActionError } from "./action-error.js";
 import { createGitHubApi } from "./github.js";
@@ -96,6 +100,23 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     const run = engineNotConfiguredCheckRun(missing);
     console.error(`Apature Gate: ${run.title}. ${missing.join(", ")} not set.`);
+    if ((await gh.getCurrentHeadSha()) === pr.head.sha) await gh.publishCheckRun(run);
+    return;
+  }
+
+  // A set-but-unusable endpoint is the same setup problem as an unset one, and
+  // was reported as its opposite: it passed the blank check above, died at the
+  // first `fetch` with no HTTP status, and was published as "temporarily
+  // unavailable ... Gate will retry" on every push, forever. Parsing it here,
+  // beside the check that already names the variable, is what turns a permanent
+  // outage story back into one line an operator can act on.
+  const malformed = malformedEngineEndpoint(engineEnv);
+  if (malformed) {
+    const run = engineEndpointInvalidCheckRun(malformed);
+    console.error(
+      `Apature Gate: ${run.title}. ${malformed.variableName} is set to "${malformed.value}", and ${malformed.reason}.` +
+        (malformed.suggestion ? ` Did you mean "${malformed.suggestion}"?` : ""),
+    );
     if ((await gh.getCurrentHeadSha()) === pr.head.sha) await gh.publishCheckRun(run);
     return;
   }

@@ -10,6 +10,7 @@ export type {
   EnvVarResolution,
   EngineClientEnv,
   LegacyEnvVarUse,
+  MalformedEngineEndpoint,
 } from "./store.js";
 export {
   APP_SECRET_KEYS,
@@ -20,6 +21,7 @@ export {
   resolveSecretEnv,
   resolveEngineClientEnv,
   missingEngineSettings,
+  malformedEngineEndpoint,
   EnvSecretStore,
 } from "./store.js";
 export { REDACTED, redact } from "./redact.js";
