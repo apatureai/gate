@@ -101,6 +101,44 @@ turn a fresh advisory red is roadmap item 5, and the container-image half of it
 is item 10. Until those land, re-audit before you deploy rather than trusting
 this page.
 
+## What Gate treats as untrusted
+
+Everything the critique engine sends back is untrusted display text, including
+the model's own prose. That is not a statement about the engine's honesty: the
+model is looking at the pull request's rendered page, so its wording derives
+partly from text the pull request author wrote. An author who controls the page
+has influence over the finding.
+
+Gate publishes that text as Markdown, on a comment whose structure is the only
+thing telling a reader which words are Gate's. So every engine- and
+model-supplied string on both published surfaces (the sticky comment and the
+Check Run) is neutralized before it is rendered:
+
+- **Prose is escaped and flattened** (`packages/delivery/src/sanitize.ts`). All
+  whitespace collapses to single spaces, so no block construct can be opened,
+  and the Markdown metacharacters are backslash-escaped, so a finding cannot
+  close the `<details>` block it sits in, start a heading, forge a bold grade
+  line, break out of a table cell, or inject a link or an `@mention`. Each field
+  is length-capped so one finding cannot flood the comment.
+- **Values shown as code go through a closed code span.** Backticks are the only
+  character that can end one, and they are replaced rather than escaped, because
+  a backslash inside a code span is literal.
+- **Link destinations are validated, not escaped.** An evidence URL has to parse
+  as an absolute `http`/`https` URL. Anything else, `javascript:` and `data:`
+  included, is published as inert text saying the evidence is not linkable, and
+  never as a link.
+
+The cost is real and accepted: the transform is lossy. A suggestion that arrives
+with backticked code renders with the backticks visible rather than as a code
+span, and a legitimate link in engine prose is defanged along with a hostile
+one. Both are recoverable in a way that a forged `✅ Ship` under Gate's own
+heading is not.
+
+This is a rendering boundary, not a review of the engine. Gate cannot tell a
+truthful finding from an invented one, and does not claim to: see the
+`provenance` and `coverage` handling in `packages/delivery` for what it does
+check.
+
 ## Things that are intentional, not vulnerabilities
 
 - **Gate never requests `contents: write` and never edits code.** Check Runs are

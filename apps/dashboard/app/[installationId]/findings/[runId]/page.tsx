@@ -60,6 +60,13 @@ export default async function FindingBrowserPage({
     return { ...f, screenshotUrl: capabilityScreenshotUrl(env.artifactBaseUrl(), artifactId, cap) };
   });
 
+  // The engine's narrative, titles and suggestions are UNTRUSTED text (the model
+  // reads the pull request's own page), and they reach this page raw on purpose:
+  // React renders them as text nodes and attribute values, which are escaped, and
+  // this page renders no Markdown. That is what makes it safe, so it stops being
+  // safe the moment someone adds a Markdown renderer or `dangerouslySetInnerHTML`
+  // here. The published GitHub surfaces, which ARE Markdown, sanitize instead:
+  // `packages/delivery/src/sanitize.ts`.
   return (
     <section>
       <h1>

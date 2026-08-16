@@ -39,7 +39,11 @@ describe("runReviewDemo", () => {
     const comment = await readFile(result.commentPath, "utf8");
     expect(comment).toContain(STICKY_MARKER);
     expect(comment).toContain("Primary CTA uses an off-brand color on mobile");
-    expect(comment).toContain("[Evidence](./annotated-f_001.png)");
+    // Absolute http(s), because that is the only destination Gate will link. The
+    // demo used to rewrite these to `./annotated-f_001.png` so they resolved
+    // against the PNGs beside the file; a relative destination is now published
+    // as inert text, so the demo would have been showing an impossible comment.
+    expect(comment).toContain("[Evidence](https://artifacts.judgment-engine.internal/shot_001.png)");
   });
 
   it("writes an annotated PNG per finding that has recorded geometry", async () => {

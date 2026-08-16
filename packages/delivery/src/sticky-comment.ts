@@ -1,12 +1,17 @@
 import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
-import { coverageState, suppressesGradeForCoverage } from "./coverage.js";
+import { coverageState, notReviewedItems, suppressesGradeForCoverage } from "./coverage.js";
 import {
   footerModel,
   judgmentBanner,
   judgmentState,
   suppressesGrade,
 } from "./judgment.js";
-import { sanitizeDisplayText } from "./sanitize.js";
+import {
+  escapeTableCell,
+  safeLinkUrl,
+  sanitizeCodeSpan,
+  sanitizeDisplayText,
+} from "./sanitize.js";
 
 /** Severity ladder, lowest to highest (mirrors the `.gate.yml` enum). */
 const SEVERITY_RANK: Record<Severity, number> = { nit: 0, minor: 1, major: 2, blocker: 3 };
@@ -73,27 +78,76 @@ export interface StickyCommentContext {
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
 
+/**
+ * Display bounds for the untrusted fields, in characters.
+ *
+ * EVERY string below originates with the engine or the model, and the model's
+ * prose derives partly from the page text of the pull request under review, so a
+ * pull request author has influence over it without controlling the engine. They
+ * are therefore rendered through `sanitize.ts` (never interpolated raw), which
+ * both escapes the Markdown structure out of them and caps them here so one
+ * finding cannot flood the comment.
+ */
+const OVERALL_MAX = 2_000;
+const TITLE_MAX = 300;
+const SUGGESTION_MAX = 1_000;
+const ROUTE_MAX = 120;
+const VIEWPORT_MAX = 40;
+/** Version stamps in the lineage footer: short by construction, engine-supplied all the same. */
+const STAMP_MAX = 80;
+
 function screenshotLinks(result: GateReviewResult): Map<string, string> {
   return new Map(result.artifacts.annotatedScreenshots.map((shot) => [shot.findingId, shot.url]));
 }
 
-function evidenceLink(finding: Finding, screenshots: Map<string, string>): string {
+/**
+ * The engine's evidence URL for a finding, but only when Gate will vouch for it.
+ *
+ * The URL is a link DESTINATION, so escaping it would break the link rather than
+ * make it safe; it is validated instead (`safeLinkUrl`). A destination that is
+ * not absolute http(s) never becomes a link at all: the reader is told the
+ * evidence exists and that Gate would not link it, which is the honest outcome
+ * and cannot be mistaken for a Gate-endorsed destination.
+ */
+const EVIDENCE_NOT_LINKABLE = "evidence not linkable";
+
+function evidenceHref(finding: Finding, screenshots: Map<string, string>): string | null {
   const url = screenshots.get(finding.id);
-  return url ? `[Evidence](${url})` : "none";
+  return url === undefined ? null : safeLinkUrl(url);
+}
+
+function evidenceCell(finding: Finding, screenshots: Map<string, string>): string {
+  if (!screenshots.has(finding.id)) return "none";
+  const href = evidenceHref(finding, screenshots);
+  return href ? `[Evidence](${href})` : EVIDENCE_NOT_LINKABLE;
 }
 
 function findingSummary(finding: Finding, screenshots: Map<string, string>): string {
-  const evidence = screenshots.get(finding.id);
+  const href = evidenceHref(finding, screenshots);
+  const evidence = href
+    ? ` · [Evidence](${href})`
+    : screenshots.has(finding.id)
+      ? ` · ${EVIDENCE_NOT_LINKABLE}`
+      : "";
   return (
-    `**${finding.title}** (\`${finding.route}\`, ${finding.viewport})` +
-    `${finding.suggestion ? `. ${finding.suggestion}` : ""}` +
-    `${evidence ? ` · [Evidence](${evidence})` : ""}`
+    `**${sanitizeDisplayText(finding.title, TITLE_MAX)}** ` +
+    `(${sanitizeCodeSpan(finding.route, ROUTE_MAX)}, ${sanitizeDisplayText(finding.viewport, VIEWPORT_MAX)})` +
+    `${finding.suggestion ? `. ${sanitizeDisplayText(finding.suggestion, SUGGESTION_MAX)}` : ""}` +
+    evidence
   );
 }
 
 function blockersTable(findings: Finding[], screenshots: Map<string, string>): string {
   const rows = findings
-    .map((f) => `| ${f.title} | \`${f.route}\` | ${f.viewport} | ${f.suggestion ?? "none"} | ${evidenceLink(f, screenshots)} |`)
+    .map((f) =>
+      // `escapeTableCell` only on the route: GFM ends a cell at an unescaped pipe
+      // even inside a code span, and `sanitizeDisplayText` escapes the pipe itself.
+      `| ${sanitizeDisplayText(f.title, TITLE_MAX)} ` +
+      `| ${escapeTableCell(sanitizeCodeSpan(f.route, ROUTE_MAX))} ` +
+      `| ${sanitizeDisplayText(f.viewport, VIEWPORT_MAX)} ` +
+      `| ${f.suggestion ? sanitizeDisplayText(f.suggestion, SUGGESTION_MAX) : "none"} ` +
+      `| ${evidenceCell(f, screenshots)} |`,
+    )
     .join("\n");
   return `### ⛔ Blockers\n\n| Finding | Route | Viewport | Suggestion | Evidence |\n| --- | --- | --- | --- | --- |\n${rows}`;
 }
@@ -122,6 +176,17 @@ function detailsSection(title: string, findings: Finding[], screenshots: Map<str
  * (verdict#165), and for the same reason. It is applied here as well as in
  * `buildCheckRun` so the two surfaces published side by side on one PR always
  * say the same thing about the same run.
+ *
+ * EVERY engine- or model-supplied string on this comment goes through
+ * `sanitize.ts` on its way in. This comment is Markdown, and its structure is
+ * what tells a reader which words are Gate's: a finding whose text can close the
+ * `<details>` block it sits in and open a second `## Apature Gate: design review`
+ * heading with a bold `✅ Ship` under it has forged a Gate verdict on the pull
+ * request, and the model's prose derives partly from the page text of the pull
+ * request under review, so its author has influence over that text. Nothing is
+ * interpolated raw here: prose is escaped, values shown as code are rendered
+ * through a closed code span, and link destinations are validated rather than
+ * escaped.
  */
 export function renderStickyComment(result: GateReviewResult, ctx: StickyCommentContext): string {
   const screenshots = screenshotLinks(result);
@@ -141,7 +206,7 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
     parts.push(
       "## Apature Gate: design review",
       `**${GRADE_LABEL[result.grade]}** · reviewed \`${shortSha(ctx.headSha)}\``,
-      result.overall,
+      sanitizeDisplayText(result.overall, OVERALL_MAX),
     );
   } else if (nothingReviewed) {
     parts.push(
@@ -185,10 +250,12 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   }
 
   // Always render "not reviewed" when anything was skipped; never silently drop.
-  if (result.notReviewed.length > 0) {
-    parts.push(`### Not reviewed\n\n${result.notReviewed.map((n) => `- ${n}`).join("\n")}`);
-  }
+  // Same sanitized, bounded items the Check Run renders, so the two surfaces
+  // cannot disagree about what was skipped OR about how it was neutralized.
+  const skipped = notReviewedItems(result);
+  if (skipped) parts.push(`### Not reviewed\n\n${skipped}`);
 
+  // Gate-owned prose, built from Gate's own signals; not engine text.
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);
 
   // Capture-health caveat: the engine's page-health footnote (Verdict #20), rendered
@@ -199,14 +266,21 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
     parts.push(`> 🩺 **Capture health:** ${sanitizeDisplayText(health)}`);
   }
 
-  // Version-lineage footer: engine/model/capture/dna stamps so every finding is traceable.
+  // Version-lineage footer: engine/model/capture/dna stamps so every finding is
+  // traceable. These are engine-supplied strings like any other, and they are
+  // rendered inside an HTML element, so an unsanitized stamp could close the
+  // `<sub>` and forge a verdict below it exactly as a finding could.
   const foot = [
-    `engine ${result.metadata.engineVersion}`,
+    `engine ${sanitizeDisplayText(result.metadata.engineVersion, STAMP_MAX)}`,
     `model ${footerModel(result)}`,
-    `capture ${result.metadata.captureVersion}`,
+    `capture ${sanitizeDisplayText(result.metadata.captureVersion, STAMP_MAX)}`,
   ];
-  if (result.metadata.uiDnaVersion) foot.push(`ui-dna ${result.metadata.uiDnaVersion}`);
-  if (ctx.runUrl) foot.push(`[run details](${ctx.runUrl})`);
+  if (result.metadata.uiDnaVersion) {
+    foot.push(`ui-dna ${sanitizeDisplayText(result.metadata.uiDnaVersion, STAMP_MAX)}`);
+  }
+  // Gate-built, never the engine's URL, and validated anyway: this one is a link.
+  const runUrl = ctx.runUrl ? safeLinkUrl(ctx.runUrl) : null;
+  if (runUrl) foot.push(`[run details](${runUrl})`);
   parts.push(`<sub>${foot.join(" · ")}</sub>`);
 
   return parts.join("\n\n");

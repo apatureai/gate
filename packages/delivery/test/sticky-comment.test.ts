@@ -11,6 +11,7 @@ import {
 } from "../src/index.js";
 
 const golden = loadGoldenReviewResult();
+const ZWSP = String.fromCharCode(0x200b);
 
 describe("renderStickyComment", () => {
   const body = renderStickyComment(golden, { headSha: "abcdef1234567890", runUrl: "https://gate.app/r/1" });
@@ -44,12 +45,16 @@ describe("renderStickyComment", () => {
 
   it("renders the not-reviewed section (never silently dropped)", () => {
     expect(body).toContain("### Not reviewed");
-    expect(body).toContain(golden.notReviewed[0]!);
+    // Engine prose, so it arrives sanitized: same line, with the Markdown
+    // metacharacters escaped (GFM renders `\(` as a literal `(`).
+    expect(body).toContain("route /checkout \\(no preview deployment matched the head SHA\\)");
   });
 
   it("includes a page-health footnote with engine/model/ui-dna lineage", () => {
     expect(body).toContain(`model ${golden.metadata.model}`);
-    expect(body).toContain(`ui-dna ${golden.metadata.uiDnaVersion}`);
+    // The stamps are engine-supplied too: `@` is defanged with a zero-width
+    // space, which is invisible to a reader and inert to GitHub's mention parser.
+    expect(body).toContain(`ui-dna ui-dna@${ZWSP}2026.06.12`);
     expect(body).toContain("[run details](https://gate.app/r/1)");
   });
 

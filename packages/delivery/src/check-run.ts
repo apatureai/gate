@@ -24,6 +24,9 @@ import { sanitizeDisplayText } from "./sanitize.js";
  */
 export type CheckRunConclusion = "success" | "neutral" | "failure";
 
+/** Bound on the engine's narrative, matching the sticky comment's. */
+const OVERALL_MAX = 2_000;
+
 const GRADE_TITLE: Record<ReviewGrade, string> = {
   ship: "Ship",
   ship_with_nits: "Ship with nits",
@@ -115,7 +118,9 @@ export function buildCheckRun(
 
   const summaryParts: string[] = [];
   if (graded) {
-    summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, result.overall);
+    // The narrative is model prose, and a Check Run summary is Markdown too: it
+    // is sanitized here for the same reason the sticky comment sanitizes it.
+    summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, sanitizeDisplayText(result.overall, OVERALL_MAX));
   } else if (nothingReviewed) {
     summaryParts.push(nothingReviewedReason(result));
     // When the engine ALSO could not attest a judgment, say so: it is the more

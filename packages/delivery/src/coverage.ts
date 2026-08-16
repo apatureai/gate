@@ -1,5 +1,5 @@
 import type { GateReviewResult, ReviewCoverage, Viewport } from "@gate/types";
-import { sanitizeDisplayText } from "./sanitize.js";
+import { sanitizeCodeSpan, sanitizeDisplayText } from "./sanitize.js";
 
 /**
  * How much of the requested review actually happened.
@@ -105,9 +105,9 @@ export const NOTHING_REVIEWED_REMEDY =
   "rather than green: there was nothing to find because nothing was looked at. The routes " +
   "and the reason each was skipped are listed below.";
 
-/** Render a route/viewport list as safe inline text, bounded so a long list cannot flood the summary. */
+/** Render a route/viewport list as safe code spans, bounded so a long list cannot flood the summary. */
 function renderItems(items: readonly string[], max = 12): string {
-  const shown = items.slice(0, max).map((item) => `\`${sanitizeDisplayText(item, 80)}\``);
+  const shown = items.slice(0, max).map((item) => sanitizeCodeSpan(item, 80));
   const rest = items.length - shown.length;
   return rest > 0 ? `${shown.join(", ")} and ${rest} more` : shown.join(", ");
 }
@@ -172,9 +172,19 @@ export function coverageCaveat(result: GateReviewResult): string {
  * every other untrusted display string Gate publishes.
  */
 export function notReviewedSection(result: GateReviewResult, max = 20): string | undefined {
+  const items = notReviewedItems(result, max);
+  return items === undefined ? undefined : `**Not reviewed**\n\n${items}`;
+}
+
+/**
+ * The skipped-item list on its own, without a heading, so each surface can title
+ * it in its own voice while sharing one bound and one sanitizer. The sticky
+ * comment renders it under `### Not reviewed`; the Check Run under a bold line.
+ */
+export function notReviewedItems(result: GateReviewResult, max = 20): string | undefined {
   const lines = result.notReviewed.filter((line) => line.trim().length > 0);
   if (lines.length === 0) return undefined;
   const shown = lines.slice(0, max).map((line) => `- ${sanitizeDisplayText(line, 300)}`);
   if (lines.length > shown.length) shown.push(`- _and ${lines.length - shown.length} more_`);
-  return `**Not reviewed**\n\n${shown.join("\n")}`;
+  return shown.join("\n");
 }

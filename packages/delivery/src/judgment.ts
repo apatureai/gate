@@ -1,4 +1,5 @@
 import type { GateReviewResult } from "@gate/types";
+import { sanitizeDisplayText } from "./sanitize.js";
 
 /**
  * Did anything actually judge this page?
@@ -169,11 +170,16 @@ export function judgmentRemedy(state: JudgmentState): string {
  * is the model the engine is CONFIGURED to route to, which it stamps whether or
  * not a call was made; on an unjudged run printing it bare reads as an
  * attribution. `provenance.model` is the model that was actually called.
+ *
+ * The model name is engine-supplied and this string is published in the sticky
+ * comment's footer, so it is sanitized here rather than at the call site: the
+ * caller composes it into Markdown and cannot tell by looking whether the parts
+ * it is joining are safe.
  */
 export function footerModel(result: GateReviewResult): string {
+  const configured = sanitizeDisplayText(result.metadata.model, 80);
   const state = judgmentState(result);
-  if (!suppressesGrade(state)) return result.metadata.model;
-  const configured = result.metadata.model;
+  if (!suppressesGrade(state)) return configured;
   // Silence is not evidence the model was skipped, only that nobody said.
   return state === "unattested"
     ? `${configured} (configured; the engine did not state whether it was called)`

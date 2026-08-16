@@ -29,6 +29,7 @@ export {
   suppressesGradeForCoverage,
   coverageCaveat,
   notReviewedSection,
+  notReviewedItems,
   nothingReviewedReason,
   NOTHING_REVIEWED_TITLE,
   NOTHING_REVIEWED_REMEDY,
@@ -42,7 +43,12 @@ export {
   engineEndpointInvalidCheckRun,
 } from "./setup-failure.js";
 export type { MalformedEndpointFacts } from "./setup-failure.js";
-export { sanitizeDisplayText } from "./sanitize.js";
+export {
+  sanitizeDisplayText,
+  sanitizeCodeSpan,
+  safeLinkUrl,
+  escapeTableCell,
+} from "./sanitize.js";
 export { validateFindings, decideDelivery, decideDeliveryForError } from "./degradation.js";
 export type {
   DegradationReason,

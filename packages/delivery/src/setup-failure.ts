@@ -1,4 +1,5 @@
 import type { CheckRun } from "./check-run.js";
+import { sanitizeCodeSpan } from "./sanitize.js";
 
 const SUMMARY_LIMIT = 1_800;
 
@@ -64,16 +65,11 @@ const ENDPOINT_DISPLAY_LIMIT = 200;
  * whole point of printing the value is that the operator can compare it to what
  * they pasted, and the suggestion next to it has to survive being copied. So the
  * transform is the minimum that keeps a code span closed: no control characters,
- * no newlines, no backticks, and a length cap.
+ * no newlines, no backticks, and a length cap. That is `sanitizeCodeSpan`, which
+ * this named it before the sticky comment needed the same primitive for routes.
  */
 function codeSpan(value: string): string {
-  // eslint-disable-next-line no-control-regex -- intentionally matches control chars to strip them
-  const stripped = value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim();
-  const capped =
-    stripped.length > ENDPOINT_DISPLAY_LIMIT
-      ? `${stripped.slice(0, ENDPOINT_DISPLAY_LIMIT - 1)}\u2026`
-      : stripped;
-  return `\`${capped.replace(/`/g, "'")}\``;
+  return sanitizeCodeSpan(value, ENDPOINT_DISPLAY_LIMIT);
 }
 
 /**

@@ -3,7 +3,7 @@ import type { Finding, GateMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
 import { coverageState, suppressesGradeForCoverage, type CoverageState } from "./coverage.js";
 import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
-import { sanitizeDisplayText } from "./sanitize.js";
+import { sanitizeCodeSpan } from "./sanitize.js";
 import { renderStickyComment } from "./sticky-comment.js";
 
 /**
@@ -219,12 +219,21 @@ function rejectionHint(facts: EngineErrorFacts): string {
   return DEFAULT_REJECTION_HINT;
 }
 
-/** `HTTP 401 signature_mismatch`, sanitized, or nothing when the engine said neither. */
+/**
+ * `` `HTTP 401 signature_mismatch` ``, as a closed code span, or nothing when the
+ * engine said neither.
+ *
+ * A code span, not escaped prose: the operator's job here is to match this
+ * string against their service's logs, and an error code carries underscores
+ * that inline escaping would render as `signature\_mismatch`. Inside a span the
+ * backslash is literal, so the only thing that has to be neutralized is the
+ * backtick that would close it early, which is what `sanitizeCodeSpan` does.
+ */
 function engineReply(facts: EngineErrorFacts): string | null {
   const parts: string[] = [];
   if (typeof facts.status === "number") parts.push(`HTTP ${facts.status}`);
-  if (facts.code) parts.push(sanitizeDisplayText(facts.code, 120));
-  return parts.length > 0 ? parts.join(" ") : null;
+  if (facts.code) parts.push(facts.code);
+  return parts.length > 0 ? sanitizeCodeSpan(parts.join(" "), 120) : null;
 }
 
 /**
@@ -240,7 +249,7 @@ export function decideDeliveryForError(
   facts: EngineErrorFacts = {},
 ): DeliveryDecision {
   const reply = engineReply(facts);
-  const replyLine = reply ? `\n\nThe critique service answered \`${reply}\`.` : "";
+  const replyLine = reply ? `\n\nThe critique service answered ${reply}.` : "";
 
   switch (reason) {
     case "circuit_open":

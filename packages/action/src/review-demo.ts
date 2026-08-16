@@ -120,8 +120,7 @@ export async function runReviewDemo(options: { outDir?: string } = {}): Promise<
   const outDir = resolve(options.outDir ?? "out");
   await mkdir(outDir, { recursive: true });
 
-  // Annotate first: the comment links the artifacts, so they must exist and the
-  // recorded result must point at where they landed.
+  // Annotate first: the comment links the artifacts, so they must exist.
   const golden = loadGoldenReviewResult();
   const base = await renderFixturePage();
   const screenshots: ReviewDemoScreenshot[] = [];
@@ -134,16 +133,13 @@ export async function runReviewDemo(options: { outDir?: string } = {}): Promise<
     screenshots.push({ findingId: shot.findingId, path, bytes: png.byteLength });
   }
 
-  const result: GateReviewResult = {
-    ...golden,
-    artifacts: {
-      ...golden.artifacts,
-      annotatedScreenshots: golden.artifacts.annotatedScreenshots.map((shot) => ({
-        ...shot,
-        url: `./annotated-${shot.findingId}.png`,
-      })),
-    },
-  };
+  // The recorded result keeps the fixture's absolute artifact URLs. This used to
+  // rewrite them to `./annotated-f_001.png` so the links resolved against the
+  // PNGs written beside the file, and that is no longer a link Gate publishes: a
+  // destination that is not absolute http(s) is rendered as inert text, so
+  // rewriting them here would demo a comment Gate cannot produce. The PNGs are
+  // still written, and the transcript names the path of each one.
+  const result: GateReviewResult = golden;
 
   const gh = inMemoryGitHub();
   const outcome = await runAction(
@@ -211,5 +207,6 @@ export function formatReviewDemoResult(result: ReviewDemoResult, cwd = process.c
   }
   out.push("");
   out.push("  Open the PNGs to see the annotation boxes; read review-comment.md as GitHub would render it.");
+  out.push("  Its evidence links point at the recorded engine's artifact host, which is where a real run's would.");
   return out.join("\n");
 }
