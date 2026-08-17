@@ -101,16 +101,78 @@ function countByKind(violations: readonly Measurement[]): string {
 }
 
 /**
+ * The per-row eligibility tag.
+ *
+ * `blockEligible` is the ENGINE's own precision claim about one measurement, and
+ * until now the advisory block threw it away: every row rendered identically, so
+ * a reader could not tell a 3.23:1 contrast failure the engine will stand behind
+ * from a `<pre>` that is wide on purpose. Both are true measurements. Only one of
+ * them is something the engine is willing to fail a build on, and a team that did
+ * not build this engine has no other way to learn which.
+ *
+ * Deliberately the engine's word, not a severity: `advisory only` says the engine
+ * will not gate on this one, and says nothing about whether it is worth fixing.
+ */
+const ELIGIBILITY_TAG: Record<"true" | "false", string> = {
+  true: "_[block-eligible]_",
+  false: "_[advisory only]_",
+};
+
+/**
+ * Block-eligible rows first.
+ *
+ * The list is capped at `MAX_MEASUREMENT_LINES`, so an unsorted block could push
+ * the one violation the engine stands behind past the cut in favour of twelve it
+ * does not. A stable sort keeps the engine's order within each group.
+ */
+function blockEligibleFirst(violations: readonly Measurement[]): Measurement[] {
+  return [...violations].sort((a, b) => Number(b.blockEligible) - Number(a.blockEligible));
+}
+
+/**
  * One measured row. Every cell is engine-supplied and therefore untrusted
  * display text: the model's prose is not the only string on this surface a pull
  * request author can influence, since a selector comes off their own DOM.
+ *
+ * The eligibility tag is the one cell Gate writes itself, from a boolean it never
+ * computes and never overrides.
  */
 function measurementLine(violation: Measurement): string {
   return (
     `- \`[${KIND_LABEL[violation.kind]}]\` ${sanitizeCodeSpan(violation.route, ROUTE_MAX)} ` +
     `${sanitizeCodeSpan(violation.element, ELEMENT_MAX)} ` +
     `(${violation.viewports.map((viewport) => sanitizeDisplayText(viewport, 40)).join(", ")}) — ` +
-    sanitizeDisplayText(violation.detail, DETAIL_MAX)
+    `${sanitizeDisplayText(violation.detail, DETAIL_MAX)} ` +
+    ELIGIBILITY_TAG[violation.blockEligible ? "true" : "false"]
+  );
+}
+
+/**
+ * The sentence that tells a reader which of these the engine stands behind.
+ *
+ * Rendered under `advisory` as well as under `block`, because the whole point is
+ * that a reader can see the engine's confidence BEFORE their repository decides
+ * what to do with it. Under `advisory` nothing here fails anything, and the
+ * sentence says so in the same breath.
+ */
+function eligibilitySummary(violations: readonly Measurement[], blocking: boolean): string {
+  const eligible = violations.filter((violation) => violation.blockEligible).length;
+  const advisory = violations.length - eligible;
+  if (eligible === 0) {
+    return (
+      `None of them are block-eligible: the engine reports them and will not stand behind any of ` +
+      `them for failing a check, so \`rules.measurements: block\` would change nothing here.`
+    );
+  }
+  const stands =
+    `${eligible} of them ${eligible === 1 ? "is" : "are"} **block-eligible**: ` +
+    `${eligible === 1 ? "a measurement" : "measurements"} the engine will stand behind for failing a check` +
+    (blocking ? "." : ", which this repository's `rules.measurements: advisory` does not let it do.");
+  if (advisory === 0) return stands;
+  return (
+    `${stands} The other ${advisory} ${advisory === 1 ? "is" : "are"} advisory only: the engine ` +
+    `reports ${advisory === 1 ? "it" : "them"} and will not gate on ${advisory === 1 ? "it" : "them"} ` +
+    `under any configuration.`
   );
 }
 
@@ -149,15 +211,20 @@ export function measurementBlock(
   }
   if (visible.length === 0) return null;
 
-  const shown = visible.slice(0, MAX_MEASUREMENT_LINES);
-  const remaining = visible.length - shown.length;
+  const ordered = blockEligibleFirst(visible);
+  const shown = ordered.slice(0, MAX_MEASUREMENT_LINES);
+  const remaining = ordered.length - shown.length;
   const heading = options.blocking
     ? `📏 **Measured violations** — ${visible.length} violation(s) computed from the captured DOM ` +
       `(${countByKind(visible)}). This repository sets \`rules.measurements: block\`.`
     : `📏 **Measured, not graded** — ${visible.length} violation(s) computed from the captured DOM ` +
       `(${countByKind(visible)}).`;
 
-  const lines = [heading, shown.map(measurementLine).join("\n")];
+  const lines = [
+    heading,
+    eligibilitySummary(visible, options.blocking ?? false),
+    shown.map(measurementLine).join("\n"),
+  ];
   if (remaining > 0) lines.push(`…and ${remaining} more`);
   lines.push(
     options.blocking

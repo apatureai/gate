@@ -43,6 +43,9 @@ importers:
       '@gate/engine':
         specifier: workspace:*
         version: link:../engine
+      '@gate/observability':
+        specifier: workspace:*
+        version: link:../observability
       '@gate/secrets':
         specifier: workspace:*
         version: link:../secrets

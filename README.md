@@ -666,6 +666,14 @@ never computes that flag and never overrides it. Note also that there is no base
 in this system: every measurement is of the page as it is now, not of what this pull request did to
 it, so `block` on a legacy codebase fails on pre-existing debt from the first run.
 
+**Every row says which one it is**, under `advisory` as well as under `block`. A measured row ends in
+`_[block-eligible]_` or `_[advisory only]_`, and the line above the list counts the split, so a reader
+who did not build this engine can tell a contrast failure it will stand behind from a `<pre>` that is
+wide on purpose without reading this file first. Block-eligible rows sort first: the list is capped at
+twelve, and an unsorted block could push the one violation the engine stands behind past the cut in
+favour of twelve it does not. The tag is a disclosure, not a policy: under `advisory` it changes
+nothing about the conclusion.
+
 A measurement is never a finding. It has no severity, so `min_severity_to_comment` cannot filter one,
 and `rules.suppress` does not reach one: muting a judgment and muting a ruler are different acts, and
 one key doing both would hide the second by accident. `measurement_suppress` is the second key, and
@@ -679,6 +687,38 @@ contrast failure grades `ship_with_nits`, and Gate publishes a green tick with t
 underneath it. Under `advisory`, which is the default, that is what you get. A repository whose
 honest goal is "never merge a WCAG AA contrast failure" wants `measurements: block`, and should read
 the paragraph above about baselines before turning it on.
+
+**How often that actually happens, and how you read it.** Leaving the hole open is only defensible if
+the size of it is measured, so Gate counts it. Every published review writes one line to the log the
+Action or the service already produces, with a stable prefix and stable `key=value` fields:
+
+```
+[gate.metric] gate.review.published conclusion=success graded=true green_over_measured=true measured=contrast:1,overflow:1,touch_target:1 measured_suppressed= repo=acme/web pr=42 sha=0123456789abcdef0123456789abcdef01234567
+```
+
+`green_over_measured=true` is a green check published over an unsuppressed violation the engine marked
+block-eligible. It is deliberately narrow: a model really judged the page, really produced findings,
+and the engine really stood behind at least one measurement the repo did not mute. `graded=true` is the
+denominator, meaning the grade reached the conclusion at all, so unjudged, nothing-reviewed and
+grade-retracted runs stay out of it. Two commands, no observability vendor:
+
+```bash
+grep -c 'green_over_measured=true' gate.log   # numerator
+grep -c 'graded=true' gate.log                # denominator
+```
+
+Above roughly **5% of graded runs**, the retraction predicate is too narrow to be the whole answer and
+flooring the grade on measurements is the right reversal. `measured_suppressed` is what stops a healthy
+zero from being read the wrong way: a repository that muted every contrast violation reports no green
+checks over a measured one because there is nothing left to be green over, and above roughly 15% of what
+is published for a kind, the fix is to stop emitting that kind rather than to add more configuration.
+
+The same three counters go to OpenTelemetry as `gate.review.green_over_measured`,
+`gate.review.measurements_published` and `gate.review.measurement_suppressed` when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set and a MeterProvider is registered. With no collector they bind to
+the API's no-op meter, which is why the Action path can record inside a customer's runner without any
+telemetry configured. Attributes stay low-cardinality; repository and PR number appear on the log line
+only, never as a metric label.
 
 Two things Gate sends the engine come from the repository rather than from this file. `verify_stability` above rides along inside the config; alongside it, Gate reads the repository's `package.json` at the PR's head and names the component libraries it finds (`shadcn/ui`, `radix`, `mui`, `chakra`, `mantine`) so the engine can append that library's rubric note to its own prompt. Ids only, never prose: the note is the engine's text, so nothing in a pull request's own manifest is written into a model prompt. Both fields are additive and optional in both directions. A repository that opted into nothing and uses none of those libraries produces exactly the request Gate sent before either existed, an engine that has never heard of them ignores them, and a manifest that is missing, private or malformed costs a review its rubric addenda and nothing else.
 
@@ -746,7 +786,7 @@ pnpm workspace, TypeScript project references, Vitest, ESLint. Roughly 10k lines
 | `packages/db` | Postgres: idempotent migrations, pg/PGlite executors, RLS tenant-isolation runners. Owns `installations`, `runs`, `feedback_events`, `billing_customers`, `webhook_log`, `screenshot_artifacts`, `feedback_consumed_tokens`. |
 | `packages/redis` | Key namespaces (BullMQ, supersession, token buckets), connection handling, and a no-eviction assertion, because evicting a supersession key would break the guard. |
 | `packages/secrets` | KMS envelope encryption, app/tenant secret stores, the canonical secret→env-var map, log redaction and output scrubbing, fork-PR storageState handling. |
-| `packages/observability` | OpenTelemetry spans and metrics for the review pipeline, including the stale-publish invariant. Ships `observability/alerts.yaml` and `observability/dashboard.json`. |
+| `packages/observability` | OpenTelemetry spans and metrics for the review pipeline, including the stale-publish invariant, plus the published-review recorder both delivery paths call: it writes `gate.review.green_over_measured` to OTel and to one greppable `[gate.metric]` line. Ships `observability/alerts.yaml` and `observability/dashboard.json`. |
 | `packages/e2e` | Acceptance harness asserting the Action-path criteria end to end against a mock engine. |
 
 | App | What it is |

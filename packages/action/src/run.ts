@@ -17,6 +17,7 @@ import {
   type JudgmentEngineClient,
   verifyPreviewHandoff,
 } from "@gate/engine";
+import { type PublishedReviewFacts, recordPublishedReview } from "@gate/observability";
 import { scrubTail } from "@gate/secrets";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { PreviewBuildFact } from "@gate/types";
@@ -106,6 +107,14 @@ export interface ActionRunDeps {
   runUrl?: string;
   /** Local build-and-serve supervisor (#70); wired by main.ts for the local-serve path. */
   startLocalServer?: StartLocalServerFn;
+  /**
+   * Published-review counters, including `gate.review.green_over_measured`.
+   *
+   * Defaults to the real recorder, so the production path records without any
+   * caller opting in: an instrument that only fires when somebody remembers to
+   * pass it is the bug this replaced. Overridden in tests only.
+   */
+  recordMetrics?: (facts: PublishedReviewFacts) => void;
 }
 
 export type ActionStatus =
@@ -322,6 +331,20 @@ export async function runAction(
       commentAction = upsert.action;
     }
     await deps.publishCheckRun({ name: "Apature Gate", ...decision.checkRun });
+
+    // Recorded AFTER the publish, never before it: the metric is named for what
+    // reached the pull request, and a check that threw on the way out was not
+    // published over anything.
+    (deps.recordMetrics ?? recordPublishedReview)({
+      conclusion: decision.checkRun.conclusion,
+      graded: decision.graded,
+      greenOverMeasured: decision.greenOverMeasured,
+      measurementKinds: decision.measurementKinds,
+      suppressedMeasurementKinds: decision.suppressedMeasurementKinds,
+      repository: `${ctx.repository.owner}/${ctx.repository.name}`,
+      pullRequest: ctx.pullRequest.number,
+      headSha: ctx.pullRequest.headSha,
+    });
 
     // The run log states what the Check Run states. `nothing_reviewed` is
     // reported ahead of `not_judged` for the same reason the Check Run titles it

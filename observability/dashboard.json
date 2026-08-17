@@ -55,6 +55,32 @@
       "targets": [
         { "expr": "increase(gate_stale_publish_total[1h])", "legendFormat": "stale publishes" }
       ]
+    },
+    {
+      "id": 6,
+      "title": "Green over measured (share of graded runs; reverses the decision above 5%)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum(increase(gate_review_green_over_measured_total[24h])) / clamp_min(sum(increase(gate_review_published_total{graded=\"true\"}[24h])), 1)",
+          "legendFormat": "green over measured"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Measured violations published vs muted, by kind",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (kind) (increase(gate_review_measurements_published_total[24h]))",
+          "legendFormat": "published {{kind}}"
+        },
+        {
+          "expr": "sum by (kind) (increase(gate_review_measurement_suppressed_total[24h]))",
+          "legendFormat": "muted {{kind}}"
+        }
+      ]
     }
   ]
 }

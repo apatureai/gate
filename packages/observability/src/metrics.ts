@@ -34,6 +34,16 @@ export const METRIC_NAMES = {
    */
   greenOverMeasured: "gate.review.green_over_measured",
   /**
+   * Every review Gate published, attributed by `graded`: whether the grade
+   * reached the Check Run at all.
+   *
+   * The denominator `greenOverMeasured` is read against. The reversal threshold
+   * is stated as a share of GRADED runs, and an unjudged, nothing-reviewed or
+   * grade-retracted run can never be green over anything, so counting it below
+   * the line would dilute the number the decision said it would be reversed by.
+   */
+  reviewsPublished: "gate.review.published",
+  /**
    * Measured violations a repository muted with `rules.measurement_suppress`,
    * by kind. The proxy for each check's false-positive rate on real
    * repositories. Above roughly 15% of what is published for a kind, the fix is
@@ -59,6 +69,7 @@ export class GateMetrics {
   private readonly engineCancels: Counter;
   private readonly engineTimeouts: Counter;
   private readonly greenOverMeasured: Counter;
+  private readonly reviewsPublished: Counter;
   private readonly measurementSuppressed: Counter;
   private readonly measurementsPublished: Counter;
   private queueDepthProvider: () => number = () => 0;
@@ -81,6 +92,9 @@ export class GateMetrics {
     this.engineTimeouts = meter.createCounter(METRIC_NAMES.engineTimeouts);
     this.greenOverMeasured = meter.createCounter(METRIC_NAMES.greenOverMeasured, {
       description: "Green checks published over an unsuppressed block-eligible measured violation.",
+    });
+    this.reviewsPublished = meter.createCounter(METRIC_NAMES.reviewsPublished, {
+      description: "Reviews published, attributed by whether the grade reached the check.",
     });
     this.measurementSuppressed = meter.createCounter(METRIC_NAMES.measurementSuppressed, {
       description: "Measured violations muted by rules.measurement_suppress, by kind.",
@@ -114,6 +128,11 @@ export class GateMetrics {
   /** A green check went out over a measured violation the engine stood behind. */
   recordGreenOverMeasured(attributes?: Attributes): void {
     this.greenOverMeasured.add(1, attributes);
+  }
+
+  /** A review reached the pull request. `graded` separates the denominator. */
+  recordReviewPublished(graded: boolean, attributes?: Attributes): void {
+    this.reviewsPublished.add(1, { ...attributes, graded });
   }
 
   /** A repo muted a measured violation of this kind. */

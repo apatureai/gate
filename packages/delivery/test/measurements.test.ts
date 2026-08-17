@@ -8,8 +8,10 @@ import { describe, expect, it } from "vitest";
 import {
   blockEligibleMeasurements,
   buildCheckRun,
+  decideDelivery,
   isGreenOverMeasured,
   mapCheckRunConclusion,
+  MAX_MEASUREMENT_LINES,
   measurementBlock,
   renderStickyComment,
   suppressMeasurements,
@@ -386,5 +388,183 @@ describe("gate_green_over_measured", () => {
         { conclusion: "success" },
       ),
     ).toBe(false);
+  });
+});
+
+/**
+ * Which measurements the engine will stand behind.
+ *
+ * `blockEligible` is the engine's own precision claim, per measurement, and the
+ * advisory row used to throw it away: every row rendered identically, so a team
+ * that did not build this engine could not tell a contrast failure it will gate
+ * on from a `<pre>` that is wide on purpose. Under `advisory`, which is the
+ * default and where this matters most, nothing about the conclusion says it
+ * either.
+ */
+describe("the advisory row says what the engine stands behind", () => {
+  const mixed = withMeasurements(loadGoldenReviewResult(), [
+    violation({ blockEligible: true }),
+    violation({ kind: "overflow", element: "#promo-code", blockEligible: false }),
+  ]);
+
+  it("tags every row with the engine's own eligibility, both ways", () => {
+    const block = measurementBlock(mixed) ?? "";
+    const rows = block.split("\n").filter((line) => line.startsWith("- "));
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("#hero-subtitle");
+    expect(rows[0]).toContain("_[block-eligible]_");
+    expect(rows[1]).toContain("#promo-code");
+    expect(rows[1]).toContain("_[advisory only]_");
+  });
+
+  it("summarizes the split, and says advisory mode will not act on it", () => {
+    const block = measurementBlock(mixed) ?? "";
+
+    expect(block).toContain("1 of them is **block-eligible**");
+    expect(block).toContain("The other 1 is advisory only");
+    expect(block).toContain("`rules.measurements: advisory` does not let it do");
+  });
+
+  it("says so plainly when the engine stands behind none of them", () => {
+    const none = withMeasurements(loadGoldenReviewResult(), [violation({ blockEligible: false })]);
+    const block = measurementBlock(none) ?? "";
+
+    expect(block).toContain("None of them are block-eligible");
+    expect(block).toContain("would change nothing here");
+    expect(block).not.toContain("**block-eligible**");
+  });
+
+  it("drops the advisory caveat once the repo has opted into blocking", () => {
+    const block = measurementBlock(mixed, { mode: "block", blocking: true }) ?? "";
+
+    expect(block).toContain("1 of them is **block-eligible**");
+    expect(block).not.toContain("does not let it do");
+    expect(block).toContain("will not gate on it under any configuration");
+  });
+
+  it("puts block-eligible rows first, so the display cap can never hide one", () => {
+    // Twelve advisory-only rows would otherwise push the one violation the
+    // engine stands behind past the cut, and the reader would never see it.
+    const buried = withMeasurements(loadGoldenReviewResult(), [
+      ...Array.from({ length: 14 }, (_, i) =>
+        violation({ element: `#advisory-${i}`, blockEligible: false }),
+      ),
+      violation({ element: "#the-one-that-matters", blockEligible: true }),
+    ]);
+    const block = measurementBlock(buried) ?? "";
+    const rows = block.split("\n").filter((line) => line.startsWith("- "));
+
+    expect(rows).toHaveLength(MAX_MEASUREMENT_LINES);
+    expect(rows[0]).toContain("#the-one-that-matters");
+    expect(block).toContain("…and 3 more");
+  });
+
+  it("keeps the engine's order inside each group", () => {
+    const ordered = withMeasurements(loadGoldenReviewResult(), [
+      violation({ element: "#a", blockEligible: false }),
+      violation({ element: "#b", blockEligible: true }),
+      violation({ element: "#c", blockEligible: false }),
+      violation({ element: "#d", blockEligible: true }),
+    ]);
+    const rows = (measurementBlock(ordered) ?? "").split("\n").filter((l) => l.startsWith("- "));
+
+    expect(rows.map((row) => row.match(/#[a-d]/)?.[0])).toEqual(["#b", "#d", "#a", "#c"]);
+  });
+
+  it("reaches both surfaces, not just the check", () => {
+    const comment = renderStickyComment(mixed, { headSha: "abcdef1234567" });
+    const run = buildCheckRun(mixed, "none");
+
+    expect(comment).toContain("_[block-eligible]_");
+    expect(comment).toContain("_[advisory only]_");
+    expect(run.summary).toContain("_[block-eligible]_");
+    expect(run.summary).toContain("_[advisory only]_");
+  });
+
+  it("still cannot promote a measurement into a finding or a conclusion", () => {
+    // Saying which ones the engine stands behind is a disclosure, not a policy
+    // change: `advisory` remains the default and remains inert.
+    const run = buildCheckRun(mixed, "blockers");
+    expect(run.conclusion).toBe(mapCheckRunConclusion(mixed.grade, "blockers"));
+  });
+});
+
+/**
+ * What the delivery decision hands the counter.
+ *
+ * `greenOverMeasured` alone is a numerator with no denominator. The threshold
+ * that reverses the measurement decision is stated as a share of GRADED runs,
+ * and a repository that muted every contrast violation would report a healthy
+ * zero for the wrong reason, so both of those facts ride along with it.
+ */
+describe("the decision carries the reversal number's context", () => {
+  const completed = (result: GateReviewResult, suppress: string[] = []) =>
+    decideDelivery(
+      { status: "completed", result, jobId: "j" },
+      { headSha: "abcdef1234567", gate: "none", measurementSuppress: suppress },
+    );
+
+  const green: GateReviewResult = {
+    ...withMeasurements(loadGoldenReviewResult(), [violation({ blockEligible: true })]),
+    grade: "ship_with_nits",
+    findings: [loadGoldenReviewResult().findings[2]!],
+  };
+
+  it("marks a green-over-measured run as graded and green over a measurement", () => {
+    const decision = completed(green);
+
+    expect(decision.checkRun.conclusion).toBe("success");
+    expect(decision.graded).toBe(true);
+    expect(decision.greenOverMeasured).toBe(true);
+    expect(decision.measurementKinds).toEqual(["contrast"]);
+  });
+
+  it("does not count a retracted grade in the denominator", () => {
+    // A run the engine retracted can never be green over anything, and counting
+    // it below the line would dilute the very number the decision named.
+    const retracted: GateReviewResult = {
+      ...green,
+      findings: [],
+      gradeUnavailableReason: "measured_facts_unjudged",
+    };
+    const decision = completed(retracted);
+
+    expect(decision.checkRun.conclusion).toBe("neutral");
+    expect(decision.graded).toBe(false);
+    expect(decision.greenOverMeasured).toBe(false);
+  });
+
+  it("does not count an unjudged or nothing-reviewed run either", () => {
+    const unjudged: GateReviewResult = {
+      ...green,
+      provenance: { ...green.provenance!, model_backed: false },
+    };
+    const nothing: GateReviewResult = {
+      ...green,
+      coverage: { ...green.coverage!, routesReviewed: [], viewportsReviewed: [] },
+    };
+
+    expect(completed(unjudged).graded).toBe(false);
+    expect(completed(nothing).graded).toBe(false);
+  });
+
+  it("still counts a plain needs_work run: it was graded, just not green", () => {
+    const decision = completed(measured);
+
+    expect(decision.checkRun.conclusion).toBe("neutral");
+    expect(decision.graded).toBe(true);
+    expect(decision.greenOverMeasured).toBe(false);
+  });
+
+  it("reports what the repo muted, by kind, beside what it published", () => {
+    const decision = completed(measured, ["#hero-subtitle", "touch_target:#icon-close"]);
+
+    expect(decision.measurementKinds).toEqual(["overflow"]);
+    expect(decision.suppressedMeasurementKinds).toEqual(["contrast", "touch_target"]);
+  });
+
+  it("reports nothing muted when the repo muted nothing", () => {
+    expect(completed(measured).suppressedMeasurementKinds).toEqual([]);
   });
 });

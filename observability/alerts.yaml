@@ -6,6 +6,10 @@
 #   gate.engine.errors (counter)                  -> gate_engine_errors_total
 #   gate.engine.call ...                          (see dashboard)
 #   gate.queue.depth (gauge)                      -> gate_queue_depth
+#   gate.review.green_over_measured (counter)     -> gate_review_green_over_measured_total
+#   gate.review.published (counter, graded=)      -> gate_review_published_total
+#   gate.review.measurements_published (counter)  -> gate_review_measurements_published_total
+#   gate.review.measurement_suppressed (counter)  -> gate_review_measurement_suppressed_total
 groups:
   - name: gate-hard-invariants
     rules:
@@ -43,3 +47,41 @@ groups:
           severity: ticket
         annotations:
           summary: "critique service error rate elevated"
+
+  - name: gate-measurement-decision
+    rules:
+      # The one number that would reverse the decision to keep measured facts out
+      # of the grade. A judge that returns one unrelated nit while saying nothing
+      # about a measured WCAG AA contrast failure grades ship_with_nits, which
+      # maps to success: a green tick with the violation printed underneath it.
+      # Above roughly 5% of GRADED runs, the retraction predicate is too narrow to
+      # be the whole answer and flooring the grade on measurements is right.
+      - alert: GateGreenOverMeasuredHigh
+        expr: >-
+          sum(increase(gate_review_green_over_measured_total[24h]))
+            / clamp_min(sum(increase(gate_review_published_total{graded="true"}[24h])), 1)
+            > 0.05
+        for: 0m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Green checks published over measured violations above 5% of graded runs"
+          runbook: >-
+            This is the reversal condition the measurement decision named. Sample
+            the runs, confirm the measurements are sound, then revisit flooring the
+            grade on engine-block-eligible violations rather than leaving
+            rules.measurements at advisory by default.
+
+      # The false-positive proxy for a check. Above roughly 15% of what is
+      # published for a kind, the fix is to stop emitting that kind, not to ask
+      # repositories for more configuration.
+      - alert: GateMeasurementSuppressionHigh
+        expr: >-
+          sum by (kind) (increase(gate_review_measurement_suppressed_total[7d]))
+            / clamp_min(sum by (kind) (increase(gate_review_measurements_published_total[7d])), 1)
+            > 0.15
+        for: 0m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Repositories are muting more than 15% of one measured kind"

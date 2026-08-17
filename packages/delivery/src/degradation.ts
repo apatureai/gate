@@ -57,8 +57,26 @@ export interface DeliveryDecision {
    * fields and drifting.
    */
   greenOverMeasured?: boolean;
+  /**
+   * Whether the grade reached the Check Run at all.
+   *
+   * The denominator `greenOverMeasured` is read against. The threshold that
+   * reverses the measurement decision is stated in graded runs ("above roughly
+   * 5% of graded runs"), and an unjudged, nothing-reviewed or grade-retracted run
+   * can never be green over anything, so counting it below the line would dilute
+   * the very number the decision said it would be reversed by.
+   */
+  graded?: boolean;
   /** Measured violations rendered on the PR surfaces, by kind, for the SLOs. */
   measurementKinds?: string[];
+  /**
+   * Measured violations this repo muted with `rules.measurement_suppress`, by
+   * kind. The proxy for a check's false-positive rate on real repositories, and
+   * the thing that would otherwise make `greenOverMeasured` look healthy for the
+   * wrong reason: a repo that muted every contrast violation reports zero green
+   * checks over a measured one because there is nothing left to be green over.
+   */
+  suppressedMeasurementKinds?: string[];
 }
 
 export interface DegradationContext {
@@ -172,19 +190,28 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     measurementSuppress: ctx.measurementSuppress,
   });
 
+  // The same three conditions `buildCheckRun` requires before a grade is allowed
+  // to reach a conclusion. Recomputed from the result rather than inferred from
+  // the conclusion, because `neutral` is also what a plain `needs_work` grade
+  // produces and those are not the same run.
+  const gradeReached = graded && (result.gradeUnavailableReason ?? "").length === 0;
+  const visible = visibleMeasurements(result, ctx.measurementSuppress ?? []);
+  const shown = new Set(visible);
+  const muted = (result.measurements?.violations ?? []).filter((violation) => !shown.has(violation));
+
   return {
     publishComment: true,
     comment,
     caveat,
     judgment,
     coverage,
+    graded: gradeReached,
     greenOverMeasured: isGreenOverMeasured(result, {
       conclusion: checkRun.conclusion,
       suppress: ctx.measurementSuppress ?? [],
     }),
-    measurementKinds: visibleMeasurements(result, ctx.measurementSuppress ?? []).map(
-      (violation) => violation.kind,
-    ),
+    measurementKinds: visible.map((violation) => violation.kind),
+    suppressedMeasurementKinds: muted.map((violation) => violation.kind),
     checkRun: { conclusion: checkRun.conclusion, title: checkRun.title, summary: checkRun.summary },
   };
 }

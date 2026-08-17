@@ -14,6 +14,7 @@ import {
   type JudgmentEngineClient,
   verifyPreviewHandoff,
 } from "@gate/engine";
+import { type PublishedReviewFacts, recordPublishedReview } from "@gate/observability";
 import type { GateReviewRequest, NormalizedDesignReviewConfig } from "@gate/types";
 import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 import { buildFeedbackEvent } from "./feedback-store.js";
@@ -75,6 +76,15 @@ export interface HostedReviewDeps {
   signal?: AbortSignal;
   runUrl?: string;
   now?: () => number;
+  /**
+   * Published-review counters, including `gate.review.green_over_measured`.
+   *
+   * Defaults to the real recorder for the same reason the Action path does: the
+   * decision that deferred blocking said it would be revisited from this number,
+   * and a number nobody records is a promise nobody can keep. Overridden in
+   * tests only.
+   */
+  recordMetrics?: (facts: PublishedReviewFacts) => void;
 }
 
 export type HostedReviewStatus =
@@ -244,6 +254,19 @@ export async function runHostedReview(
     await upsertStickyComment(deps.comments, decision.comment);
   }
   await deps.publishCheckRun({ name: "Apature Gate", ...decision.checkRun });
+
+  // After the publish, never before it: the metric is named for what reached the
+  // pull request.
+  (deps.recordMetrics ?? recordPublishedReview)({
+    conclusion: decision.checkRun.conclusion,
+    graded: decision.graded,
+    greenOverMeasured: decision.greenOverMeasured,
+    measurementKinds: decision.measurementKinds,
+    suppressedMeasurementKinds: decision.suppressedMeasurementKinds,
+    repository: `${repo.owner}/${repo.name}`,
+    pullRequest: repo.prNumber,
+    headSha: ctx.pullRequest.headSha,
+  });
 
   if (deps.feedback && outcome.status === "completed") {
     await deps.feedback.record(

@@ -14,6 +14,7 @@
     "@gate/config": "workspace:*",
     "@gate/delivery": "workspace:*",
     "@gate/engine": "workspace:*",
+    "@gate/observability": "workspace:*",
     "@gate/secrets": "workspace:*",
     "@gate/types": "workspace:*",
     "sharp": "^0.35.3"
