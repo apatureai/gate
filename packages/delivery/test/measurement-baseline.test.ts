@@ -130,7 +130,7 @@ describe("measurement identity", () => {
   });
 
   it("stamps the normalization version it was computed under", () => {
-    expect(measurementFingerprint(violation()).startsWith("m1:")).toBe(true);
+    expect(measurementFingerprint(violation()).startsWith("m2:")).toBe(true);
     expect(measurementIdentity(violation()).detail).toBe(
       "text contrast #:# is below wcag aa #:#",
     );
@@ -145,7 +145,7 @@ describe("what a baseline records", () => {
     expect(snapshot.routesMeasured).toEqual(["/checkout", "/pricing"]);
     expect(snapshot.checksRun).toEqual(["contrast", "overflow", "touch_target"]);
     expect(snapshot.entries).toHaveLength(1);
-    expect(snapshot.version).toBe("m1");
+    expect(snapshot.version).toBe("m2");
   });
 
   it("records nothing measurable from a result that carries no measurement report", () => {

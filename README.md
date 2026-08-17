@@ -695,7 +695,12 @@ measurement-identity version.
 
 **A page the base run never captured cannot be classified**, and neither can a check the base run
 never executed. Both are reported as *Not classified* with the reason, and neither gates. Gate does
-not guess which side of a pull request an unplaceable violation came from.
+not guess which side of a pull request an unplaceable violation came from. **A renamed route lands
+here on purpose.** `/` becoming `/home` is, to Gate, a page it has never measured, because nothing
+matches a violation across two routes; the old page's violations are not counted as fixed either,
+since a page this run never captured was not fixed. A route matched loosely would let a genuinely new
+page inherit an old page's clean bill of health without a word, and that is the one error nobody ever
+sees.
 
 **Where the baselines come from.** A completed review records the set for its own head commit. So a
 pull request is scoped once Gate has reviewed its base commit, which in practice means running Gate on
@@ -717,9 +722,34 @@ direction of the trade, and the only one available, since the other direction re
 back catalogue as this pull request's fault. The normalization is versioned, and a set recorded under
 a different version is refused rather than compared.
 
+**A markup refactor is not a new violation either.** Normalizing the selector is not enough on its
+own, because a pull request can move the whole selector path without touching the defect underneath
+it: wrapping the element in a div (`#hero .tagline` becomes `#hero .inner .tagline`), tightening a
+descendant combinator into a child one (`#hero > .tagline`), or renaming the class
+(`#hero .subtitle`). Each of those used to read as one violation resolved plus one introduced, which
+under `block` failed a pull request that changed no colour at all, on exactly the mature repositories
+a baseline is for. So a violation that matches neither selector key gets one last comparison against a
+third and much weaker key: **same check, same page, same stated defect, no selector at all.**
+
+That key is too weak to be an identity, so it is **spent rather than matched**. A match may claim one
+stored violation, and only one that nothing else accounts for: a stored violation whose element is
+still present in this run is already spoken for, and a claimed one is gone. **The number of
+same-defect violations on a page therefore cannot grow without something being called introduced**,
+which is what keeps this from turning `block` off in the other direction. A new low-contrast element
+added beside an existing one is introduced even when the engine's sentence about it is identical,
+word for word.
+
+The cost is on the record: a pull request that fixes one violation and adds a like one on the same
+page reads as one fixed and one carried over, rather than one fixed and one introduced. That is the
+cheaper of the two errors and it is chosen knowingly. A false *already on the base* is a violation
+Gate still renders, still counts and still shows the reader; a false *introduced* is a red check on
+unrelated work whose only escape hatch, `measurement_suppress`, would hide the real defect too. Rows
+carried over this way are marked as such on the pull request rather than folded silently into the
+count.
+
 Gate stores only what it needs to answer "is this the same violation": the check and the route in the
-clear, and the element and detail as SHA-256 digests. Selectors and engine sentences derive from the
-customer's page and are never kept.
+clear, and the element, the detail and the defect as SHA-256 digests. Selectors and engine sentences
+derive from the customer's page and are never kept.
 
 **Every row says which one it is**, under `advisory` as well as under `block`. A measured row ends in
 `_[block-eligible]_` or `_[advisory only]_`, and the line above the list counts the split, so a reader
@@ -938,6 +968,7 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **Review quality is entirely the service's, and Gate can only tell you whether a model was involved at all.** The `provenance` stamp answers "did anything judge this?", not "was the judgment any good?". A service that runs a real but bad model gets a real, bad review published verbatim.
 - **The Action path constrains hostile pull request code; it does not sandbox it.** The `ulimit` caps, environment allowlist, loopback-redirect refusal and fork gating are real mitigations. The aggregate cgroup-v2 caps that would make them airtight are roadmap item 6. Read the threat model before running the Action path on a repository that accepts fork pull requests.
 - **Component-library detection reads one file, at the repository root.** Gate looks at `package.json` at the PR's head and nothing else, so a monorepo whose UI package declares Radix in `packages/web/package.json` is not detected, and neither is a library vendored without a dependency entry. The review still runs, grounded on tokens and brand; it simply carries no library rubric note, and nothing in the result distinguishes that from a repository that genuinely uses none. On the App path the read can also fail for reasons that have nothing to do with your code (a rate limit, a permission change), and it fails quietly on purpose: grounding must never be able to fail a pull request's review.
+- **A measurement baseline can carry a violation to the wrong element, and it errs that way on purpose.** After the selector keys miss, a violation is matched on check, page and the substance of the engine's sentence, and it may claim one stored violation that nothing else accounts for. That is what makes a wrapper div, a tightened combinator or a renamed class stop reading as a new defect. It also means a pull request that fixes one contrast failure and adds another with the same sentence on the same page is reported as one fixed and one already on the base, rather than one fixed and one introduced, so that one does not fail the check. It is still rendered, still counted, and still in the review. The count is the guard: the number of same-defect violations on a page cannot grow without something being called introduced. What Gate will not do is match across pages, so a renamed route is *Not classified* rather than carried over.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.
 - **Nothing fails CI on a new dependency advisory.** Both trees audit clean today and the history is in [SECURITY.md](SECURITY.md#dependency-advisories), but no job enforces that, so the guarantee is only as fresh as the last manual `pnpm audit`. Roadmap item 5.

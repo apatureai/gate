@@ -123,15 +123,19 @@ describe("createSqlMeasurementBaselineStore", () => {
 
   it("drops jsonb entries it cannot recognise instead of trusting them", async () => {
     // A malformed entry that survived into the fingerprint set would silently
-    // make a real violation look pre-existing, so the reader is strict.
+    // make a real violation look pre-existing, so the reader is strict. An entry
+    // missing `defectKey` is malformed for the same reason: it is an entry no
+    // markup refactor could ever claim, which is the failure the third tier
+    // exists to remove.
     await db.query(
       `INSERT INTO measurement_baselines
          (installation_id, repo_owner, repo_name, commit_sha, fingerprint_version,
           checks_run, routes_measured, entries)
        VALUES (1, 'acme', 'web', 'basesha', 'm1',
          '["contrast", "nonsense"]'::jsonb, '["/pricing", 7]'::jsonb,
-         '[{"kind":"contrast","route":"/pricing","elementKey":"k","fingerprint":"f"},
-           {"kind":"nonsense","route":"/pricing","elementKey":"k","fingerprint":"f"},
+         '[{"kind":"contrast","route":"/pricing","elementKey":"k","fingerprint":"f","defectKey":"d"},
+           {"kind":"nonsense","route":"/pricing","elementKey":"k","fingerprint":"f","defectKey":"d"},
+           {"kind":"contrast","route":"/pricing","elementKey":"k","fingerprint":"f"},
            {"kind":"contrast","route":"/pricing"},
            "not-an-object", null]'::jsonb)`,
     );
@@ -140,7 +144,7 @@ describe("createSqlMeasurementBaselineStore", () => {
     expect(read?.checksRun).toEqual(["contrast"]);
     expect(read?.routesMeasured).toEqual(["/pricing"]);
     expect(read?.entries).toEqual([
-      { kind: "contrast", route: "/pricing", elementKey: "k", fingerprint: "f" },
+      { kind: "contrast", route: "/pricing", elementKey: "k", fingerprint: "f", defectKey: "d" },
     ]);
   });
 

@@ -34,7 +34,10 @@ const UNCLASSIFIED_REASON: Record<UnclassifiedReason, string> = {
   no_baseline: "there is no stored baseline for the base commit",
   baseline_unavailable: "the baseline store could not be read",
   version_skew: "the stored baseline is not comparable to this run",
-  route_not_measured: "the base run never captured that route",
+  // A renamed page lands here, and the wording says so: Gate does not match a
+  // violation across two routes, so `/` becoming `/home` is a page it has never
+  // seen rather than a page whose violations it can place.
+  route_not_measured: "the base run never captured that route, new or renamed",
   check_not_run: "the base run never ran that check",
 };
 
@@ -165,6 +168,13 @@ export function baselineSection(
     const changed = comparison.classified.filter(
       (row) => row.origin === "pre_existing" && row.detailChanged === true,
     ).length;
+    // Same defect, same page, different markup: a wrapper, a tightened
+    // combinator, a renamed class. Said out loud rather than folded into the
+    // count, because it is the one carry-over Gate reached by a weaker key than
+    // the selector, and a reader is entitled to know which ones those were.
+    const remarked = comparison.classified.filter(
+      (row) => row.origin === "pre_existing" && row.elementChanged === true,
+    ).length;
     const carried = comparison.preExisting.length;
     lines.push(
       `**Already on the base** — ${carried} of the violation(s) above ` +
@@ -173,6 +183,10 @@ export function baselineSection(
         (changed > 0
           ? ` ${changed} of them ${changed === 1 ? "is" : "are"} the same defect on the same element ` +
             "with a different measurement, which is a change in degree and not a new violation."
+          : "") +
+        (remarked > 0
+          ? ` ${remarked} of them ${remarked === 1 ? "is" : "are"} the same defect on the same page ` +
+            "carried by a different selector, which is a markup change and not a new violation."
           : ""),
     );
   }

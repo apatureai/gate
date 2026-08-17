@@ -116,16 +116,24 @@ function asEntries(value: unknown): MeasurementBaselineEntry[] {
     const route = row.route;
     const elementKey = row.elementKey;
     const fingerprint = row.fingerprint;
+    // `defectKey` is required like the other two. A row missing it was written
+    // by a build that predates the markup-refactor tier, and that build stamped
+    // a different `fingerprint_version`, so the whole snapshot is refused as
+    // skewed before an entry is ever read. Accepting a keyless entry here would
+    // instead leave a live one that no refactor can ever claim, which is the
+    // failure this tier exists to remove, restored one row at a time.
+    const defectKey = row.defectKey;
     if (
       typeof kind !== "string" ||
       !(KINDS as readonly string[]).includes(kind) ||
       typeof route !== "string" ||
       typeof elementKey !== "string" ||
-      typeof fingerprint !== "string"
+      typeof fingerprint !== "string" ||
+      typeof defectKey !== "string"
     ) {
       continue;
     }
-    entries.push({ kind: kind as MeasurementKind, route, elementKey, fingerprint });
+    entries.push({ kind: kind as MeasurementKind, route, elementKey, fingerprint, defectKey });
   }
   return entries;
 }

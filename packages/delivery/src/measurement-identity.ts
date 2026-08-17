@@ -38,13 +38,42 @@ import type { Measurement, MeasurementKind } from "@gate/types";
  *     it changes when the ENGINE changes. An engine upgrade must never look like
  *     a repository full of new violations.
  *
- * TWO KEYS, NOT ONE. The full identity above is the `fingerprint`. Dropping the
- * detail from it leaves the `elementKey`: same check, same page, same element.
+ * THREE KEYS, NOT ONE, each weaker than the one above it. The full identity is
+ * the `fingerprint`. Dropping the detail from it leaves the `elementKey`: same
+ * check, same page, same element. Dropping the ELEMENT from it instead leaves
+ * the `defectKey`: same check, same page, same stated defect, whatever markup
+ * carries it.
+ *
  * The comparison treats a fingerprint miss that is an elementKey HIT as still
  * pre-existing, because the alternative is that an engine which rewords its own
  * sentence turns a repository's whole back catalogue into a merge block. The
  * detail therefore decides whether Gate says "unchanged" or "the measurement
  * changed", and never decides whether something gates.
+ *
+ * THE DEFECT KEY IS FOR THE MARKUP REFACTOR, and it is the one key here that is
+ * too weak to be trusted on its own. Position is not the only part of a selector
+ * a pull request moves without touching the defect:
+ *
+ *     #hero .tagline   ->  #hero > .tagline        a combinator was tightened
+ *     #hero .tagline   ->  #hero .inner .tagline   a wrapper div was added
+ *     #hero .tagline   ->  #hero .subtitle         the class was renamed
+ *
+ * None of those three is a new contrast failure, and all three move the whole
+ * selector path, so no amount of normalizing the path absorbs them. Matching on
+ * a stable TAIL or on an id anchor absorbs some and not others: a rename breaks
+ * the tail, a wrapper breaks nothing, and a selector with no id has no anchor to
+ * fall back to. So the defect key gives up on the path entirely and is carried
+ * by three weak signals instead of one strong one: the check, the page, and the
+ * substance of what the engine said is wrong.
+ *
+ * On its own that is far too loose, because two unrelated low-contrast elements
+ * on one page produce the same defect key, and a genuinely new one would be
+ * absorbed as pre-existing in silence. What makes it safe is not this module but
+ * how `compareMeasurementsToBaseline` spends it: a defect-key match CONSUMES a
+ * baseline entry that nothing else claimed, so the number of same-defect
+ * violations on a route can never grow without something being called
+ * introduced. This key answers "which old violation is this the same one as",
+ * never "is anything new here".
  *
  * VERSIONED. Any change to the normalization below changes what is the same
  * violation, so it comes with a bump of `MEASUREMENT_IDENTITY_VERSION`. A stored
@@ -54,7 +83,7 @@ import type { Measurement, MeasurementKind } from "@gate/types";
  */
 
 /** Normalization version stamped into every fingerprint and every stored baseline. */
-export const MEASUREMENT_IDENTITY_VERSION = "m1";
+export const MEASUREMENT_IDENTITY_VERSION = "m2";
 
 /** The canonical, comparable form of one measured violation. */
 export interface MeasurementIdentity {
@@ -172,4 +201,24 @@ export function measurementElementKey(violation: Measurement): string {
 export function measurementFingerprint(violation: Measurement): string {
   const identity = measurementIdentity(violation);
   return digest([identity.kind, identity.route, identity.element, identity.detail]);
+}
+
+/**
+ * Same check, same page, same stated defect, WHATEVER MARKUP CARRIES IT.
+ *
+ * The selector is left out on purpose, which makes this the loosest key Gate
+ * computes and the only one that must never be read as an identity by itself:
+ * every low-contrast element on one page shares it. It exists so that a pull
+ * request which wraps, retitles or re-nests an element around an untouched
+ * violation can be shown a candidate to carry that violation over, rather than
+ * one violation resolved plus one introduced on markup that changed no colour.
+ *
+ * The count is what makes it safe. `compareMeasurementsToBaseline` lets a defect
+ * key claim only a baseline entry no exact match already claimed, and only once,
+ * so this key can move a violation between selectors and can never manufacture
+ * room for an extra one.
+ */
+export function measurementDefectKey(violation: Measurement): string {
+  const identity = measurementIdentity(violation);
+  return digest([identity.kind, identity.route, identity.detail]);
 }

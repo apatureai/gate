@@ -49,6 +49,7 @@ export type { MeasurementBlockOptions } from "./measurements.js";
 export {
   MEASUREMENT_IDENTITY_VERSION,
   detailSubstance,
+  measurementDefectKey,
   measurementElementKey,
   measurementFingerprint,
   measurementIdentity,

@@ -1,6 +1,7 @@
 import type { GateReviewResult, Measurement, MeasurementKind } from "@gate/types";
 import {
   MEASUREMENT_IDENTITY_VERSION,
+  measurementDefectKey,
   measurementElementKey,
   measurementFingerprint,
   normalizeRoute,
@@ -40,6 +41,44 @@ import { suppressMeasurements } from "./measurements.js";
  * captured cannot be classified, and neither can one from a check the base run
  * never executed. Both are stated rather than guessed, because guessing here has
  * exactly one direction: it calls untouched defects new.
+ *
+ * THREE TIERS AND A BUDGET (added August 17, 2026). Matching on the selector,
+ * however carefully the selector is normalized, still breaks on a markup
+ * refactor: wrapping an element in a div, tightening a descendant combinator
+ * into a child combinator, or renaming a class all move the whole path while the
+ * contrast ratio underneath it does not move at all. Each of those read as one
+ * violation resolved plus one introduced, which under `block` fails a pull
+ * request that changed no colour, on exactly the mature repositories the
+ * baseline was built for. So a violation that misses on both selector keys gets
+ * a third and last chance against the `defectKey`: same check, same page, same
+ * stated defect, no selector at all.
+ *
+ * That key is far too weak to be an identity, so it is spent rather than
+ * matched. A defect-key hit may CLAIM one baseline entry, and only an entry that
+ * is genuinely unaccounted for: an entry whose element is still present in this
+ * run is already spoken for by that violation, and an entry another claim took
+ * is gone. The number of same-defect violations on a route therefore cannot grow
+ * without something being called introduced, which is the property that keeps
+ * this from turning `block` off in the other direction.
+ *
+ * WHICH WAY AN AMBIGUOUS MATCH FALLS, and why. A claim can pick the wrong old
+ * violation: a pull request that fixes one low-contrast element and adds another
+ * with the same sentence on the same page reads as one resolved plus one carried
+ * over, rather than one resolved plus one introduced. That is the cost, it is
+ * paid knowingly, and it is the cheaper of the two. A false "already there" is a
+ * violation Gate still renders, still counts, and still shows the reader; a
+ * false "introduced" is a red check on somebody's unrelated pull request, and
+ * the only escape from it is a suppression that also hides the real defect.
+ *
+ * THE ROUTE IS NEVER FUZZY, AND A RENAMED PAGE IS THEREFORE UNCLASSIFIED. `/`
+ * becoming `/home` is a markup refactor's cousin, and it is deliberately NOT
+ * absorbed: the route is the last coordinate that keeps two pages apart, and a
+ * defect key with a fuzzy route would let a genuinely new page inherit an old
+ * page's clean bill of health without a word. So a violation on a renamed route
+ * is `route_not_measured`: reported, named, never gated. The old route's entries
+ * are not counted as resolved either, because this run never captured that page
+ * and a page nobody looked at was not fixed. Both halves are the same rule, that
+ * Gate does not guess across pages, and both are tested.
  */
 
 /** One violation as it was recorded on a base commit. */
@@ -51,6 +90,12 @@ export interface MeasurementBaselineEntry {
   elementKey: string;
   /** `measurementFingerprint`: the full identity, detail included. */
   fingerprint: string;
+  /**
+   * `measurementDefectKey`: same check, same page, same stated defect, whatever
+   * markup carries it. The only key that survives a wrapper, a combinator change
+   * or a class rename, and the only one that is spent instead of matched.
+   */
+  defectKey: string;
 }
 
 /**
@@ -145,6 +190,7 @@ export function buildMeasurementBaseline(
       route: normalizeRoute(violation.route),
       elementKey: measurementElementKey(violation),
       fingerprint: measurementFingerprint(violation),
+      defectKey: measurementDefectKey(violation),
     })),
     engineVersion: result.metadata.engineVersion ?? null,
     ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
@@ -240,6 +286,14 @@ export interface ClassifiedMeasurement {
    * rewords its own output must not turn a back catalogue into a merge block.
    */
   detailChanged?: boolean;
+  /**
+   * Same check, same page, same stated defect on the base, carried by a
+   * DIFFERENT selector, and it claimed a baseline entry nothing else accounted
+   * for. A markup refactor around an untouched violation: a wrapper, a tightened
+   * combinator, a renamed class. Reported as pre-existing, never as introduced,
+   * and marked so a reader can see which of the two it is.
+   */
+  elementChanged?: boolean;
 }
 
 export type MeasurementBaselineStatus =
@@ -356,8 +410,37 @@ export function compareMeasurementsToBaseline(
   const baseRoutes = new Set(snapshot.routesMeasured);
   const baseChecks = new Set(snapshot.checksRun);
 
-  const classified: ClassifiedMeasurement[] = visible.map((measurement) => {
+  // Which stored violations are genuinely unaccounted for, and therefore the
+  // only ones a markup refactor may claim. An entry whose element is still
+  // present in this run is spoken for by that violation, however its detail
+  // reads, so it can never also be handed to a second one. That is the single
+  // rule standing between "a refactor carries its violation over" and "a new
+  // violation hides behind an old one".
+  //
+  // Built from EVERY violation this run reported, not just the visible ones: a
+  // repository that muted a violation with `rules.measurement_suppress` still
+  // has it on the page, and the entry it accounts for is not free.
+  const presentKeys = new Set(all.map(measurementElementKey));
+  const claimable = new Map<string, number[]>();
+  snapshot.entries.forEach((entry, index) => {
+    if (presentKeys.has(entry.elementKey)) return;
+    const waiting = claimable.get(entry.defectKey);
+    if (waiting) waiting.push(index);
+    else claimable.set(entry.defectKey, [index]);
+  });
+  const claimedEntries = new Set<number>();
+
+  /** Spend one unaccounted-for entry on this violation, or report there is none. */
+  const claim = (measurement: Measurement): boolean => {
+    const index = claimable.get(measurementDefectKey(measurement))?.pop();
+    if (index === undefined) return false;
+    claimedEntries.add(index);
+    return true;
+  };
+
+  const place = (measurement: Measurement): ClassifiedMeasurement => {
     if (!baseRoutes.has(normalizeRoute(measurement.route))) {
+      // A renamed route lands here on purpose: see THE ROUTE IS NEVER FUZZY.
       return { measurement, origin: "unclassified" as const, reason: "route_not_measured" as const };
     }
     if (!baseChecks.has(measurement.kind)) {
@@ -369,19 +452,36 @@ export function compareMeasurementsToBaseline(
     if (elementKeys.has(measurementElementKey(measurement))) {
       return { measurement, origin: "pre_existing" as const, detailChanged: true };
     }
+    if (claim(measurement)) {
+      return { measurement, origin: "pre_existing" as const, elementChanged: true };
+    }
     return { measurement, origin: "introduced" as const };
-  });
+  };
+
+  // Placed over EVERY violation and rendered for the visible ones, because a
+  // claim spends a shared resource: a muted violation still sitting on an old
+  // element must take its own entry with it, or the next violation in the list
+  // inherits an entry that was never free.
+  const shown = new Set(visible);
+  const classified: ClassifiedMeasurement[] = [];
+  for (const measurement of all) {
+    const row = place(measurement);
+    if (shown.has(measurement)) classified.push(row);
+  }
 
   // A fix is measured against EVERY violation this run reported, not just the
   // visible ones: muting a violation with `rules.measurement_suppress` hides it,
   // it does not fix it, and counting a mute as a fix would be the one lie this
-  // surface can tell in the flattering direction.
-  const presentKeys = new Set(all.map(measurementElementKey));
+  // surface can tell in the flattering direction. An entry a refactored
+  // violation claimed is not a fix either: the defect moved, it did not go.
   const nowRoutes = new Set(measuredRoutes(result));
   const nowChecks = new Set(measuredKinds(result));
   const resolved = snapshot.entries.filter(
-    (entry) =>
-      nowRoutes.has(entry.route) && nowChecks.has(entry.kind) && !presentKeys.has(entry.elementKey),
+    (entry, index) =>
+      nowRoutes.has(entry.route) &&
+      nowChecks.has(entry.kind) &&
+      !presentKeys.has(entry.elementKey) &&
+      !claimedEntries.has(index),
   ).length;
 
   return {
