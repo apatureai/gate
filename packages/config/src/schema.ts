@@ -18,6 +18,26 @@ export const previewSourceEnum = z.enum([
 export const viewportEnum = z.enum(["mobile", "tablet", "desktop"]);
 export const severityEnum = z.enum(["nit", "minor", "major", "blocker"]);
 export const gateModeEnum = z.enum(["none", "nits", "blockers"]);
+/**
+ * What a repo lets the engine's MEASUREMENTS do (`rules.measurements`).
+ *
+ * A measurement is a contrast ratio, a scroll width or a rectangle the engine
+ * computed from the captured DOM with no model involved. It is the
+ * best-grounded thing in a review and, until this key existed, the only half a
+ * consumer could not see.
+ *
+ *  - `off`       do not render the measured block. The engine's own grade
+ *                retraction still applies: that is computed engine-side and no
+ *                repository config can silence it. Gate still says, in one line,
+ *                that measurements arrived and are not being shown, because a
+ *                setting that makes a surface quietly lie is worse than the
+ *                surface being noisy.
+ *  - `advisory`  (default) render them, never change the conclusion.
+ *  - `block`     let an ENGINE-marked block-eligible violation fail the check.
+ *                Opt-in only, exactly like `rules.gate: blockers`, and for the
+ *                same reason: the engine does not block on its own authority.
+ */
+export const measurementsModeEnum = z.enum(["off", "advisory", "block"]);
 
 const previewSchema = z
   .object({
@@ -56,6 +76,18 @@ const rulesSchema = z
     gate: gateModeEnum.default("none"),
     min_severity_to_comment: severityEnum.default("nit"),
     suppress: z.array(z.string()).default([]),
+    // What the engine's measured facts may do on this repo's PRs. Default
+    // `advisory`: shown, never blocking. See `measurementsModeEnum`.
+    measurements: measurementsModeEnum.default("advisory"),
+    // Measured violations this repo has muted, matched EXACTLY (no glob) against
+    // a violation's `element` or its `"<kind>:<element>"` form, the same
+    // semantics and the same rationale as `suppress`: pattern semantics are
+    // undefined in the config contract, so an ambiguous match is never guessed.
+    //
+    // Suppression removes a violation from rendering AND from block
+    // eligibility. It CANNOT affect the engine's grade retraction, which is
+    // computed engine-side from what was measured and never reads repo config.
+    measurement_suppress: z.array(z.string()).default([]),
   })
   .strict()
   .prefault({});

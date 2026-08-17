@@ -21,6 +21,27 @@ export const METRIC_NAMES = {
   enginePollCount: "gate.engine.poll_count",
   engineCancels: "gate.engine.cancels",
   engineTimeouts: "gate.engine.timeouts",
+  /**
+   * Reviews that published a GREEN check while carrying an unsuppressed,
+   * engine-block-eligible measured violation.
+   *
+   * This is the hole the measurement decision deliberately left open, priced.
+   * A model that returns one unrelated nit while ignoring a measured WCAG AA
+   * contrast failure grades `ship_with_nits`, which maps to `success`, with the
+   * violation printed underneath the tick. Above roughly 5% of graded runs, the
+   * retraction predicate is too narrow to be the whole answer and flooring the
+   * grade on measurements is the right reversal.
+   */
+  greenOverMeasured: "gate.review.green_over_measured",
+  /**
+   * Measured violations a repository muted with `rules.measurement_suppress`,
+   * by kind. The proxy for each check's false-positive rate on real
+   * repositories. Above roughly 15% of what is published for a kind, the fix is
+   * to stop emitting that kind, not to add more configuration.
+   */
+  measurementSuppressed: "gate.review.measurement_suppressed",
+  /** Measured violations published, by kind: the denominator for the above. */
+  measurementsPublished: "gate.review.measurements_published",
 } as const;
 
 /**
@@ -37,6 +58,9 @@ export class GateMetrics {
   private readonly enginePollCount: Histogram;
   private readonly engineCancels: Counter;
   private readonly engineTimeouts: Counter;
+  private readonly greenOverMeasured: Counter;
+  private readonly measurementSuppressed: Counter;
+  private readonly measurementsPublished: Counter;
   private queueDepthProvider: () => number = () => 0;
 
   constructor(meter: Meter = metrics.getMeter(METER_NAME)) {
@@ -55,6 +79,15 @@ export class GateMetrics {
     });
     this.engineCancels = meter.createCounter(METRIC_NAMES.engineCancels);
     this.engineTimeouts = meter.createCounter(METRIC_NAMES.engineTimeouts);
+    this.greenOverMeasured = meter.createCounter(METRIC_NAMES.greenOverMeasured, {
+      description: "Green checks published over an unsuppressed block-eligible measured violation.",
+    });
+    this.measurementSuppressed = meter.createCounter(METRIC_NAMES.measurementSuppressed, {
+      description: "Measured violations muted by rules.measurement_suppress, by kind.",
+    });
+    this.measurementsPublished = meter.createCounter(METRIC_NAMES.measurementsPublished, {
+      description: "Measured violations rendered on a PR surface, by kind.",
+    });
 
     meter
       .createObservableGauge(METRIC_NAMES.queueDepth, { description: "Pending review jobs." })
@@ -76,6 +109,21 @@ export class GateMetrics {
 
   recordEngineError(attributes?: Attributes): void {
     this.engineErrors.add(1, attributes);
+  }
+
+  /** A green check went out over a measured violation the engine stood behind. */
+  recordGreenOverMeasured(attributes?: Attributes): void {
+    this.greenOverMeasured.add(1, attributes);
+  }
+
+  /** A repo muted a measured violation of this kind. */
+  recordMeasurementSuppressed(kind: string, attributes?: Attributes): void {
+    this.measurementSuppressed.add(1, { ...attributes, kind });
+  }
+
+  /** A measured violation of this kind was rendered on a PR surface. */
+  recordMeasurementPublished(kind: string, attributes?: Attributes): void {
+    this.measurementsPublished.add(1, { ...attributes, kind });
   }
 
   recordCaptureInstability(ratio: number, attributes?: Attributes): void {

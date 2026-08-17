@@ -236,6 +236,8 @@ export async function runHostedReview(
     gate: config.rules.gate,
     minSeverityToComment: config.rules.minSeverityToComment,
     suppress: config.rules.suppress,
+    measurements: config.rules.measurements,
+    measurementSuppress: config.rules.measurementSuppress,
     runUrl: deps.runUrl,
   });
   if (decision.publishComment && decision.comment) {

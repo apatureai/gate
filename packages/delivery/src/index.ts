@@ -35,6 +35,15 @@ export {
   NOTHING_REVIEWED_REMEDY,
 } from "./coverage.js";
 export type { CoverageState } from "./coverage.js";
+export {
+  MAX_MEASUREMENT_LINES,
+  blockEligibleMeasurements,
+  isGreenOverMeasured,
+  measurementBlock,
+  suppressMeasurements,
+  visibleMeasurements,
+} from "./measurements.js";
+export type { MeasurementBlockOptions } from "./measurements.js";
 export { mapCheckRunConclusion, buildCheckRun } from "./check-run.js";
 export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.js";
 export {

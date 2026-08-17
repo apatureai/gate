@@ -1,8 +1,9 @@
 import type { PollOutcome } from "@gate/engine";
-import type { Finding, GateMode, Severity } from "@gate/types";
+import type { Finding, GateMode, MeasurementsMode, Severity } from "@gate/types";
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
 import { coverageState, suppressesGradeForCoverage, type CoverageState } from "./coverage.js";
 import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
+import { isGreenOverMeasured, visibleMeasurements } from "./measurements.js";
 import { sanitizeCodeSpan } from "./sanitize.js";
 import { renderStickyComment } from "./sticky-comment.js";
 
@@ -46,6 +47,18 @@ export interface DeliveryDecision {
    * carries the fact as well as the comment.
    */
   coverage?: CoverageState;
+  /**
+   * A green check published over a measured violation the engine stood behind.
+   *
+   * The counter that prices the case this design deliberately does not close: a
+   * judge that returns one unrelated nit and says nothing about a measured WCAG
+   * AA failure still grades green. Carried on the decision so a caller with a
+   * meter records exactly what was published, rather than recomputing it from
+   * fields and drifting.
+   */
+  greenOverMeasured?: boolean;
+  /** Measured violations rendered on the PR surfaces, by kind, for the SLOs. */
+  measurementKinds?: string[];
 }
 
 export interface DegradationContext {
@@ -55,6 +68,15 @@ export interface DegradationContext {
   minSeverityToComment?: Severity;
   /** `rules.suppress`: findings whose id/element matches an entry are omitted from the comment. */
   suppress?: string[];
+  /**
+   * `rules.measurements`. Default `advisory`: the engine's measured facts are
+   * rendered on both surfaces and never change the Check Run conclusion. Only
+   * `block`, which a repo owner sets explicitly, lets an engine-marked
+   * block-eligible violation fail the check.
+   */
+  measurements?: MeasurementsMode;
+  /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
+  measurementSuppress?: readonly string[];
   runUrl?: string;
   /** Capture-instability signal from engine result metadata. */
   captureUnstable?: boolean;
@@ -141,8 +163,14 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     captureCaveat: caveat,
     minSeverityToComment: ctx.minSeverityToComment,
     suppress: ctx.suppress,
+    measurements: ctx.measurements,
+    measurementSuppress: ctx.measurementSuppress,
   });
-  const checkRun = buildCheckRun(result, ctx.gate, { detailsUrl: ctx.runUrl });
+  const checkRun = buildCheckRun(result, ctx.gate, {
+    detailsUrl: ctx.runUrl,
+    measurements: ctx.measurements,
+    measurementSuppress: ctx.measurementSuppress,
+  });
 
   return {
     publishComment: true,
@@ -150,6 +178,13 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     caveat,
     judgment,
     coverage,
+    greenOverMeasured: isGreenOverMeasured(result, {
+      conclusion: checkRun.conclusion,
+      suppress: ctx.measurementSuppress ?? [],
+    }),
+    measurementKinds: visibleMeasurements(result, ctx.measurementSuppress ?? []).map(
+      (violation) => violation.kind,
+    ),
     checkRun: { conclusion: checkRun.conclusion, title: checkRun.title, summary: checkRun.summary },
   };
 }

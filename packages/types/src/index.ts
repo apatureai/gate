@@ -7,6 +7,7 @@ export type {
   NormalizedPreviewConfig,
   NormalizedRoutesConfig,
   NormalizedRulesConfig,
+  MeasurementsMode,
   NormalizedTokensConfig,
   NormalizedDesignReviewConfig,
 } from "./config.js";
@@ -17,6 +18,9 @@ export type {
   GateReviewRequest,
   GateReviewResult,
   ReviewCoverage,
+  Measurement,
+  MeasurementKind,
+  MeasurementReport,
   JudgmentProvenance,
   ConfidenceSource,
   ConfidenceCalibrationReference,
@@ -32,8 +36,10 @@ export type {
 } from "./feedback.js";
 export {
   goldenReviewResultPath,
+  measuredReviewResultPath,
   preCalibrationReviewResultPath,
   loadGoldenReviewResult,
+  loadMeasuredReviewResult,
   loadPreCalibrationReviewResult,
 } from "./golden.js";
 export { deriveArtifactId } from "./artifact-id.js";

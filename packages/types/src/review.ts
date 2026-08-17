@@ -167,6 +167,47 @@ export type ReviewCoverage = {
   viewportsReviewed: Viewport[];
 };
 
+/** The deterministic check kinds the engine reports. */
+export type MeasurementKind = "contrast" | "overflow" | "touch_target";
+
+/**
+ * One violation the ENGINE computed from the captured DOM.
+ *
+ * Deliberately not a `Finding` and never convertible into one: no severity, no
+ * confidence, no dimension, because no model produced it and nothing calibrated
+ * it. Gate renders it in its own block, under its own heading, so a reader can
+ * always tell which half of the result they are looking at.
+ */
+export type Measurement = {
+  kind: MeasurementKind;
+  route: string;
+  /** Every viewport this exact violation was measured at. */
+  viewports: Viewport[];
+  /** Stable selector, the same vocabulary as `Finding.element`. */
+  element: string;
+  /** The engine's factual sentence, verbatim. Untrusted display text. */
+  detail: string;
+  /**
+   * The ENGINE's claim that this measurement is precise enough to gate a merge
+   * on. Gate never computes it and never overrides it. `false` does not mean the
+   * measurement is wrong, only that acting on it automatically would be, so a
+   * `false` violation is rendered and can never set a conclusion.
+   */
+  blockEligible: boolean;
+};
+
+/**
+ * The measured half of a review.
+ *
+ * `checksRun` is what makes an empty `violations` array mean anything: empty
+ * `checksRun` is "nothing was measured", and a non-empty one with no violations
+ * is the positive statement "these checks ran and found nothing".
+ */
+export type MeasurementReport = {
+  checksRun: MeasurementKind[];
+  violations: Measurement[];
+};
+
 export type GateReviewResult = {
   grade: ReviewGrade;
   overall: string;
@@ -249,6 +290,24 @@ export type GateReviewResult = {
    * render a grade when nothing was reviewed. See `ReviewCoverage`.
    */
   coverage?: ReviewCoverage;
+  /**
+   * What the engine MEASURED, as opposed to what it judged.
+   *
+   * Contrast ratios against WCAG AA, horizontal overflow and touch-target sizes,
+   * computed from the captured DOM with no model involved. Additive + optional
+   * under schema v1, like `coverage` and `provenance`.
+   *
+   * Gate renders these inside the Check Run it already publishes, on EVERY path
+   * including the unjudged and no-grade ones, because a measurement is true
+   * whether or not a model ran and is the only thing on an unjudged result a
+   * reader can act on. They never change the Check Run conclusion and never
+   * become findings, unless the repo explicitly sets `rules.measurements: block`.
+   *
+   * Absent means "this producer does not report measurements". It never means
+   * the page is clean; that positive statement is a non-empty `checksRun` with
+   * an empty `violations`.
+   */
+  measurements?: MeasurementReport;
   /**
    * Whether anything actually judged the page, stated by the engine in the
    * payload (additive + optional under schema v1, like `pageHealthFootnote`).

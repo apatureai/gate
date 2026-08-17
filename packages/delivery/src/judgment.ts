@@ -21,6 +21,14 @@ import { sanitizeDisplayText } from "./sanitize.js";
  * facts in it are real. Only the grade, the narrative and the findings are not a
  * judgment of the page, and only those are suppressed.
  *
+ * That sentence was a promise with nothing behind it until the measurement
+ * contract landed. The measured facts were real inside the engine and never
+ * crossed to Gate: `contract.ts` names every field it keeps and strips the rest,
+ * and it had no field for a measurement, so this surface published "the measured
+ * facts are real" while holding none. `measurements` on `GateReviewResult` and
+ * `measurementBlock` in `measurements.ts` are what make it true, and they are
+ * why the block is rendered on the unjudged path as well as the graded one.
+ *
  * A result that says NOTHING about its own judgment is treated the same way, as
  * of 2026-08-15. See `suppressesGrade` for why that reversed.
  */
@@ -157,6 +165,11 @@ export function judgmentNoGradeReason(state: JudgmentState): string {
 
 /** The remedy line that closes a no-grade Check Run summary. */
 export function judgmentRemedy(state: JudgmentState): string {
+  // "The measured facts are real" is only sayable because they now arrive: they
+  // are named in the engine contract, they survive parsing, and they are printed
+  // in this same summary by `measurementBlock`. When the engine sends none, the
+  // measured block renders nothing and this line still holds: it says the facts
+  // are real, not that there are any.
   const withheld =
     "The capture and the measured facts are real. The grade, the narrative and any findings " +
     "the engine returned are withheld, because Gate cannot show them as a judgment of this page. ";

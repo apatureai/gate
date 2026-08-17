@@ -95,6 +95,8 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
       gate: raw.rules.gate,
       minSeverityToComment: raw.rules.min_severity_to_comment,
       suppress: raw.rules.suppress,
+      measurements: raw.rules.measurements,
+      measurementSuppress: raw.rules.measurement_suppress,
     },
     tokens: {
       source: raw.tokens.source,

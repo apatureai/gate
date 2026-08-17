@@ -27,6 +27,14 @@ export type Severity = "nit" | "minor" | "major" | "blocker";
  */
 export type GateMode = "none" | "nits" | "blockers";
 
+/**
+ * What the engine's MEASUREMENTS may do on this repo (`rules.measurements`).
+ * `advisory` is the default and the only vendor-set behaviour: measurements are
+ * rendered and never change a Check Run conclusion. `block` is a repo owner's
+ * explicit policy, the same shape as `rules.gate: blockers`.
+ */
+export type MeasurementsMode = "off" | "advisory" | "block";
+
 export type NormalizedPreviewConfig = {
   source: PreviewSource;
   /** Provider environment name; defaults to `Preview`. */
@@ -64,6 +72,14 @@ export type NormalizedRulesConfig = {
   minSeverityToComment: Severity;
   /** Suppression rules (selectors, finding ids, or patterns). */
   suppress: string[];
+  /** What the engine's measured facts may do here. Default `advisory`. */
+  measurements: MeasurementsMode;
+  /**
+   * Measured violations this repo muted, matched exactly against a violation's
+   * `element` or `"<kind>:<element>"`. Never affects the engine's own grade
+   * retraction, which is computed engine-side and reads no repo config.
+   */
+  measurementSuppress: string[];
 };
 
 /**

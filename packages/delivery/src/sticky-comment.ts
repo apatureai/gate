@@ -1,4 +1,10 @@
-import type { Finding, GateReviewResult, ReviewGrade, Severity } from "@gate/types";
+import type {
+  Finding,
+  GateReviewResult,
+  MeasurementsMode,
+  ReviewGrade,
+  Severity,
+} from "@gate/types";
 import { coverageState, notReviewedItems, suppressesGradeForCoverage } from "./coverage.js";
 import {
   footerModel,
@@ -6,6 +12,7 @@ import {
   judgmentState,
   suppressesGrade,
 } from "./judgment.js";
+import { measurementBlock } from "./measurements.js";
 import {
   escapeTableCell,
   safeLinkUrl,
@@ -74,6 +81,15 @@ export interface StickyCommentContext {
    * `id` or `element` are omitted from the comment. Unset/empty lists everything.
    */
   suppress?: string[];
+  /**
+   * `rules.measurements`. Defaults to `advisory`. The measured block is rendered
+   * on every path, including the withheld-grade ones, because a measurement is
+   * true whether or not a model ran. It never changes what this comment says
+   * about the grade.
+   */
+  measurements?: MeasurementsMode;
+  /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
+  measurementSuppress?: readonly string[];
 }
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
@@ -257,6 +273,17 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   // cannot disagree about what was skipped OR about how it was neutralized.
   const skipped = notReviewedItems(result);
   if (skipped) parts.push(`### Not reviewed\n\n${skipped}`);
+
+  // The measured half, rendered on every path for the same reason the Check Run
+  // renders it on every path: it is computed from the captured DOM with no model
+  // involved, so it is the one part of an unjudged run that is not withheld.
+  // The comment's own prose says "the page was captured and measured"; this is
+  // what that sentence points at.
+  const measured = measurementBlock(result, {
+    mode: ctx.measurements ?? "advisory",
+    suppress: ctx.measurementSuppress ?? [],
+  });
+  if (measured) parts.push(measured);
 
   // Gate-owned prose, built from Gate's own signals; not engine text.
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);

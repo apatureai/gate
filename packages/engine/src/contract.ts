@@ -83,6 +83,41 @@ const coverageSchema = z.object({
   viewportsReviewed: z.array(z.enum(["mobile", "tablet", "desktop"])),
 });
 
+/**
+ * The measured half of the review (verdict `MeasurementReport`).
+ *
+ * Named here for the same reason `coverage` and `provenance` are, and with a
+ * sharper consequence than either. This schema is deliberately not `.strict()`,
+ * so a field it does not name is STRIPPED: silently, with no error and no log
+ * line. Gate has been publishing "The capture and the measured facts are real"
+ * into a live Check Run summary while holding no measured fact and having no
+ * field one could ever have arrived in. That sentence becomes true the moment
+ * this object parses, and was false every line before it.
+ *
+ * `blockEligible` is the ENGINE's precision claim, not Gate's policy. Gate never
+ * computes it and never overrides it; it only refuses to let a `false` one
+ * change a Check Run conclusion.
+ *
+ * Required WITHIN the object, optional as a whole, exactly like `coverage`:
+ * `violations` without `checksRun` cannot tell "measured, clean" from "not
+ * measured", and omitting the object is the supported way to say nothing.
+ */
+const measurementKindEnum = z.enum(["contrast", "overflow", "touch_target"]);
+
+const measurementsSchema = z.object({
+  checksRun: z.array(measurementKindEnum),
+  violations: z.array(
+    z.object({
+      kind: measurementKindEnum,
+      route: z.string(),
+      viewports: z.array(z.enum(["mobile", "tablet", "desktop"])),
+      element: z.string(),
+      detail: z.string(),
+      blockEligible: z.boolean(),
+    }),
+  ),
+});
+
 const provenanceSchema = z.object({
   model_backed: z.union([z.boolean(), z.null()]),
   source: z.enum(["model", "canned", "fixture", "unknown"]).catch("unknown"),
@@ -133,6 +168,10 @@ export const GateReviewResultSchema = z.object({
   // Additive engine field (verdict#165). Preserved through parsing; the Check
   // Run refuses to publish a grade when it says nothing was reviewed.
   coverage: coverageSchema.optional(),
+  // Additive engine field. Preserved through parsing; rendered inside the
+  // existing "Apature Gate" check and NEVER allowed to change the conclusion
+  // unless a repo explicitly opts in with `rules.measurements: block`.
+  measurements: measurementsSchema.optional(),
   provenance: provenanceSchema.optional(),
 });
 

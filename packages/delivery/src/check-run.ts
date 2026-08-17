@@ -1,4 +1,4 @@
-import type { GateMode, GateReviewResult, ReviewGrade } from "@gate/types";
+import type { GateMode, GateReviewResult, MeasurementsMode, ReviewGrade } from "@gate/types";
 import {
   coverageCaveat,
   coverageState,
@@ -16,6 +16,7 @@ import {
   judgmentTitle,
   suppressesGrade,
 } from "./judgment.js";
+import { blockEligibleMeasurements, measurementBlock } from "./measurements.js";
 import { sanitizeDisplayText } from "./sanitize.js";
 
 /**
@@ -55,6 +56,18 @@ export function mapCheckRunConclusion(grade: ReviewGrade, gate: GateMode): Check
 export interface CheckRunContext {
   /** Link to the sticky comment or dashboard run (TRD §7). */
   detailsUrl?: string;
+  /**
+   * `rules.measurements`. Defaults to `advisory`: the measured block is
+   * rendered and the conclusion is untouched.
+   *
+   * Deliberately in this context object rather than a second positional
+   * parameter, so `buildCheckRun(result, gate)` keeps its exact signature and
+   * `mapCheckRunConclusion(grade, gate)` stays the only thing that turns a
+   * GRADE into a conclusion.
+   */
+  measurements?: MeasurementsMode;
+  /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
+  measurementSuppress?: readonly string[];
 }
 
 export interface CheckRun {
@@ -107,21 +120,38 @@ export function buildCheckRun(
   // coverage is full and truthful while the grade means nothing.
   const gradeRetracted = (result.gradeUnavailableReason ?? "").length > 0;
   const graded = !suppressesGrade(state) && !nothingReviewed && !gradeRetracted;
-  // Never `success`, never `failure`: an ungraded run is not a pass, and it is
-  // not the repo's PR failing either.
-  const conclusion: CheckRunConclusion = graded
-    ? mapCheckRunConclusion(result.grade, gate)
-    : "neutral";
+  const measurementsMode = ctx.measurements ?? "advisory";
+  // The ONLY path in this system where a measurement changes a conclusion, and
+  // it exists only because a repo owner wrote `rules.measurements: block` in
+  // their own `.gate.yml`. Same shape as `rules.gate: blockers`, and for the
+  // same reason: the engine does not block on its own authority, and neither
+  // does the vendor default. Only ENGINE-marked block-eligible violations count,
+  // and a suppressed one has already been removed.
+  const blocking =
+    measurementsMode === "block" &&
+    blockEligibleMeasurements(result, ctx.measurementSuppress ?? []).length > 0;
+  // Never `success`, never `failure` from a grade that was suppressed: an
+  // ungraded run is not a pass, and it is not the repo's PR failing either.
+  // `blocking` is the one thing that overrides that, and it is repo policy
+  // rather than a judgment: when a repo has said "never merge this measured
+  // defect", an explicit answer beats "no grade".
+  const conclusion: CheckRunConclusion = blocking
+    ? "failure"
+    : graded
+      ? mapCheckRunConclusion(result.grade, gate)
+      : "neutral";
   // Coverage wins the title when both are suppressed. "Nothing reviewed" is the
   // stronger and more actionable statement: an operator whose capture produced
   // no pages is not helped by being told the judgment stamp was missing too.
-  const title = graded
-    ? GRADE_TITLE[result.grade]
-    : nothingReviewed
-      ? NOTHING_REVIEWED_TITLE
-      : gradeRetracted
-        ? "No usable grade"
-        : judgmentTitle(state);
+  const title = blocking
+    ? "Measured violations"
+    : graded
+      ? GRADE_TITLE[result.grade]
+      : nothingReviewed
+        ? NOTHING_REVIEWED_TITLE
+        : gradeRetracted
+          ? "No usable grade"
+          : judgmentTitle(state);
 
   const summaryParts: string[] = [];
   if (graded) {
@@ -130,11 +160,19 @@ export function buildCheckRun(
     summaryParts.push(`**Grade:** ${GRADE_TITLE[result.grade]}`, sanitizeDisplayText(result.overall, OVERALL_MAX));
   } else if (gradeRetracted && !nothingReviewed) {
     // Say what the engine said, not a paraphrase: it knows why it retracted and
-    // Gate does not enumerate the reasons.
+    // Gate does not enumerate the reasons. The one reason Gate DOES word is the
+    // one whose slug is opaque and whose consequence is the sharpest: a judge
+    // that was handed measured facts about this page and returned nothing.
     summaryParts.push(
-      "**No grade.** The engine reported that its grade is not a verdict about this page " +
-        `(\`${sanitizeDisplayText(result.gradeUnavailableReason ?? "", 120)}\`). ` +
-        "This run is not a pass and not a failure.",
+      result.gradeUnavailableReason === "measured_facts_unjudged"
+        ? "**No grade.** The engine measured " +
+            `${result.measurements?.violations.length ?? 0} violation(s) on the route(s) it ` +
+            "reviewed, and the review returned no findings at all. A judge that is handed " +
+            "measured facts and returns nothing has not reviewed this page, so this run is not " +
+            "a pass and not a failure."
+        : "**No grade.** The engine reported that its grade is not a verdict about this page " +
+            `(\`${sanitizeDisplayText(result.gradeUnavailableReason ?? "", 120)}\`). ` +
+            "This run is not a pass and not a failure.",
     );
     if (result.overall.trim().length > 0) {
       summaryParts.push(sanitizeDisplayText(result.overall, OVERALL_MAX));
@@ -154,6 +192,17 @@ export function buildCheckRun(
     if (detail) summaryParts.push(sanitizeDisplayText(detail, 600));
     summaryParts.push(judgmentRemedy(state));
   }
+  // The measured half, on EVERY path: graded, unjudged, nothing-reviewed and
+  // grade-retracted alike. A measurement is true whether or not a model ran, and
+  // on the paths where the grade is withheld it is the only thing on this check
+  // a reader can act on. This is also what finally makes `judgmentRemedy`'s
+  // "the measured facts are real" a statement with something behind it.
+  const measured = measurementBlock(result, {
+    mode: measurementsMode,
+    suppress: ctx.measurementSuppress ?? [],
+    blocking,
+  });
+  if (measured) summaryParts.push(measured);
   // What this run covered, on every path including "the engine did not say".
   summaryParts.push(coverageCaveat(result));
   // What the engine skipped, in its own words. Rendered here as well as in the

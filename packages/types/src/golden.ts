@@ -21,6 +21,20 @@ export function goldenReviewResultPath(): string {
   return fileURLToPath(new URL("../fixtures/gate-review-result.golden.json", import.meta.url));
 }
 
+/**
+ * Path to the golden result WITH a measured half.
+ *
+ * A second fixture rather than a change to the first, deliberately. The golden
+ * fixture is the cross-repo contract anchor and stays byte-identical: an engine
+ * that reports no measurements is a supported producer, and its result must keep
+ * parsing and rendering exactly as it did. This variant is the same review with
+ * `measurements` added, so a test can prove the field survives parsing, reaches
+ * the Check Run, and changes nothing else.
+ */
+export function measuredReviewResultPath(): string {
+  return fileURLToPath(new URL("../fixtures/gate-review-result.measured.json", import.meta.url));
+}
+
 /** Historical payload with numeric confidence but no report provenance. */
 export function preCalibrationReviewResultPath(): string {
   return fileURLToPath(new URL("../fixtures/gate-review-result.pre-calibration.json", import.meta.url));
@@ -32,6 +46,11 @@ export function preCalibrationReviewResultPath(): string {
  */
 export function loadGoldenReviewResult(): GateReviewResult {
   return JSON.parse(readFileSync(goldenReviewResultPath(), "utf8")) as GateReviewResult;
+}
+
+/** Load the golden result variant that also carries the engine's measurements. */
+export function loadMeasuredReviewResult(): GateReviewResult {
+  return JSON.parse(readFileSync(measuredReviewResultPath(), "utf8")) as GateReviewResult;
 }
 
 /** Load the shared deploy-skew/legacy counterexample. */

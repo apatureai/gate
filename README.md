@@ -628,6 +628,8 @@ rules:
   gate: none                    # none | nits | blockers, merge-blocking is opt-in
   min_severity_to_comment: nit  # nit | minor | major | blocker
   suppress: []                  # finding ids or element selectors to mute (exact match, no globs)
+  measurements: advisory        # off | advisory | block, what the engine's MEASURED facts may do
+  measurement_suppress: []      # element selectors, or "<kind>:<element>", to mute (exact match)
 
 tokens:
   source: null            # path to design tokens
@@ -635,6 +637,48 @@ tokens:
 ```
 
 Severity and suppression filter what the comment *lists*; they never change the grade or the Check Run conclusion, which reflect the holistic verdict.
+
+### The measured half
+
+The engine produces two independent things, and only one of them is a judgment. Text contrast against
+WCAG AA, horizontal overflow and touch-target sizes are **computed from the captured DOM with no
+model involved**. Gate renders them inside the same "Apature Gate" check it already publishes, under
+their own heading, on **every** path: graded, unjudged, nothing-reviewed and no-grade alike. That is
+deliberate. The grade, the narrative and the findings are withheld on those paths because nothing
+established them; a measurement needs nothing to establish it, and on an unjudged run it is the only
+thing on the check a reader can act on.
+
+`rules.measurements` is what a repository lets them do:
+
+| Value | Effect |
+|---|---|
+| `off` | The measured block is not rendered. Gate still prints one line saying measurements arrived and are not being shown, because a setting that makes a surface quietly drop evidence is worse than a noisy surface. |
+| `advisory` (default) | Rendered, never changes the Check Run conclusion. |
+| `block` | An engine-marked block-eligible violation makes the check fail, titled *Measured violations*. |
+
+`block` is opt-in and will stay opt-in, exactly like `rules.gate: blockers` and for the same reason:
+the engine does not block on its own authority, and neither does the vendor default. It acts only on
+violations the **engine** marked `blockEligible`, which it does not do lightly: a `<pre>` with
+`overflow-x: auto` is content wider than its box on purpose, 44px is WCAG 2.5.5 at level AAA rather
+than the 24px AA line, and a flattened background colour cannot see a background image. Those
+measurements are still reported; what they do not carry is permission to fail somebody's build. Gate
+never computes that flag and never overrides it. Note also that there is no baseline store anywhere
+in this system: every measurement is of the page as it is now, not of what this pull request did to
+it, so `block` on a legacy codebase fails on pre-existing debt from the first run.
+
+A measurement is never a finding. It has no severity, so `min_severity_to_comment` cannot filter one,
+and `rules.suppress` does not reach one: muting a judgment and muting a ruler are different acts, and
+one key doing both would hide the second by accident. `measurement_suppress` is the second key, and
+it matches exactly, never as a glob, against a violation's element or its `"<kind>:<element>"` form.
+It cannot reach the engine's own grade retraction, which is computed engine-side and reads no
+repository configuration.
+
+**What this still does not close.** The grade remains a pure function of the model's surviving
+findings. A judge that returns one unrelated nit while saying nothing about a measured 3.23:1
+contrast failure grades `ship_with_nits`, and Gate publishes a green tick with the violation printed
+underneath it. Under `advisory`, which is the default, that is what you get. A repository whose
+honest goal is "never merge a WCAG AA contrast failure" wants `measurements: block`, and should read
+the paragraph above about baselines before turning it on.
 
 Two things Gate sends the engine come from the repository rather than from this file. `verify_stability` above rides along inside the config; alongside it, Gate reads the repository's `package.json` at the PR's head and names the component libraries it finds (`shadcn/ui`, `radix`, `mui`, `chakra`, `mantine`) so the engine can append that library's rubric note to its own prompt. Ids only, never prose: the note is the engine's text, so nothing in a pull request's own manifest is written into a model prompt. Both fields are additive and optional in both directions. A repository that opted into nothing and uses none of those libraries produces exactly the request Gate sent before either existed, an engine that has never heard of them ignores them, and a manifest that is missing, private or malformed costs a review its rubric addenda and nothing else.
 

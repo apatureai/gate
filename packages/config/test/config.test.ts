@@ -31,7 +31,16 @@ describe("defaults", () => {
       viewports: ["mobile", "desktop"],
       darkMode: false,
       brand: null,
-      rules: { gate: "none", minSeverityToComment: "nit", suppress: [] },
+      rules: {
+        gate: "none",
+        minSeverityToComment: "nit",
+        suppress: [],
+        // Measurements are SHOWN by default and never block by default. `off`
+        // is never the default, because silence is exactly what this contract
+        // closes, and `block` is never the vendor's call to make.
+        measurements: "advisory",
+        measurementSuppress: [],
+      },
       tokens: { source: null, values: {} },
     });
   });
