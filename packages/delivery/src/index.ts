@@ -40,10 +40,47 @@ export {
   blockEligibleMeasurements,
   isGreenOverMeasured,
   measurementBlock,
+  measurementLine,
+  measurementsAreBlocking,
   suppressMeasurements,
   visibleMeasurements,
 } from "./measurements.js";
 export type { MeasurementBlockOptions } from "./measurements.js";
+export {
+  MEASUREMENT_IDENTITY_VERSION,
+  detailSubstance,
+  measurementElementKey,
+  measurementFingerprint,
+  measurementIdentity,
+  normalizeElement,
+  normalizeRoute,
+} from "./measurement-identity.js";
+export type { MeasurementIdentity } from "./measurement-identity.js";
+export {
+  buildMeasurementBaseline,
+  compareMeasurementsToBaseline,
+  createInMemoryMeasurementBaselineStore,
+  gateableMeasurements,
+  lookupMeasurementBaseline,
+  measuredKinds,
+  measuredRoutes,
+} from "./measurement-baseline.js";
+export type {
+  BuildBaselineOptions,
+  ClassifiedMeasurement,
+  CompareMeasurementsOptions,
+  MeasurementBaselineEntry,
+  MeasurementBaselineKey,
+  MeasurementBaselineLookup,
+  MeasurementBaselineRecord,
+  MeasurementBaselineSnapshot,
+  MeasurementBaselineStatus,
+  MeasurementBaselineStore,
+  MeasurementComparison,
+  MeasurementOrigin,
+  UnclassifiedReason,
+} from "./measurement-baseline.js";
+export { BASELINE_SECTION_HEADING, baselineSection } from "./measurement-baseline-render.js";
 export { mapCheckRunConclusion, buildCheckRun } from "./check-run.js";
 export type { CheckRunConclusion, CheckRunContext, CheckRun } from "./check-run.js";
 export {

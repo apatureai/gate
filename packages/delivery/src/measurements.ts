@@ -1,4 +1,8 @@
 import type { GateReviewResult, Measurement, MeasurementsMode } from "@gate/types";
+// Type-only: `measurement-baseline.ts` imports `suppressMeasurements` from this
+// module at runtime, and a type import carries no runtime edge back, so the
+// dependency between the two stays one-directional.
+import type { MeasurementComparison } from "./measurement-baseline.js";
 import { sanitizeCodeSpan, sanitizeDisplayText } from "./sanitize.js";
 
 /**
@@ -41,10 +45,24 @@ const KIND_LABEL: Record<Measurement["kind"], string> = {
 /**
  * Drop measurements the repo muted with `rules.measurement_suppress`.
  *
- * An entry matches a violation when it exactly equals the violation's `element`
- * or its `"<kind>:<element>"` form. Exact, never glob or regex: pattern
- * semantics are undefined in the config contract, so an ambiguous match is never
- * guessed. Same rule and same rationale as `suppressFindings`.
+ * An entry matches a violation when it exactly equals ONE of three things:
+ *
+ *  - the violation's `kind` (`contrast`), muting that whole kind on this repo;
+ *  - the violation's `element` (`#hero-subtitle`), muting that element whatever
+ *    was measured on it;
+ *  - the `"<kind>:<element>"` form (`contrast:#hero-subtitle`), muting the pair.
+ *
+ * The kind-level form is here because the narrow forms were the only ones that
+ * worked while every rendered row leads with `[contrast]`, so the obvious thing
+ * to copy off a review and paste into `.gate.yml` silently did nothing. A repo
+ * that has decided its palette is a deliberate choice should be able to say that
+ * once, not once per selector.
+ *
+ * Matching is EXACT in all three forms, never glob or regex: pattern semantics
+ * are undefined in the config contract, so an ambiguous match is never guessed.
+ * Same rule and same rationale as `suppressFindings`. Kinds are compared against
+ * the violation's own `kind` string rather than a list Gate keeps, so a kind the
+ * engine adds later is mutable the day it ships without a Gate release.
  *
  * Suppression removes a violation from rendering AND from block eligibility.
  * It cannot reach the ENGINE's grade retraction, which is computed engine-side
@@ -59,7 +77,10 @@ export function suppressMeasurements(
   if (suppress.length === 0) return [...violations];
   const muted = new Set(suppress);
   return violations.filter(
-    (violation) => !muted.has(violation.element) && !muted.has(`${violation.kind}:${violation.element}`),
+    (violation) =>
+      !muted.has(violation.kind) &&
+      !muted.has(violation.element) &&
+      !muted.has(`${violation.kind}:${violation.element}`),
   );
 }
 
@@ -85,6 +106,38 @@ export function blockEligibleMeasurements(
   suppress: readonly string[] = [],
 ): Measurement[] {
   return visibleMeasurements(result, suppress).filter((violation) => violation.blockEligible);
+}
+
+/**
+ * Whether this repository's own configuration turns these measurements into a
+ * failing check.
+ *
+ * The single definition of that question, because two surfaces ask it and they
+ * must never answer it differently: the Check Run asks it to set a conclusion,
+ * the measured block asks it to word the sentence that tells a reader which mode
+ * produced the outcome. Before this existed the block took the answer as a
+ * caller-supplied flag, the sticky comment did not pass one, and a repository on
+ * `block` got a comment stating in as many words that its mode was `advisory`.
+ *
+ * Both conditions are required and neither is Gate's to assert: the repo must
+ * have written `block`, and the ENGINE must have marked at least one surviving
+ * violation `blockEligible`.
+ */
+export function measurementsAreBlocking(
+  result: GateReviewResult,
+  mode: MeasurementsMode | undefined,
+  suppress: readonly string[] = [],
+  baseline?: MeasurementComparison,
+): boolean {
+  if ((mode ?? "advisory") !== "block") return false;
+  // A THIRD condition, when the caller scoped this run against the base commit:
+  // the violation has to be one this pull request introduced. Without it, the
+  // first pull request opened after installation fails on every pre-existing
+  // violation in the repository, which is how a merge gate gets switched off in
+  // its first week. An absent, unreadable or incomparable baseline classifies
+  // nothing as introduced, so it can only ever make this answer `false`.
+  if (baseline) return baseline.introduced.filter((violation) => violation.blockEligible).length > 0;
+  return blockEligibleMeasurements(result, suppress).length > 0;
 }
 
 /** Count violations by kind, in a stable order, for the block's header line. */
@@ -136,8 +189,12 @@ function blockEligibleFirst(violations: readonly Measurement[]): Measurement[] {
  *
  * The eligibility tag is the one cell Gate writes itself, from a boolean it never
  * computes and never overrides.
+ *
+ * Exported so the baseline-scoped section can list an INTRODUCED violation in
+ * exactly this shape, through exactly these sanitizers and bounds, instead of
+ * growing a second row format that has to be kept in step with this one.
  */
-function measurementLine(violation: Measurement): string {
+export function measurementLine(violation: Measurement): string {
   return (
     `- \`[${KIND_LABEL[violation.kind]}]\` ${sanitizeCodeSpan(violation.route, ROUTE_MAX)} ` +
     `${sanitizeCodeSpan(violation.element, ELEMENT_MAX)} ` +
@@ -155,19 +212,31 @@ function measurementLine(violation: Measurement): string {
  * what to do with it. Under `advisory` nothing here fails anything, and the
  * sentence says so in the same breath.
  */
-function eligibilitySummary(violations: readonly Measurement[], blocking: boolean): string {
+function eligibilitySummary(
+  violations: readonly Measurement[],
+  mode: MeasurementsMode,
+  blocking: boolean,
+): string {
   const eligible = violations.filter((violation) => violation.blockEligible).length;
   const advisory = violations.length - eligible;
   if (eligible === 0) {
     return (
       `None of them are block-eligible: the engine reports them and will not stand behind any of ` +
-      `them for failing a check, so \`rules.measurements: block\` would change nothing here.`
+      `them for failing a check, so ` +
+      (mode === "block"
+        ? "this repository's `rules.measurements: block` has nothing here to act on."
+        : "`rules.measurements: block` would change nothing here.")
     );
   }
   const stands =
     `${eligible} of them ${eligible === 1 ? "is" : "are"} **block-eligible**: ` +
     `${eligible === 1 ? "a measurement" : "measurements"} the engine will stand behind for failing a check` +
-    (blocking ? "." : ", which this repository's `rules.measurements: advisory` does not let it do.");
+    (blocking
+      ? "."
+      : mode === "block"
+        ? ", which this repository's `rules.measurements: block` lets it do only for the ones this " +
+          "pull request introduced."
+        : ", which this repository's `rules.measurements: advisory` does not let it do.");
   if (advisory === 0) return stands;
   return (
     `${stands} The other ${advisory} ${advisory === 1 ? "is" : "are"} advisory only: the engine ` +
@@ -181,8 +250,16 @@ export interface MeasurementBlockOptions {
   mode?: MeasurementsMode;
   /** `rules.measurement_suppress`. */
   suppress?: readonly string[];
-  /** Whether `block` mode is failing the check, which changes the heading. */
-  blocking?: boolean;
+  /**
+   * This run's measured violations placed against the base commit's stored set.
+   *
+   * Only used here to decide whether the block is a BLOCKING one, so the heading
+   * and the closing sentence describe the outcome the reader is actually
+   * looking at. The per-violation verdict is rendered by `baselineSection`
+   * underneath, which is where a reader is told which of these are new and,
+   * more importantly, told when Gate has no basis to say.
+   */
+  baseline?: MeasurementComparison;
 }
 
 /**
@@ -211,10 +288,14 @@ export function measurementBlock(
   }
   if (visible.length === 0) return null;
 
+  // Derived here, never taken from the caller. The Check Run used to compute it
+  // and pass it while the sticky comment passed nothing, so one repository's two
+  // surfaces disagreed about that repository's own mode.
+  const blocking = measurementsAreBlocking(result, mode, options.suppress ?? [], options.baseline);
   const ordered = blockEligibleFirst(visible);
   const shown = ordered.slice(0, MAX_MEASUREMENT_LINES);
   const remaining = ordered.length - shown.length;
-  const heading = options.blocking
+  const heading = blocking
     ? `📏 **Measured violations** — ${visible.length} violation(s) computed from the captured DOM ` +
       `(${countByKind(visible)}). This repository sets \`rules.measurements: block\`.`
     : `📏 **Measured, not graded** — ${visible.length} violation(s) computed from the captured DOM ` +
@@ -222,12 +303,12 @@ export function measurementBlock(
 
   const lines = [
     heading,
-    eligibilitySummary(visible, options.blocking ?? false),
+    eligibilitySummary(visible, mode, blocking),
     shown.map(measurementLine).join("\n"),
   ];
   if (remaining > 0) lines.push(`…and ${remaining} more`);
   lines.push(
-    options.blocking
+    blocking
       ? "No model was involved in these. They did not affect the grade; this repository's own " +
         "configuration is what turned them into a failing check."
       : "No model was involved in these. They do not affect the grade.",

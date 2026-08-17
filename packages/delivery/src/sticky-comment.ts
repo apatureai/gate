@@ -12,7 +12,9 @@ import {
   judgmentState,
   suppressesGrade,
 } from "./judgment.js";
-import { measurementBlock } from "./measurements.js";
+import { baselineSection } from "./measurement-baseline-render.js";
+import type { MeasurementComparison } from "./measurement-baseline.js";
+import { measurementBlock, measurementsAreBlocking } from "./measurements.js";
 import {
   escapeTableCell,
   safeLinkUrl,
@@ -90,6 +92,13 @@ export interface StickyCommentContext {
   measurements?: MeasurementsMode;
   /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
   measurementSuppress?: readonly string[];
+  /**
+   * This run's measured violations placed against the base commit's stored set,
+   * computed once by the caller and shared with the Check Run so the two
+   * surfaces cannot tell different stories about who introduced what. Absent
+   * means the caller did not ask for scoping.
+   */
+  baseline?: MeasurementComparison;
 }
 
 const shortSha = (sha: string): string => sha.slice(0, 7);
@@ -282,8 +291,25 @@ export function renderStickyComment(result: GateReviewResult, ctx: StickyComment
   const measured = measurementBlock(result, {
     mode: ctx.measurements ?? "advisory",
     suppress: ctx.measurementSuppress ?? [],
+    ...(ctx.baseline ? { baseline: ctx.baseline } : {}),
   });
   if (measured) parts.push(measured);
+
+  // Whose violations those are, from the SAME comparison the Check Run was built
+  // from. These two surfaces sit beside each other on a pull request, and the
+  // merge-gating one must never be the more confident of the two.
+  if (ctx.baseline) {
+    const scoped = baselineSection(ctx.baseline, {
+      mode: ctx.measurements ?? "advisory",
+      blocking: measurementsAreBlocking(
+        result,
+        ctx.measurements,
+        ctx.measurementSuppress ?? [],
+        ctx.baseline,
+      ),
+    });
+    if (scoped) parts.push(scoped);
+  }
 
   // Gate-owned prose, built from Gate's own signals; not engine text.
   if (ctx.captureCaveat) parts.push(`> ⚠️ ${ctx.captureCaveat}`);

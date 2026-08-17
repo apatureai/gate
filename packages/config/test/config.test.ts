@@ -117,6 +117,76 @@ tokens:
   });
 });
 
+/**
+ * `rules.measurements`: the key that says what the engine's MEASURED facts may
+ * do on this repository. Three values, and the default is the middle one on
+ * purpose. `off` is never the default, because silence is what this contract
+ * closes; `block` is never the default, because merge-gating is the repo
+ * owner's call and never the vendor's.
+ */
+describe("rules.measurements", () => {
+  it("accepts each of the three modes and normalizes it unchanged", () => {
+    for (const mode of ["off", "advisory", "block"] as const) {
+      expect(loadDesignReviewConfig(`rules:\n  measurements: ${mode}\n`).rules.measurements).toBe(
+        mode,
+      );
+    }
+  });
+
+  it("defaults to advisory when the file omits it, with or without a rules block", () => {
+    expect(loadDesignReviewConfig(null).rules.measurements).toBe("advisory");
+    expect(loadDesignReviewConfig("rules:\n  gate: blockers\n").rules.measurements).toBe("advisory");
+  });
+
+  it("rejects a fourth mode, and names the key in the message", () => {
+    expect.assertions(2);
+    try {
+      parseDesignReviewConfig({ rules: { measurements: "warn" } });
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConfigValidationError);
+      expect((err as ConfigValidationError).issues.join(" ")).toMatch(/rules\.measurements/);
+    }
+  });
+
+  it("rejects a boolean for it, which is the plausible wrong guess", () => {
+    expect(() => parseDesignReviewConfig({ rules: { measurements: true } })).toThrow(
+      ConfigValidationError,
+    );
+  });
+
+  it("carries the suppression list alongside it, defaulting to empty", () => {
+    expect(loadDesignReviewConfig(null).rules.measurementSuppress).toEqual([]);
+    expect(
+      loadDesignReviewConfig("rules:\n  measurement_suppress: [contrast, '#hero']\n").rules
+        .measurementSuppress,
+    ).toEqual(["contrast", "#hero"]);
+  });
+
+  it("rejects a bare string where the suppression list belongs", () => {
+    expect(() => parseDesignReviewConfig({ rules: { measurement_suppress: "contrast" } })).toThrow(
+      ConfigValidationError,
+    );
+  });
+
+  /**
+   * The upgrade consideration, stated as a test because it is a real one.
+   *
+   * `rules` is `.strict()`, so a gate build that predates this key rejects the
+   * whole file rather than ignoring the line: a repository that adopts
+   * `rules.measurements` has raised its minimum Gate version. This is the
+   * mechanism that makes that true, and it is the same mechanism that turns
+   * `viewport:` into an error instead of a silently ignored typo.
+   */
+  it("is a closed schema: an unknown rules key fails the file, it is not ignored", () => {
+    expect(() => parseDesignReviewConfig({ rules: { measurement: "block" } })).toThrow(
+      ConfigValidationError,
+    );
+    expect(() => parseDesignReviewConfig({ rules: { measurements_mode: "block" } })).toThrow(
+      ConfigValidationError,
+    );
+  });
+});
+
 describe("validation errors are surfaced", () => {
   it("rejects an unknown gate mode with a readable message", () => {
     expect.assertions(2);

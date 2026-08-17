@@ -3,6 +3,11 @@ import type { Finding, GateMode, MeasurementsMode, Severity } from "@gate/types"
 import { buildCheckRun, type CheckRunConclusion } from "./check-run.js";
 import { coverageState, suppressesGradeForCoverage, type CoverageState } from "./coverage.js";
 import { judgmentState, suppressesGrade, type JudgmentState } from "./judgment.js";
+import {
+  compareMeasurementsToBaseline,
+  type MeasurementBaselineLookup,
+  type MeasurementBaselineStatus,
+} from "./measurement-baseline.js";
 import { isGreenOverMeasured, visibleMeasurements } from "./measurements.js";
 import { sanitizeCodeSpan } from "./sanitize.js";
 import { renderStickyComment } from "./sticky-comment.js";
@@ -77,6 +82,17 @@ export interface DeliveryDecision {
    * checks over a measured one because there is nothing left to be green over.
    */
   suppressedMeasurementKinds?: string[];
+  /**
+   * Whether the measured half was scoped to this pull request, and if not, why.
+   *
+   * Present only when the caller asked for scoping. Carried on the decision so a
+   * run log can record `no_baseline` beside a green check: those two facts read
+   * very differently together, and an operator watching this field is watching
+   * for a fleet that has quietly never been able to gate on anything.
+   */
+  measurementBaseline?: MeasurementBaselineStatus;
+  /** Measured violations this pull request introduced, by kind. */
+  introducedMeasurementKinds?: string[];
 }
 
 export interface DegradationContext {
@@ -95,6 +111,21 @@ export interface DegradationContext {
   measurements?: MeasurementsMode;
   /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
   measurementSuppress?: readonly string[];
+  /**
+   * What Gate has stored for this pull request's BASE commit.
+   *
+   * Supplying it turns the measured half from "everything this run saw" into
+   * "what this pull request added", which is the only form a merge gate can be
+   * run in: without it, the first pull request after installation inherits the
+   * repository's entire back catalogue of pre-existing violations.
+   *
+   * Every non-`found` answer, including "Gate has no store on this path", makes
+   * every violation unclassified, which gates nothing and is stated in as many
+   * words on both surfaces. OMITTING the field entirely is different again: it
+   * means this caller did not ask for scoping at all, and the surfaces render
+   * exactly as they did before baselines existed.
+   */
+  measurementBaseline?: MeasurementBaselineLookup;
   runUrl?: string;
   /** Capture-instability signal from engine result metadata. */
   captureUnstable?: boolean;
@@ -175,6 +206,18 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
   }
   const caveat = caveats.length > 0 ? caveats.join(" ") : undefined;
 
+  // Scope the measured half to what this pull request added, when the caller
+  // asked for scoping. Computed ONCE and handed to both surfaces, so the sticky
+  // comment and the merge-gating Check Run can never disagree about which
+  // violations are this pull request's fault.
+  const baseline =
+    ctx.measurementBaseline === undefined
+      ? undefined
+      : compareMeasurementsToBaseline(result, {
+          lookup: ctx.measurementBaseline,
+          suppress: ctx.measurementSuppress ?? [],
+        });
+
   const comment = renderStickyComment(result, {
     headSha: ctx.headSha,
     runUrl: ctx.runUrl,
@@ -183,11 +226,13 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
     suppress: ctx.suppress,
     measurements: ctx.measurements,
     measurementSuppress: ctx.measurementSuppress,
+    ...(baseline ? { baseline } : {}),
   });
   const checkRun = buildCheckRun(result, ctx.gate, {
     detailsUrl: ctx.runUrl,
     measurements: ctx.measurements,
     measurementSuppress: ctx.measurementSuppress,
+    ...(baseline ? { baseline } : {}),
   });
 
   // The same three conditions `buildCheckRun` requires before a grade is allowed
@@ -210,6 +255,12 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
       conclusion: checkRun.conclusion,
       suppress: ctx.measurementSuppress ?? [],
     }),
+    ...(baseline
+      ? {
+          measurementBaseline: baseline.status,
+          introducedMeasurementKinds: baseline.introduced.map((violation) => violation.kind),
+        }
+      : {}),
     measurementKinds: visible.map((violation) => violation.kind),
     suppressedMeasurementKinds: muted.map((violation) => violation.kind),
     checkRun: { conclusion: checkRun.conclusion, title: checkRun.title, summary: checkRun.summary },

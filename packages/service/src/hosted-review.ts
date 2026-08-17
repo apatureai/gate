@@ -1,9 +1,12 @@
 import {
+  buildMeasurementBaseline,
   type CheckRun,
   type CheckRunConclusion,
   decideDelivery,
   decideDeliveryForError,
   type GitHubCommentsApi,
+  lookupMeasurementBaseline,
+  type MeasurementBaselineStore,
   upsertStickyComment,
 } from "@gate/delivery";
 import {
@@ -69,6 +72,21 @@ export interface HostedReviewDeps {
   runStore?: RunStore;
   /** Durable screenshot-artifact registry (#71), written only for current completed reviews. */
   screenshotRegistry?: ScreenshotRegistryWriter;
+  /**
+   * Durable per-commit measurement sets, which is what makes "introduced by this
+   * pull request" a statement Gate can support.
+   *
+   * Read for the pull request's BASE commit and written for its HEAD, so a
+   * repository accumulates baselines as Gate reviews it and a run on the base
+   * branch is what gives the next pull request something to be compared with.
+   *
+   * Optional, and its absence is not treated as a clean base: with no store,
+   * every measurement is unclassified, `rules.measurements: block` fails nothing,
+   * and both PR surfaces say so. The alternative, reading "I have never looked"
+   * as "there was nothing there", fails a team's first pull request on their
+   * whole back catalogue.
+   */
+  measurementBaselines?: MeasurementBaselineStore;
   /** Hosted App artifacts are private unless a caller explicitly marks them public. */
   screenshotVisibility?: ScreenshotVisibility;
   feedback?: FeedbackSink;
@@ -239,7 +257,43 @@ export async function runHostedReview(
         }),
       );
     }
+
+    // Record what this commit measured, so a later pull request based on it can
+    // be told apart from it. Best-effort by design: a baseline that fails to
+    // store costs the NEXT run its scoping, and must never cost THIS one its
+    // review. The failure is logged rather than swallowed, because a store that
+    // is quietly never written produces a fleet that silently never gates.
+    if (deps.measurementBaselines) {
+      try {
+        await deps.measurementBaselines.record({
+          installationId: ctx.installationId,
+          owner: repo.owner,
+          name: repo.name,
+          commitSha: ctx.pullRequest.headSha,
+          snapshot: buildMeasurementBaseline(outcome.result, {
+            commitSha: ctx.pullRequest.headSha,
+            recordedAtMs: at,
+          }),
+        });
+      } catch (err) {
+        console.error(
+          `[gate] measurement baseline record failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
   }
+
+  // What this repository measured at the pull request's BASE. Always asked for
+  // on this path, including when no store is bound: "Gate cannot classify these"
+  // is a fact a reviewer needs, and leaving the question unasked would render
+  // the measured half as if every pre-existing violation were this pull
+  // request's doing.
+  const measurementBaseline = await lookupMeasurementBaseline(deps.measurementBaselines, {
+    installationId: ctx.installationId,
+    owner: repo.owner,
+    name: repo.name,
+    commitSha: ctx.pullRequest.baseSha,
+  });
 
   const decision = decideDelivery(outcome, {
     headSha: ctx.pullRequest.headSha,
@@ -248,6 +302,7 @@ export async function runHostedReview(
     suppress: config.rules.suppress,
     measurements: config.rules.measurements,
     measurementSuppress: config.rules.measurementSuppress,
+    measurementBaseline,
     runUrl: deps.runUrl,
   });
   if (decision.publishComment && decision.comment) {

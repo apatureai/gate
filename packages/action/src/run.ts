@@ -1,4 +1,5 @@
 import {
+  buildMeasurementBaseline,
   type CheckRun,
   type CheckRunConclusion,
   type CoverageState,
@@ -6,6 +7,8 @@ import {
   decideDeliveryForError,
   type GitHubCommentsApi,
   type JudgmentState,
+  lookupMeasurementBaseline,
+  type MeasurementBaselineStore,
   suppressesGrade,
   suppressesGradeForCoverage,
   upsertStickyComment,
@@ -107,6 +110,18 @@ export interface ActionRunDeps {
   runUrl?: string;
   /** Local build-and-serve supervisor (#70); wired by main.ts for the local-serve path. */
   startLocalServer?: StartLocalServerFn;
+  /**
+   * Durable per-commit measurement sets, read for the pull request's BASE and
+   * written for its HEAD.
+   *
+   * Unbound on the stock Action, which runs inside a GitHub-hosted runner with
+   * no database of its own. That is not treated as "the base was clean": with no
+   * store, every measured violation is unclassified, `rules.measurements: block`
+   * fails nothing, and both surfaces say which of those two things happened. A
+   * self-hosted operator who has a database can pass one and get the same
+   * scoping the App path has.
+   */
+  measurementBaselines?: MeasurementBaselineStore;
   /**
    * Published-review counters, including `gate.review.green_over_measured`.
    *
@@ -308,7 +323,18 @@ export async function runAction(
       return { status: ENGINE_FAILURE_STATUS[failure.kind], conclusion: delivery.checkRun.conclusion };
     }
 
-    // 4. Map the outcome to a safe, non-blocking delivery decision.
+    // 4. Map the outcome to a safe, non-blocking delivery decision, with the
+    // measured half scoped to the pull request's own base commit. The question
+    // is asked even when nothing can answer it, because "Gate has no baseline
+    // here, so none of these can be shown to be new" is the honest reading of a
+    // measured block on a mature repository, and silence would let it be read as
+    // this pull request's fault.
+    const measurementBaseline = await lookupMeasurementBaseline(deps.measurementBaselines, {
+      installationId: ctx.installationId,
+      owner: ctx.repository.owner,
+      name: ctx.repository.name,
+      commitSha: ctx.pullRequest.baseSha,
+    });
     const decision = decideDelivery(outcome, {
       headSha: ctx.pullRequest.headSha,
       gate: config.rules.gate,
@@ -316,6 +342,7 @@ export async function runAction(
       suppress: config.rules.suppress,
       measurements: config.rules.measurements,
       measurementSuppress: config.rules.measurementSuppress,
+      measurementBaseline,
       runUrl: deps.runUrl,
     });
 
@@ -331,6 +358,28 @@ export async function runAction(
       commentAction = upsert.action;
     }
     await deps.publishCheckRun({ name: "Apature Gate", ...decision.checkRun });
+
+    // Record what this head commit measured, so a pull request based on it later
+    // has something to be compared against. Best-effort: a store that refuses a
+    // write costs the NEXT run its scoping and must never cost this one its
+    // published review.
+    if (deps.measurementBaselines && outcome.status === "completed") {
+      try {
+        await deps.measurementBaselines.record({
+          installationId: ctx.installationId,
+          owner: ctx.repository.owner,
+          name: ctx.repository.name,
+          commitSha: ctx.pullRequest.headSha,
+          snapshot: buildMeasurementBaseline(outcome.result, {
+            commitSha: ctx.pullRequest.headSha,
+          }),
+        });
+      } catch (err) {
+        console.error(
+          `[gate] measurement baseline record failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
 
     // Recorded AFTER the publish, never before it: the metric is named for what
     // reached the pull request, and a check that threw on the way out was not

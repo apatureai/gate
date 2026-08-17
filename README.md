@@ -338,7 +338,8 @@ What runs today, from a clean clone, with no credentials:
 | Billing | **Untested against Stripe** | Stripe plumbing and tier limits are unit-tested; no real charge has ever run |
 | Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; run [`verdict`](https://github.com/apatureai/verdict) or write your own, see roadmap item 1 |
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
-| Baseline before/after comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the pairs; nothing on the review path calls it |
+| Baseline before/after screenshot comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the capture pairs; nothing on the review path calls it. Unrelated to the measurement baseline below, which is wired |
+| Measurement baselines (scoping `block` to what a PR introduced) | **Works on the App path** | Stored per repository and commit in `measurement_baselines`. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
 
 Verified on 2026-08-16, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
@@ -370,7 +371,8 @@ Concrete, pickup-able work. Each one names the seam it plugs into.
 
 1. **A reference critique service.** This is the biggest single unlock. Gate calls out over HTTP for browser capture and the model critique; the transport seam is `createHttpEngineTransport` in `packages/engine/src/http.ts`, the wire contract is `packages/types` (`GateReviewRequest` / `GateReviewResult`), and `packages/types/fixtures/` holds the golden fixture that anchors both sides. A minimal implementation is Playwright capture plus one vision-model call returning a `GateReviewResult`. Nothing else on this list matters as much.
 2. **A fixture-backed transport people can import.** The review demo replays a recorded response, but that replay lives inside the demo CLI rather than being exported. A `createFixtureEngineTransport` on `@gate/engine`'s public surface would let anyone run the whole Action path against their own repository with no endpoint at all. Small, high leverage, good first issue.
-3. **Wire up baseline before/after comparison.** `packages/delivery/src/baseline.ts` already builds `ComparisonPair`s and `BeforeAfterArtifact`s behind a `BaselineStore` interface, and it is tested, but no caller exists on the review path. Deciding where the base capture comes from is the interesting half.
+3. **Wire up baseline before/after SCREENSHOT comparison.** `packages/delivery/src/baseline.ts` already builds `ComparisonPair`s and `BeforeAfterArtifact`s behind a `BaselineStore` interface, and it is tested, but no caller exists on the review path. Deciding where the base capture comes from is the interesting half. (The measurement baseline is a different thing and is wired: see [Scoped to what the pull request introduced](#scoped-to-what-the-pull-request-introduced).)
+3b. **Give the Action path somewhere to keep a measurement baseline.** `runAction` accepts a `measurementBaselines` store and the App path binds a Postgres one, but a GitHub-hosted runner has no database, so the stock Action can never scope `rules.measurements: block` and correctly refuses to gate. A store backed by the Actions cache or by a committed lockfile-style artifact, implementing the same two-method `MeasurementBaselineStore` interface, would close that.
 4. **Ship an object-store adapter for screenshots.** `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE` expects a `{objectKey}` template today, and `packages/dashboard` already mints short-lived capability tokens. An S3 or R2 signed-GET signer implementing the same interface would close the loop.
 5. **Keep the dependency tree clean.** Both trees audit clean as of 2026-08-10, and staying there is the ongoing job. The eleven advisories that were open the day before are cleared in [SECURITY.md](SECURITY.md#dependency-advisories), which also records the one pinned override holding a fix in place. Dependabot opens the bumps; what is missing is a CI job that fails on a new advisory rather than leaving it to whoever next runs `pnpm audit` by hand. That job is the pickup-able piece, and it wants the same drift policy as item 10.
 6. **Aggregate cgroup-v2 caps for the supervisor.** The `ulimit` caps are per-process. `pids.max` and `memory.max` on a cgroup would make containment aggregate rather than per-process, which is the difference between a mitigation and a sandbox. Needs host setup, so it wants a design discussion first.
@@ -629,7 +631,8 @@ rules:
   min_severity_to_comment: nit  # nit | minor | major | blocker
   suppress: []                  # finding ids or element selectors to mute (exact match, no globs)
   measurements: advisory        # off | advisory | block, what the engine's MEASURED facts may do
-  measurement_suppress: []      # element selectors, or "<kind>:<element>", to mute (exact match)
+  measurement_suppress: []      # a kind ("contrast"), an element ("#hero"), or "contrast:#hero",
+                                # to mute (exact match, no globs)
 
 tokens:
   source: null            # path to design tokens
@@ -654,7 +657,7 @@ thing on the check a reader can act on.
 |---|---|
 | `off` | The measured block is not rendered. Gate still prints one line saying measurements arrived and are not being shown, because a setting that makes a surface quietly drop evidence is worse than a noisy surface. |
 | `advisory` (default) | Rendered, never changes the Check Run conclusion. |
-| `block` | An engine-marked block-eligible violation makes the check fail, titled *Measured violations*. |
+| `block` | An engine-marked block-eligible violation **that this pull request introduced** makes the check fail, titled *Measured violations*. With no stored baseline for the pull request's base commit, nothing can be shown to be introduced and nothing fails. |
 
 `block` is opt-in and will stay opt-in, exactly like `rules.gate: blockers` and for the same reason:
 the engine does not block on its own authority, and neither does the vendor default. It acts only on
@@ -662,9 +665,61 @@ violations the **engine** marked `blockEligible`, which it does not do lightly: 
 `overflow-x: auto` is content wider than its box on purpose, 44px is WCAG 2.5.5 at level AAA rather
 than the 24px AA line, and a flattened background colour cannot see a background image. Those
 measurements are still reported; what they do not carry is permission to fail somebody's build. Gate
-never computes that flag and never overrides it. Note also that there is no baseline store anywhere
-in this system: every measurement is of the page as it is now, not of what this pull request did to
-it, so `block` on a legacy codebase fails on pre-existing debt from the first run.
+never computes that flag and never overrides it.
+
+#### Scoped to what the pull request introduced
+
+`block` acts on **new** violations only. Gate stores the measurement set it observed for a repository
+at each commit it reviews, and on a pull request it compares this run against the set stored for the
+pull request's **base** commit:
+
+| Placement | Rendered | Gates |
+|---|---|---|
+| Already on the base | Yes, marked *Already on the base* | Never, under any mode |
+| Introduced by this pull request | Yes, listed under *New in this pull request* | Yes, if the mode is `block` and the engine marked it `blockEligible` |
+| Not classifiable | Yes, marked *Not classified* with the reason | Never |
+
+Without this, the first pull request opened after installation inherits every pre-existing contrast
+failure in the repository. As advisory output that is noise; as a merge gate it is unusable, and the
+predictable response is to switch the tool off, after which it reviews nothing forever.
+
+**No baseline never gates, and never reads as a clean result.** A repository Gate has never run on its
+base branch has no stored set for that base commit. Gate says so, in as many words, on both the Check
+Run and the sticky comment: *no baseline. Gate has never recorded a measurement set for base commit
+`abc1234`, so none of the violations above can be shown to be new and none of them are gating.* That
+is deliberately not the same sentence as "this pull request introduced no violations". Treating "I
+have never looked" as "there was nothing there" is exactly how a team gets handed the back catalogue
+this exists to prevent. Three other answers behave identically and each names itself: no baseline
+store bound on this path, a store that could not be read, and a set recorded under an older
+measurement-identity version.
+
+**A page the base run never captured cannot be classified**, and neither can a check the base run
+never executed. Both are reported as *Not classified* with the reason, and neither gates. Gate does
+not guess which side of a pull request an unplaceable violation came from.
+
+**Where the baselines come from.** A completed review records the set for its own head commit. So a
+pull request is scoped once Gate has reviewed its base commit, which in practice means running Gate on
+the base branch. The hosted **App path** has the database and does this automatically. The **Action
+path** runs inside a GitHub-hosted runner with no database, so it binds no store: `rules.measurements:
+block` on the stock Action reports its measurements and fails nothing, and says which of those two
+things happened on every run. A self-hosted operator with a database can pass a store into `runAction`
+and get the App path's behaviour.
+
+**Identity is deliberately hard to move.** A violation is the same violation across two runs when its
+check, its route, its element and the substance of the engine's sentence match. Structural-position
+pseudo-classes are stripped from the selector (`li:nth-child(3)` and `li:nth-child(4)` are one place,
+as are `:first-child` and its `nth-child` spelling), and every number in the engine's sentence is
+replaced before hashing, so a contrast ratio that drifts from 3.23 to 3.19 is one defect measured
+twice rather than one fixed and one introduced. Viewports and the engine's `blockEligible` flag are
+not part of the identity: both move for reasons that are not the defect. Stripping position merges
+genuine siblings, which can hide a newly added third copy of an existing violation; that is the safe
+direction of the trade, and the only one available, since the other direction reports an untouched
+back catalogue as this pull request's fault. The normalization is versioned, and a set recorded under
+a different version is refused rather than compared.
+
+Gate stores only what it needs to answer "is this the same violation": the check and the route in the
+clear, and the element and detail as SHA-256 digests. Selectors and engine sentences derive from the
+customer's page and are never kept.
 
 **Every row says which one it is**, under `advisory` as well as under `block`. A measured row ends in
 `_[block-eligible]_` or `_[advisory only]_`, and the line above the list counts the split, so a reader
@@ -674,19 +729,49 @@ twelve, and an unsorted block could push the one violation the engine stands beh
 favour of twelve it does not. The tag is a disclosure, not a policy: under `advisory` it changes
 nothing about the conclusion.
 
+**The summary names the mode that produced the outcome.** A failing check leads with *Failed by
+measurement*, how many block-eligible measurements were enough to do it, the `rules.measurements:
+block` line that chose it, and the setting to write instead to keep seeing them without failing on
+them. Under `off` the one line that replaces the block names `off`; under `advisory` the sentence
+above the rows says in as many words that `advisory` is what stops the engine acting on them. The
+Check Run and the sticky comment derive that from the same predicate, so the two surfaces published
+on one pull request cannot name different modes.
+
 A measurement is never a finding. It has no severity, so `min_severity_to_comment` cannot filter one,
 and `rules.suppress` does not reach one: muting a judgment and muting a ruler are different acts, and
-one key doing both would hide the second by accident. `measurement_suppress` is the second key, and
-it matches exactly, never as a glob, against a violation's element or its `"<kind>:<element>"` form.
-It cannot reach the engine's own grade retraction, which is computed engine-side and reads no
+one key doing both would hide the second by accident. `measurement_suppress` is the second key. It
+matches exactly, never as a glob, against any one of three forms:
+
+| Entry | Mutes |
+|---|---|
+| `contrast` | every contrast measurement on this repository |
+| `#hero-subtitle` | that element, whatever was measured on it |
+| `contrast:#hero-subtitle` | that kind on that element |
+
+The kind form is the one a reader reaches for first, because every rendered row leads with
+`[contrast]`, and a repository that has decided its palette is a deliberate choice should be able to
+say that once rather than once per selector. Kinds are matched against the violation's own `kind`
+string rather than a list Gate keeps, so a kind the engine adds later is mutable the day it ships.
+Suppression removes a violation from rendering and from block eligibility together: mute the last
+block-eligible violation and a `block` repository's check goes back to whatever the grade said. It
+cannot reach the engine's own grade retraction, which is computed engine-side and reads no
 repository configuration.
+
+**Upgrading is one-directional.** `.gate.yml` is a closed schema, on purpose: a typo like `viewport:`
+is a validation error rather than a silently ignored key. The cost of that is that a Gate build
+predating `rules.measurements` rejects the whole file when it sees the key, rather than ignoring the
+line. Adding `rules.measurements` (or `rules.measurement_suppress`) to a repository raises that
+repository's minimum Gate version; pin the Action to a tag that has them before you write them, and
+if you run the App path and the Action path against the same repository, upgrade both.
 
 **What this still does not close.** The grade remains a pure function of the model's surviving
 findings. A judge that returns one unrelated nit while saying nothing about a measured 3.23:1
 contrast failure grades `ship_with_nits`, and Gate publishes a green tick with the violation printed
 underneath it. Under `advisory`, which is the default, that is what you get. A repository whose
 honest goal is "never merge a WCAG AA contrast failure" wants `measurements: block`, and should read
-the paragraph above about baselines before turning it on.
+the baseline section above before turning it on: `block` acts only on violations Gate can show this
+pull request introduced, so on the App path it needs a review of the base branch on record, and on the
+stock Action it has no store to record one in.
 
 **How often that actually happens, and how you read it.** Leaving the hole open is only defensible if
 the size of it is measured, so Gate counts it. Every published review writes one line to the log the

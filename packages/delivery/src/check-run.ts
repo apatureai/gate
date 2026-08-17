@@ -16,7 +16,13 @@ import {
   judgmentTitle,
   suppressesGrade,
 } from "./judgment.js";
-import { blockEligibleMeasurements, measurementBlock } from "./measurements.js";
+import { baselineSection } from "./measurement-baseline-render.js";
+import type { MeasurementComparison } from "./measurement-baseline.js";
+import {
+  blockEligibleMeasurements,
+  measurementBlock,
+  measurementsAreBlocking,
+} from "./measurements.js";
 import { sanitizeDisplayText } from "./sanitize.js";
 
 /**
@@ -68,6 +74,21 @@ export interface CheckRunContext {
   measurements?: MeasurementsMode;
   /** `rules.measurement_suppress`: exact `element` or `"<kind>:<element>"` matches. */
   measurementSuppress?: readonly string[];
+  /**
+   * This run's measured violations placed against the base commit's stored set.
+   *
+   * When supplied, `rules.measurements: block` fails the check ONLY on
+   * violations this pull request introduced. That is the difference between a
+   * merge gate a team keeps and one they switch off in week one, because the
+   * unscoped form fails the first pull request after installation on the
+   * repository's entire back catalogue.
+   *
+   * Every answer that is not a usable baseline classifies nothing as introduced,
+   * so it can only ever make the check LESS likely to fail, never more. Absent
+   * entirely means this caller did not ask for scoping, and the conclusion is
+   * computed exactly as it was before baselines existed.
+   */
+  baseline?: MeasurementComparison;
 }
 
 export interface CheckRun {
@@ -127,9 +148,15 @@ export function buildCheckRun(
   // same reason: the engine does not block on its own authority, and neither
   // does the vendor default. Only ENGINE-marked block-eligible violations count,
   // and a suppressed one has already been removed.
-  const blocking =
-    measurementsMode === "block" &&
-    blockEligibleMeasurements(result, ctx.measurementSuppress ?? []).length > 0;
+  // ...and, when the caller scoped this run against the base commit, only on
+  // violations this pull request INTRODUCED. Everything else about the mapping
+  // below is unchanged; the scoping can only ever remove a reason to fail.
+  const blocking = measurementsAreBlocking(
+    result,
+    measurementsMode,
+    ctx.measurementSuppress ?? [],
+    ctx.baseline,
+  );
   // Never `success`, never `failure` from a grade that was suppressed: an
   // ungraded run is not a pass, and it is not the repo's PR failing either.
   // `blocking` is the one thing that overrides that, and it is repo policy
@@ -154,6 +181,30 @@ export function buildCheckRun(
           : judgmentTitle(state);
 
   const summaryParts: string[] = [];
+  // FIRST, when a measurement failed this check: a reader who opens a red check
+  // reads the top of the summary, and every other opening line here is about the
+  // grade. Under `block` the grade may be a perfectly good `Ship`, so leading
+  // with it would make the failure look unexplained, or worse, look like the
+  // model's verdict. Name the cause and name the setting that chose it, so the
+  // one person who can change the outcome knows which line of `.gate.yml` to
+  // open. "on their own" is exact: the grade may or may not also be failing,
+  // and this sentence claims only what these measurements are sufficient for.
+  if (blocking) {
+    // Counted from the SAME set that produced the conclusion. When this run was
+    // scoped against the base commit that is the introduced, block-eligible
+    // violations and nothing else, so the number a reader is given is the number
+    // of things they can fix here rather than the size of the back catalogue.
+    const gating = ctx.baseline
+      ? ctx.baseline.introduced.filter((violation) => violation.blockEligible)
+      : blockEligibleMeasurements(result, ctx.measurementSuppress ?? []);
+    summaryParts.push(
+      `**Failed by measurement.** ${gating.length} block-eligible measurement(s) ` +
+        `${ctx.baseline ? "introduced by this pull request " : ""}below are enough to ` +
+        "fail this check on their own, because this repository sets " +
+        "`rules.measurements: block`. No model was involved in producing them. Set " +
+        "`rules.measurements: advisory` to keep seeing them without failing on them.",
+    );
+  }
   if (graded) {
     // The narrative is model prose, and a Check Run summary is Markdown too: it
     // is sanitized here for the same reason the sticky comment sanitizes it.
@@ -200,9 +251,17 @@ export function buildCheckRun(
   const measured = measurementBlock(result, {
     mode: measurementsMode,
     suppress: ctx.measurementSuppress ?? [],
-    blocking,
+    ...(ctx.baseline ? { baseline: ctx.baseline } : {}),
   });
   if (measured) summaryParts.push(measured);
+  // Whose violations those are. Directly under the measured block, because its
+  // most important output is the one where it has nothing to report: "no
+  // baseline, so nothing here could be shown to be new" has to sit next to the
+  // list it is talking about, or it reads as a footnote to a clean result.
+  if (ctx.baseline) {
+    const scoped = baselineSection(ctx.baseline, { mode: measurementsMode, blocking });
+    if (scoped) summaryParts.push(scoped);
+  }
   // What this run covered, on every path including "the engine did not say".
   summaryParts.push(coverageCaveat(result));
   // What the engine skipped, in its own words. Rendered here as well as in the
