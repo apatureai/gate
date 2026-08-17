@@ -166,6 +166,87 @@ describe("a muted violation still spends its entry", () => {
   });
 });
 
+describe("one stored violation answers for one violation here", () => {
+  // The second key used to be MATCHED rather than spent, so a single stored
+  // entry could absolve every violation on its element. An element that was
+  // merely low-contrast and now carries a second, worse failure read as
+  // unchanged, and `block` never saw a regression on markup that already had a
+  // defect of the same check.
+  //
+  // A SECOND DEFECT, not the same one measured worse. Magnitudes are stripped
+  // from every key on purpose, so "contrast 2.91:1" and "contrast 1.02:1" on one
+  // element are one violation whose measurement moved, and neither key nor
+  // budget separates them. What this describes is an element that carries a
+  // second, differently stated failure of the same check.
+  const WORSE: Measurement = {
+    ...TAGLINE,
+    detail: "text is placed over a background image with no contrast floor",
+  };
+
+  it("calls the second defect on an element introduced", () => {
+    const comparison = compare([TAGLINE, WORSE]);
+
+    expect(comparison.preExisting).toEqual([TAGLINE]);
+    expect(comparison.introduced).toEqual([WORSE]);
+  });
+
+  it("fails the check under block", () => {
+    expect(blocks(compare([TAGLINE, WORSE]), [TAGLINE, WORSE])).toBe(true);
+  });
+
+  it("still carries both over when the base recorded both", () => {
+    // The control. Two entries, two violations, nothing new: the budget is only
+    // interesting when it runs out.
+    const comparison = compare([TAGLINE, WORSE], { baseline: baselineOf([TAGLINE, WORSE]) });
+
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.preExisting).toHaveLength(2);
+    expect(comparison.resolved).toBe(0);
+  });
+
+  it("matches the strongest key first, whatever order the engine reported", () => {
+    // WORSE is listed first here. If violations were placed one at a time
+    // through every tier, it would reach the element key and spend the entry
+    // that TAGLINE matches EXACTLY, and the exact match would then be called
+    // introduced. Which violation is carried over would depend on the engine's
+    // ordering rather than on the evidence.
+    const comparison = compare([WORSE, TAGLINE]);
+
+    expect(comparison.preExisting).toEqual([TAGLINE]);
+    expect(comparison.introduced).toEqual([WORSE]);
+  });
+});
+
+describe("an engine upgrade may split one row into two without gating", () => {
+  // The exception to the budget above, and the reason it is an exception. A new
+  // engine can report as two rows what the old one reported as one, and
+  // budgeting that would call the second row new on a page nobody edited. Under
+  // ONE engine a second row is a second defect, because the wording cannot have
+  // moved on its own.
+  const SPLIT_A: Measurement = { ...TAGLINE, detail: "foreground contrast is under the AA minimum" };
+  const SPLIT_B: Measurement = { ...TAGLINE, detail: "placeholder contrast is under the AA minimum" };
+  const BASE = baselineOf([TAGLINE], ENGINE_THEN);
+
+  it("carries both rows over", () => {
+    const comparison = compare([SPLIT_A, SPLIT_B], { baseline: BASE });
+
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.preExisting).toEqual([SPLIT_A, SPLIT_B]);
+  });
+
+  it("does not also report the violation as gone", () => {
+    // A violation Gate just called pre-existing must never be counted among the
+    // ones that are fixed, and the lenient match leaves its entry unspent.
+    expect(compare([SPLIT_A, SPLIT_B], { baseline: BASE }).resolved).toBe(0);
+  });
+
+  it("is not extended to a run on the same engine", () => {
+    const comparison = compare([SPLIT_A, SPLIT_B], { baseline: baselineOf([TAGLINE]) });
+
+    expect(comparison.introduced).toEqual([SPLIT_B]);
+  });
+});
+
 describe("an engine that reworded itself must not manufacture a merge blocker", () => {
   // A wrapper div AND a reworded sentence on the same violation, which is the
   // one combination that misses every key at once.

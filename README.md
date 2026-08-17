@@ -747,15 +747,21 @@ unrelated work whose only escape hatch, `measurement_suppress`, would hide the r
 carried over this way are marked as such on the pull request rather than folded silently into the
 count.
 
-**Two more misses in the same direction, stated because they are silent.** Both call a genuinely new
-violation pre-existing, which means Gate still reports it, still counts it and still shows it to the
-reader; neither turns a check red on unrelated work. First, the second key is matched rather than
-spent, so **one element gaining a second defect of the same check** answers to the stored entry it
-already had: a button that was merely low-contrast and is now invisible reads as unchanged. Second,
-the third key is **blind to magnitudes and thresholds**, because every number in the engine's
-sentence is replaced before hashing. "Same stated defect" therefore means *the same sentence once
-every number in it is replaced*, not the same sentence, so a normal-text contrast failure can claim
-the entry of a deleted large-text one on the same page.
+**One stored violation answers for one violation here**, whichever of the three keys reached it. All
+of them draw on the same budget, and they are applied in tiers, every key finished across all
+violations before the next one begins. A key that merely *matched* would let one stored violation
+absolve every violation on its element, so an element that already had a defect could take on a
+second one and still report as unchanged. Placing violations one at a time instead would let one
+reach a weak key and spend the entry that a later violation matches exactly, making the strength of a
+match depend on the order the engine happened to report things in.
+
+**What this still misses, stated because the miss is silent.** Every key is **blind to magnitudes and
+thresholds**, because every number in the engine's sentence is replaced before hashing. So "contrast
+2.91:1" and "contrast 1.02:1" on one element are one violation whose measurement moved rather than
+two, and a normal-text contrast failure can claim the entry of a deleted large-text one on the same
+page. Keeping the numbers would put every re-measured ratio on the gate, which is the failure the
+baseline exists to prevent. The blindness is chosen, and it lands on the side that reports rather
+than the side that blocks: Gate still renders these, still counts them and still shows them.
 
 **An engine upgrade is the one time the engine's sentence lies.** The detail is the engine's own
 wording, and a new engine version can reword it while the page holds still. A reword on its own is
@@ -766,10 +772,12 @@ engine running now, a violation that matched nothing may spend an unaccounted-fo
 the same page and check, and is then reported as **not classified**: never gated, and never called
 pre-existing either, because nothing has shown it is the same violation. The entry is spent, so two
 new violations cannot both shelter behind one that went missing, and a violation on a page where
-nothing went missing gates as usual. The pull request says which two engine versions were involved.
-An unknown version on either side is **not** treated as skew: Gate cannot show two engines differ
-from a missing field. The next run on the base branch re-records the baseline and restores the
-normal rule.
+nothing went missing gates as usual. Under skew the second key is also matched rather than spent,
+because a new engine may report as two rows what the old one reported as one, and budgeting that
+would call the second row new on a page nobody edited. The pull request says which two engine
+versions were involved. An unknown version on either side is **not** treated as skew: Gate cannot
+show two engines differ from a missing field. The next run on the base branch re-records the baseline
+and restores the normal rule.
 
 Gate stores only what it needs to answer "is this the same violation": the check and the route in the
 clear, and the element, the detail and the defect as SHA-256 digests. Selectors and engine sentences
