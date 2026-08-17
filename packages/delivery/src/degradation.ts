@@ -93,6 +93,16 @@ export interface DeliveryDecision {
   measurementBaseline?: MeasurementBaselineStatus;
   /** Measured violations this pull request introduced, by kind. */
   introducedMeasurementKinds?: string[];
+  /**
+   * Pre-existing violations this pull request moved into a worse severity band,
+   * by kind.
+   *
+   * Its own field rather than more entries in the one above, for the reason the
+   * two are separated everywhere else: these are not violations this pull
+   * request added, and a run log that could not tell them apart would report a
+   * repository regressing its back catalogue as one adding new defects.
+   */
+  worsenedMeasurementKinds?: string[];
 }
 
 export interface DegradationContext {
@@ -259,6 +269,7 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
       ? {
           measurementBaseline: baseline.status,
           introducedMeasurementKinds: baseline.introduced.map((violation) => violation.kind),
+          worsenedMeasurementKinds: baseline.worsened.map((violation) => violation.kind),
         }
       : {}),
     measurementKinds: visible.map((violation) => violation.kind),

@@ -133,7 +133,28 @@ function asEntries(value: unknown): MeasurementBaselineEntry[] {
     ) {
       continue;
     }
-    entries.push({ kind: kind as MeasurementKind, route, elementKey, fingerprint, defectKey });
+    // `severity` is the opposite case from `defectKey`, and it is optional for a
+    // reason the rest of this reader shares: a row written before the band
+    // existed carries no band, was stamped with the SAME identity version
+    // (identity did not change when the band was added), and is therefore
+    // compared normally. It has to come back as absent, which reads as unknown
+    // and gates on nothing. Anything that is not a positive integer is dropped
+    // to absent for the same reason: a `0`, a `2.91` or a `"3"` that reached
+    // jsonb is not a band, and reading one as a band would compare this run
+    // against a number nothing produced.
+    const severity = row.severity;
+    const banded =
+      typeof severity === "number" && Number.isInteger(severity) && severity > 0
+        ? { severity }
+        : {};
+    entries.push({
+      kind: kind as MeasurementKind,
+      route,
+      elementKey,
+      fingerprint,
+      defectKey,
+      ...banded,
+    });
   }
   return entries;
 }

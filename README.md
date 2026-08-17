@@ -657,7 +657,7 @@ thing on the check a reader can act on.
 |---|---|
 | `off` | The measured block is not rendered. Gate still prints one line saying measurements arrived and are not being shown, because a setting that makes a surface quietly drop evidence is worse than a noisy surface. |
 | `advisory` (default) | Rendered, never changes the Check Run conclusion. |
-| `block` | An engine-marked block-eligible violation **that this pull request introduced** makes the check fail, titled *Measured violations*. With no stored baseline for the pull request's base commit, nothing can be shown to be introduced and nothing fails. |
+| `block` | An engine-marked block-eligible violation **that this pull request introduced, or that it moved into a worse severity band**, makes the check fail, titled *Measured violations*. With no stored baseline for the pull request's base commit, nothing can be shown to be either and nothing fails. |
 
 `block` is opt-in and will stay opt-in, exactly like `rules.gate: blockers` and for the same reason:
 the engine does not block on its own authority, and neither does the vendor default. It acts only on
@@ -676,6 +676,7 @@ pull request's **base** commit:
 | Placement | Rendered | Gates |
 |---|---|---|
 | Already on the base | Yes, marked *Already on the base* | Never, under any mode |
+| Already on the base, in a worse severity band | Yes, listed under *Made worse by this pull request*, with the band before and after | Yes, if the mode is `block`, the engine marked it `blockEligible`, and the band is known on both sides |
 | Introduced by this pull request | Yes, listed under *New in this pull request* | Yes, if the mode is `block` and the engine marked it `blockEligible` |
 | Not classifiable | Yes, marked *Not classified* with the reason | Never |
 
@@ -755,13 +756,57 @@ second one and still report as unchanged. Placing violations one at a time inste
 reach a weak key and spend the entry that a later violation matches exactly, making the strength of a
 match depend on the order the engine happened to report things in.
 
-**What this still misses, stated because the miss is silent.** Every key is **blind to magnitudes and
-thresholds**, because every number in the engine's sentence is replaced before hashing. So "contrast
-2.91:1" and "contrast 1.02:1" on one element are one violation whose measurement moved rather than
-two, and a normal-text contrast failure can claim the entry of a deleted large-text one on the same
-page. Keeping the numbers would put every re-measured ratio on the gate, which is the failure the
-baseline exists to prevent. The blindness is chosen, and it lands on the side that reports rather
-than the side that blocks: Gate still renders these, still counts them and still shows them.
+**Every key is blind to magnitudes and thresholds**, because every number in the engine's sentence is
+replaced before hashing. So "contrast 2.91:1" and "contrast 1.02:1" on one element are one violation
+whose measurement moved rather than two, and a normal-text contrast failure can claim the entry of a
+deleted large-text one on the same page. Keeping the numbers would put every re-measured ratio on the
+gate, which is the failure the baseline exists to prevent, so the blindness is chosen.
+
+#### A violation that was already there can still be made worse
+
+The blindness above is the right call and it used to have a silent cost: a pull request could take an
+element from **2.91:1 to 1.02:1**, the fingerprint matched exactly, and Gate reported it as
+pre-existing and unchanged. A real regression, on markup that already had a defect, went through a
+`block` gate without a word.
+
+Gate cannot close that on its own, and the shape of the fix follows from why. Gate stores hashes:
+selectors and engine sentences derive from the customer's page and are never kept, so there are no
+numbers here to compare. And Gate cannot tell from prose which **direction** is worse, since lower is
+worse for contrast, larger for overflow and smaller for a touch target; deriving that from the
+engine's wording would be Gate computing a judgment the engine owns. So the **engine** states an
+ordinal severity band per violation, Gate stores it beside the keys, and Gate compares bands and
+nothing else. Raw magnitudes still never cross the boundary.
+
+The bands are the engine's, and they are coarse on purpose, so ordinary re-measurement noise cannot
+move one and a band that did move is a material change by construction:
+
+| Check | Band 1 | Band 2 | Band 3 |
+|---|---|---|---|
+| `contrast` | ratio >= 3.0 (WCAG AA for large text) | >= 1.5 | < 1.5, which is near-invisible |
+| `touch_target` | smallest dimension >= 24px (SC 2.5.8, level AA; 44px is SC 2.5.5, level AAA) | >= 10px | < 10px |
+| `overflow` | excess <= 10% of the viewport width | <= 50% | more |
+
+A band is **ordinal**: higher is worse, it is comparable only within one check, and it is never a
+magnitude and never arithmetic. It answers "which band of badness", not "how bad".
+
+A pre-existing violation whose band is **higher** than the band stored for the base is **worsened**.
+It is not called introduced, because it was already here, and a reader who is told it is new goes
+looking for markup they never wrote. It gets its own count and its own section, *Made worse by this
+pull request*, with the band before and after on the row. Under `block` it fails the check on the
+same terms an introduced violation does: the engine must have marked it `blockEligible`, and the
+comparison must be strictly greater, so a band that did not move is never a regression.
+
+**An unknown band never gates, on either side.** An engine that does not state one, a baseline
+recorded before the field existed, and a check that computes no band all leave one side unknown, and
+an unknown is not a comparison. This is the rule `blockEligible` already follows, and it is what lets
+the field ship without a stored baseline anywhere in the field becoming untrustworthy. Absence is
+stored as absence rather than as `0`: zero is the bottom of the scale, so reading it as a band would
+turn every banded violation on an old baseline into a regression the next pull request caused.
+
+**Identity does not move.** A band is a fact about a violation, not what makes two violations the same
+one, so it is in no key and `MEASUREMENT_IDENTITY_VERSION` is unchanged. Entries are stored as
+`jsonb`, so there is no migration either: every baseline already recorded keeps comparing, without a
+band, exactly as it did.
 
 **An engine upgrade is the one time the engine's sentence lies.** The detail is the engine's own
 wording, and a new engine version can reword it while the page holds still. A reword on its own is
@@ -792,15 +837,17 @@ favour of twelve it does not. The tag is a disclosure, not a policy: under `advi
 nothing about the conclusion.
 
 **The summary names the mode that produced the outcome.** A failing check leads with *Failed by
-measurement*, how many block-eligible measurements were enough to do it, the `rules.measurements:
-block` line that chose it, and the setting to write instead to keep seeing them without failing on
+measurement*, how many block-eligible measurements were enough to do it, whether they were introduced
+here or moved into a worse severity band here, the `rules.measurements: block` line that chose it, and
+the setting to write instead to keep seeing them without failing on
 them. Under `off` the one line that replaces the block names `off`; under `advisory` the sentence
 above the rows says in as many words that `advisory` is what stops the engine acting on them. The
 Check Run and the sticky comment derive that from the same predicate, so the two surfaces published
 on one pull request cannot name different modes.
 
-A measurement is never a finding. It has no severity, so `min_severity_to_comment` cannot filter one,
-and `rules.suppress` does not reach one: muting a judgment and muting a ruler are different acts, and
+A measurement is never a finding. Its severity band is an ordinal band the engine computes from a
+threshold, not a judged `Severity`, so `min_severity_to_comment` does not filter one and
+`rules.suppress` does not reach one: muting a judgment and muting a ruler are different acts, and
 one key doing both would hide the second by accident. `measurement_suppress` is the second key. It
 matches exactly, never as a glob, against any one of three forms:
 

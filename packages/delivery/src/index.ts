@@ -38,6 +38,7 @@ export type { CoverageState } from "./coverage.js";
 export {
   MAX_MEASUREMENT_LINES,
   blockEligibleMeasurements,
+  gateableMeasurements,
   isGreenOverMeasured,
   measurementBlock,
   measurementLine,
@@ -61,7 +62,6 @@ export {
   buildMeasurementBaseline,
   compareMeasurementsToBaseline,
   createInMemoryMeasurementBaselineStore,
-  gateableMeasurements,
   lookupMeasurementBaseline,
   measuredKinds,
   measuredRoutes,

@@ -112,12 +112,30 @@ function uncomparableParagraph(comparison: MeasurementComparison, mode: Measurem
   }
 }
 
+/**
+ * A row's band change, as the reader's own words rather than two bare numbers.
+ *
+ * Written out only where both bands are known, which is the only state that ever
+ * reaches this: a row with an unknown band on either side is not worsened and is
+ * never listed here. Ordinal and within one check, so it is deliberately not
+ * dressed up as a magnitude, a percentage or a delta.
+ */
+function bandChange(row: ClassifiedMeasurement): string {
+  return ` _[severity band ${row.baselineSeverity} on the base, ${row.currentSeverity} here]_`;
+}
+
 /** The counts line for a comparison that actually happened. */
 function comparedHeading(comparison: MeasurementComparison): string {
   const parts = [
     `**${comparison.introduced.length} introduced by this pull request**`,
-    `${comparison.preExisting.length} already on the base`,
   ];
+  // Its own count, beside the introduced one and never folded into it. Folding
+  // would make a pull request that added nothing and broke something read as if
+  // it had added something, and a reader cannot un-see a wrong number.
+  if (comparison.worsened.length > 0) {
+    parts.push(`**${comparison.worsened.length} already on the base and made worse here**`);
+  }
+  parts.push(`${comparison.preExisting.length} already on the base`);
   if (comparison.unclassified.length > 0) {
     parts.push(`${comparison.unclassified.length} not classified`);
   }
@@ -175,7 +193,29 @@ export function baselineSection(
     const remaining = comparison.introduced.length - shown.length;
     const list = shown.map(measurementLine).join("\n");
     lines.push(`**New in this pull request**\n${list}${remaining > 0 ? `\n…and ${remaining} more` : ""}`);
-  } else if (comparison.preExisting.length > 0) {
+  }
+
+  // Its OWN section, between the new ones and the carried-over ones, because it
+  // is neither. The sentence a reader has to leave with is that this violation
+  // was already here and this pull request made it materially worse, which is
+  // true, and is different from "new". Folding it into either neighbour loses
+  // one half of that: filed as new it accuses an author of markup they did not
+  // write, filed as an ordinary carry-over it says nothing happened.
+  if (comparison.worsened.length > 0) {
+    const rows = comparison.classified.filter((row) => row.worsened === true);
+    const shown = rows.slice(0, MAX_MEASUREMENT_LINES);
+    const remaining = rows.length - shown.length;
+    const list = shown.map((row) => `${measurementLine(row.measurement)}${bandChange(row)}`).join("\n");
+    lines.push(
+      "**Made worse by this pull request**\nEach of these was already on the base and this pull " +
+        "request moved it into a worse severity band, which the engine states and Gate compares. " +
+        "They are not new violations, and they are not unchanged ones. The band is ordinal and " +
+        "comparable only within one check; Gate never sees the measurement behind it.\n" +
+        `${list}${remaining > 0 ? `\n…and ${remaining} more` : ""}`,
+    );
+  }
+
+  if (comparison.introduced.length === 0 && comparison.worsened.length === 0 && comparison.preExisting.length > 0) {
     // The claim this whole section exists to make say-able. It is only true
     // because a comparable baseline was found, which is why the uncomparable
     // branch above may never reach this sentence, and it claims only the
@@ -199,10 +239,22 @@ export function baselineSection(
       (row) => row.origin === "pre_existing" && row.elementChanged === true,
     ).length;
     const carried = comparison.preExisting.length;
+    // The blanket "these never fail a check" is TRUE only while none of them got
+    // worse, and a worsened violation is a pre-existing one. Left unqualified it
+    // would be the one sentence on this surface that contradicts the red check
+    // beside it, so when any of these gated, the count that did is named and the
+    // promise is made about the rest.
+    const worsened = comparison.worsened.length;
+    const neverGates =
+      worsened === 0
+        ? "They are reported and they never fail a check, whatever `rules.measurements` is set to."
+        : `${worsened} of them ${worsened === 1 ? "is" : "are"} listed above as made worse, and ` +
+          "under `rules.measurements: block` a worsened violation can fail this check. The rest " +
+          "are reported and never do, whatever `rules.measurements` is set to.";
     lines.push(
       `**Already on the base** — ${carried} of the violation(s) above ` +
         `${carried === 1 ? "was" : "were"} already there before this pull request. ` +
-        "They are reported and they never fail a check, whatever `rules.measurements` is set to." +
+        neverGates +
         (changed > 0
           ? ` ${changed} of them ${changed === 1 ? "is" : "are"} the same defect on the same element ` +
             "with a different measurement, which is a change in degree and not a new violation."
@@ -242,13 +294,24 @@ export function baselineSection(
   }
 
   if (mode === "block") {
+    // Worded from what actually gated, not from what is merely present: a
+    // worsened violation the engine will not stand behind is on the page and is
+    // not the reason for anything, and naming it here would send an author to
+    // fix the wrong row.
+    const worsenedGating = comparison.worsened.filter((violation) => violation.blockEligible).length;
     lines.push(
       options.blocking
-        ? "This repository sets `rules.measurements: block`, so the new block-eligible violation(s) " +
-          "above failed this check. Pre-existing and unclassified violations never do."
+        ? worsenedGating > 0
+          ? "This repository sets `rules.measurements: block`, so the block-eligible violation(s) " +
+            "above that this pull request either introduced or moved into a worse severity band " +
+            "failed this check. A pre-existing violation whose band did not move never does, and " +
+            "neither does an unclassified one."
+          : "This repository sets `rules.measurements: block`, so the new block-eligible violation(s) " +
+            "above failed this check. Pre-existing and unclassified violations never do."
         : "This repository sets `rules.measurements: block`. Nothing here failed the check: a " +
-          "violation fails one only when it is both new in this pull request and marked " +
-          "block-eligible by the engine.",
+          "violation fails one only when the engine marked it block-eligible and it is either new " +
+          "in this pull request or one this pull request moved into a worse severity band, with a " +
+          "band known on both sides.",
     );
   }
 

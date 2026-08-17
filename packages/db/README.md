@@ -16,11 +16,15 @@ storage, never here.
 - `measurement_baselines`: the measurement set observed for a repository at a
   commit, keyed `UNIQUE(repo_owner, repo_name, commit_sha)`. This is what lets a
   pull request be told apart from its own back catalogue: a violation in the set
-  stored for the PR's base is pre-existing and never gates, one absent from it
-  was introduced by the PR. No row for a base commit means Gate has never
+  stored for the PR's base is pre-existing, one absent from it was introduced by
+  the PR. No row for a base commit means Gate has never
   measured it, which is reported as "no baseline" and never as a clean base.
   Stores the check kind and route in the clear and the element/detail identity as
-  SHA-256 digests, so no selector or engine sentence is kept.
+  SHA-256 digests, so no selector or engine sentence is kept. Each entry may also
+  carry the engine's ordinal `severity` band, which is what lets a violation that
+  was already on the base be shown to have got materially worse. It lives inside
+  the existing `entries` jsonb, so it needed no migration and no identity bump,
+  and an entry stored without one reads as unknown and gates on nothing.
 - `feedback_events`: product-facing feedback.
 - `billing_customers`: Stripe/plan state.
 - `webhook_log`: `delivery_id` PK for at-least-once webhook dedupe (§15.4).

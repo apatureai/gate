@@ -109,6 +109,33 @@ export function blockEligibleMeasurements(
 }
 
 /**
+ * The violations a scoped run's `rules.measurements: block` may fail a check on.
+ *
+ * TWO WAYS IN, AND THEY ARE DIFFERENT CLAIMS. A violation this pull request
+ * INTRODUCED, and a violation that was already on the base and that this pull
+ * request moved into a WORSE severity band. The second is not a special case of
+ * the first: it was here before, and saying it is new would send an author
+ * looking for markup they did not write. It is also not nothing, which is what
+ * it used to be: the numbers are stripped out of the baseline keys, so an
+ * element taken from 2.91:1 to 1.02:1 matched its stored entry exactly and
+ * reported as unchanged, and a `block` repository merged it.
+ *
+ * The engine's `blockEligible` governs both, unchanged and without exception:
+ * the engine decides what is precise enough to gate on, the baseline decides
+ * what this pull request is answerable for, and neither alone is enough. A
+ * worsened violation also needs a band on BOTH sides, which
+ * `compareMeasurementsToBaseline` has already established before it puts a
+ * violation in `worsened` at all: unknown never gates.
+ *
+ * Introduced first, because that is the order both surfaces list them in.
+ */
+export function gateableMeasurements(comparison: MeasurementComparison): Measurement[] {
+  return [...comparison.introduced, ...comparison.worsened].filter(
+    (violation) => violation.blockEligible,
+  );
+}
+
+/**
  * Whether this repository's own configuration turns these measurements into a
  * failing check.
  *
@@ -131,12 +158,13 @@ export function measurementsAreBlocking(
 ): boolean {
   if ((mode ?? "advisory") !== "block") return false;
   // A THIRD condition, when the caller scoped this run against the base commit:
-  // the violation has to be one this pull request introduced. Without it, the
-  // first pull request opened after installation fails on every pre-existing
-  // violation in the repository, which is how a merge gate gets switched off in
-  // its first week. An absent, unreadable or incomparable baseline classifies
-  // nothing as introduced, so it can only ever make this answer `false`.
-  if (baseline) return baseline.introduced.filter((violation) => violation.blockEligible).length > 0;
+  // the violation has to be one this pull request introduced, or one it made
+  // materially worse. Without it, the first pull request opened after
+  // installation fails on every pre-existing violation in the repository, which
+  // is how a merge gate gets switched off in its first week. An absent,
+  // unreadable or incomparable baseline classifies nothing as introduced and
+  // nothing as worsened, so it can only ever make this answer `false`.
+  if (baseline) return gateableMeasurements(baseline).length > 0;
   return blockEligibleMeasurements(result, suppress).length > 0;
 }
 
@@ -235,7 +263,7 @@ function eligibilitySummary(
       ? "."
       : mode === "block"
         ? ", which this repository's `rules.measurements: block` lets it do only for the ones this " +
-          "pull request introduced."
+          "pull request introduced or moved into a worse severity band."
         : ", which this repository's `rules.measurements: advisory` does not let it do.");
   if (advisory === 0) return stands;
   return (

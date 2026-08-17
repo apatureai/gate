@@ -131,6 +131,40 @@ import { suppressMeasurements } from "./measurements.js";
  * this whole module exists to prevent, so the blindness is chosen and the miss
  * lands on the side that reports rather than the side that blocks.
  *
+ * A VIOLATION THAT WAS ALREADY HERE CAN STILL BE MADE WORSE (added August 17,
+ * 2026), and until now that was invisible. The paragraph above is exactly right
+ * about why the numbers are stripped, and exactly wrong about what to do next: a
+ * pull request that takes an element from 2.91:1 to 1.02:1 matched the stored
+ * entry, reported as pre-existing, and reported as UNCHANGED. A real regression
+ * on markup that already had a defect passed a `block` gate in silence.
+ *
+ * Gate cannot close that on its own, and the shape of the fix follows from why.
+ * Gate stores hashes: selectors and engine sentences derive from the customer's
+ * page and are deliberately never kept, so there are no numbers here to compare.
+ * And Gate cannot tell from prose which DIRECTION is worse, since lower is worse
+ * for contrast, larger for overflow and smaller for a touch target; deriving
+ * that from the engine's wording would be Gate computing a judgment the engine
+ * owns. So the engine states an ordinal `severity` BAND per violation, Gate
+ * stores it beside the keys, and Gate compares bands and nothing else. The bands
+ * are coarse enough that re-measurement noise cannot move one, which is what
+ * makes a band change a material change by construction. Raw magnitudes still
+ * never cross this boundary.
+ *
+ * A pre-existing violation whose current band is HIGHER than the band stored for
+ * the entry it claimed is WORSENED. It is not introduced, and calling it that
+ * would be a lie a reader would act on: this violation was already here, and
+ * this pull request made it materially worse. Those are different sentences, and
+ * every surface keeps them apart. Under `block` a worsened violation fails the
+ * check on the same terms an introduced one does, and one more: BOTH BANDS MUST
+ * BE KNOWN. An older engine, an entry stored before the field existed, or a
+ * check that computes no band leaves an unknown on one side, and an unknown
+ * never gates, exactly as an absent `blockEligible` never gates.
+ *
+ * Identity is untouched by any of this. A band is a fact ABOUT a violation, not
+ * part of what makes two violations the same one, so it is not in any key and
+ * `MEASUREMENT_IDENTITY_VERSION` does not move. A bump would invalidate every
+ * baseline stored in the field to add a column nothing matches on.
+ *
  * THE ROUTE IS NEVER FUZZY, AND A RENAMED PAGE IS THEREFORE UNCLASSIFIED. `/`
  * becoming `/home` is a markup refactor's cousin, and it is deliberately NOT
  * absorbed: the route is the last coordinate that keeps two pages apart, and a
@@ -157,6 +191,21 @@ export interface MeasurementBaselineEntry {
    * or a class rename, and the only one that is spent instead of matched.
    */
   defectKey: string;
+  /**
+   * The ENGINE's ordinal severity band as it stood on the base commit. Higher is
+   * worse, comparable only within a `kind`.
+   *
+   * NOT part of any key and not part of the identity: it is a fact about the
+   * violation, not what makes two violations the same one, which is why adding
+   * it does not move `MEASUREMENT_IDENTITY_VERSION`.
+   *
+   * Optional because an entry stored before this field existed has no band, and
+   * because an engine may not compute one. That absence must read as UNKNOWN and
+   * never as zero: zero is the bottom of the scale, so treating it as a number
+   * would make every band above it look like a regression this pull request
+   * caused, on a repository that has changed nothing.
+   */
+  severity?: number;
 }
 
 /**
@@ -252,6 +301,11 @@ export function buildMeasurementBaseline(
       elementKey: measurementElementKey(violation),
       fingerprint: measurementFingerprint(violation),
       defectKey: measurementDefectKey(violation),
+      // Recorded only when the engine stated one. The key is left off entirely
+      // rather than written as `undefined` or `0`, so a snapshot round-tripped
+      // through jsonb says "this engine did not state a band" rather than
+      // "this engine stated the best band there is".
+      ...(violation.severity !== undefined ? { severity: violation.severity } : {}),
     })),
     engineVersion: result.metadata.engineVersion ?? null,
     ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
@@ -362,6 +416,27 @@ export interface ClassifiedMeasurement {
    * and marked so a reader can see which of the two it is.
    */
   elementChanged?: boolean;
+  /**
+   * This violation was already on the base and this pull request moved it into a
+   * WORSE severity band.
+   *
+   * Its own claim, not a synonym for either of its neighbours. "Introduced"
+   * would be false, because the violation was already here; "pre-existing, and
+   * that is all" would be false too, because the page really did get worse and a
+   * `block` repository asked to hear about exactly that. Set only when both
+   * bands are known and the current one is STRICTLY higher, so an unknown on
+   * either side leaves the row an ordinary carry-over and an unmoved band is not
+   * a regression.
+   *
+   * `origin` stays `pre_existing`: this changes what a violation DID, not where
+   * it came from, and a row counted as introduced on one surface and
+   * pre-existing on another is how two published surfaces start disagreeing.
+   */
+  worsened?: boolean;
+  /** The band recorded for the entry this violation claimed, when one is known. */
+  baselineSeverity?: number;
+  /** The band the engine states for this violation now, when it states one. */
+  currentSeverity?: number;
 }
 
 export type MeasurementBaselineStatus =
@@ -398,6 +473,16 @@ export interface MeasurementComparison {
   classified: ClassifiedMeasurement[];
   introduced: Measurement[];
   preExisting: Measurement[];
+  /**
+   * Pre-existing violations this pull request moved into a worse severity band.
+   *
+   * A SUBSET of `preExisting`, deliberately, and never a member of `introduced`:
+   * every one of these was already on the base, and the count that says how many
+   * violations this pull request added must not quietly grow by them. Under
+   * `block` they gate on the same terms an introduced violation does, which is
+   * the whole point of separating them out rather than leaving them silent.
+   */
+  worsened: Measurement[];
   unclassified: Measurement[];
   /**
    * Baseline violations that are gone: recorded on the base, on a route and
@@ -441,6 +526,10 @@ function uncomparable(
     classified,
     introduced: [],
     preExisting: [],
+    // Nothing was placed against the base, so nothing can be shown to have got
+    // worse either. An uncomparable baseline gates on exactly as little as it
+    // did before bands existed.
+    worsened: [],
     unclassified: [...violations],
     resolved: 0,
   };
@@ -526,17 +615,80 @@ export function compareMeasurementsToBaseline(
    * Every index points into the same entries, so a pop has to walk past
    * anything another index already spent. An entry is claimable exactly once,
    * whichever door it is reached through.
+   *
+   * Returns the POSITION of the entry it spent rather than a bare `true`,
+   * because the band comparison has to read the stored severity off the very
+   * entry this violation claimed. Any other entry on the page is a different
+   * violation's band, and comparing against it would report a regression that
+   * belongs to something else. Position `0` is a real answer, so every caller
+   * tests `!== undefined` and never truthiness.
    */
-  const spend = (index: Map<string, number[]>, key: string): boolean => {
+  const spend = (index: Map<string, number[]>, key: string): number | undefined => {
     const waiting = index.get(key);
     while (waiting && waiting.length > 0) {
       const entry = waiting.pop();
       if (entry === undefined) break;
       if (claimedEntries.has(entry)) continue;
       claimedEntries.add(entry);
-      return true;
+      return entry;
     }
-    return false;
+    return undefined;
+  };
+
+  /**
+   * A carried-over violation, with the band comparison attached.
+   *
+   * `stored` is the band recorded for the entry this violation claimed, or
+   * `undefined` when there is none to read. UNKNOWN ON EITHER SIDE IS NOT A
+   * COMPARISON: no band reaches the row, `worsened` is not set, and the
+   * violation stays an ordinary pre-existing one that gates on nothing. That is
+   * the rule an absent `blockEligible` already follows, and it is what keeps an
+   * older engine, a baseline stored before the field existed, and a check that
+   * computes no band from authorizing a merge block. Reading an absent band as
+   * `0` would do the opposite of all three: zero is the bottom of the scale, so
+   * every banded violation on an old baseline would read as a regression this
+   * pull request caused.
+   *
+   * The test is STRICTLY greater, never `>=`. A band that did not move is a
+   * violation that did not get worse, and `>=` would turn every unchanged
+   * carry-over on the page into a red check.
+   */
+  const carried = (
+    measurement: Measurement,
+    stored: number | undefined,
+    extra: Omit<ClassifiedMeasurement, "measurement" | "origin"> = {},
+  ): ClassifiedMeasurement => {
+    const row: ClassifiedMeasurement = { measurement, origin: "pre_existing", ...extra };
+    const current = measurement.severity;
+    if (stored === undefined || current === undefined) return row;
+    row.baselineSeverity = stored;
+    row.currentSeverity = current;
+    if (current > stored) row.worsened = true;
+    return row;
+  };
+
+  /**
+   * The band to compare against when an element key was MATCHED and not spent.
+   *
+   * Exactly one path reaches this: the lenient element tier under engine skew,
+   * where there is no single claimed entry to read a band off. The WORST band
+   * recorded for that element is taken, and one entry without a band makes the
+   * whole answer unknown.
+   *
+   * Both halves lean the same way, away from calling a violation worsened. Under
+   * skew a new engine may report as several rows what the old one reported as
+   * one, so the row in hand is not necessarily the whole of what was stored, and
+   * a false "worsened" is a red check on work that did not cause it: the one
+   * error this module spends everything else avoiding.
+   */
+  const worstRecordedSeverity = (elementKey: string): number | undefined => {
+    let worst: number | undefined;
+    for (const entry of snapshot.entries) {
+      if (entry.elementKey !== elementKey) continue;
+      if (entry.severity === undefined) return undefined;
+      if (worst === undefined || entry.severity > worst) worst = entry.severity;
+    }
+    return worst;
   };
 
   // A baseline recorded by one engine and a run produced by another are the only
@@ -608,11 +760,15 @@ export function compareMeasurementsToBaseline(
     return null;
   });
 
-  const afterExact = tier(comparable, (measurement) =>
-    spend(byFingerprint, measurementFingerprint(measurement))
-      ? { measurement, origin: "pre_existing" as const }
-      : null,
-  );
+  const afterExact = tier(comparable, (measurement) => {
+    const entry = spend(byFingerprint, measurementFingerprint(measurement));
+    if (entry === undefined) return null;
+    // The tier that most needs the band. A fingerprint hit means the engine's
+    // sentence matched ONCE EVERY NUMBER IN IT WAS REPLACED, so 2.91:1 and
+    // 1.02:1 on one element land here as the same violation. Before the band,
+    // that was where a real regression went silent.
+    return carried(measurement, snapshot.entries[entry]?.severity);
+  });
 
   // Same check, same page, same element, and the engine's sentence differs.
   // Spent like every other tier, EXCEPT under engine skew, where it is only
@@ -628,18 +784,18 @@ export function compareMeasurementsToBaseline(
       // recorded as accounted for all the same: a violation Gate just called
       // pre-existing must never also be counted among the ones that are gone.
       answeredLeniently.add(key);
-      return { measurement, origin: "pre_existing" as const, detailChanged: true };
+      return carried(measurement, worstRecordedSeverity(key), { detailChanged: true });
     }
-    return spend(byElementKey, key)
-      ? { measurement, origin: "pre_existing" as const, detailChanged: true }
-      : null;
+    const entry = spend(byElementKey, key);
+    if (entry === undefined) return null;
+    return carried(measurement, snapshot.entries[entry]?.severity, { detailChanged: true });
   });
 
-  const afterDefect = tier(afterElement, (measurement) =>
-    spend(byDefectKey, measurementDefectKey(measurement))
-      ? { measurement, origin: "pre_existing" as const, elementChanged: true }
-      : null,
-  );
+  const afterDefect = tier(afterElement, (measurement) => {
+    const entry = spend(byDefectKey, measurementDefectKey(measurement));
+    if (entry === undefined) return null;
+    return carried(measurement, snapshot.entries[entry]?.severity, { elementChanged: true });
+  });
 
   // Under skew, and only under skew, a violation that missed every key may still
   // be an old one the engine reworded while the markup moved. It is not called
@@ -649,7 +805,8 @@ export function compareMeasurementsToBaseline(
   // that vanished, and a violation on a page where nothing went missing still
   // gates normally.
   const introduced = tier(afterDefect, (measurement) =>
-    engineSkew && spend(byRouteKind, routeKind(measurement.kind, normalizeRoute(measurement.route)))
+    engineSkew &&
+    spend(byRouteKind, routeKind(measurement.kind, normalizeRoute(measurement.route))) !== undefined
       ? { measurement, origin: "unclassified" as const, reason: "engine_skew" as const }
       : null,
   );
@@ -684,21 +841,27 @@ export function compareMeasurementsToBaseline(
     classified,
     introduced: classified.filter((row) => row.origin === "introduced").map((row) => row.measurement),
     preExisting: classified.filter((row) => row.origin === "pre_existing").map((row) => row.measurement),
+    // A subset of `preExisting` by construction: `worsened` is only ever set on
+    // a row this comparison already placed as pre-existing, so a violation that
+    // got worse is counted once as carried over and once as worsened, and never
+    // once as new.
+    worsened: classified.filter((row) => row.worsened === true).map((row) => row.measurement),
     unclassified: classified.filter((row) => row.origin === "unclassified").map((row) => row.measurement),
     resolved,
   };
 }
 
 /**
- * The violations a repository's `rules.measurements: block` may fail a check on.
+ * The violations a repository's `rules.measurements: block` may fail a check on
+ * live in `measurements.ts` as `gateableMeasurements`, beside the predicate that
+ * decides whether a check is blocking at all.
  *
- * Introduced AND engine-marked block-eligible. Both conditions, always: the
- * engine decides what is precise enough to gate on, the baseline decides what
- * this pull request is answerable for, and neither one alone is enough.
+ * They are one rule, and three surfaces read it: the Check Run conclusion, the
+ * Check Run's own headline count, and the sentence in the measured block that
+ * tells a reader which mode produced their outcome. Two copies of it drifted
+ * once already and published a comment stating the wrong mode, so there is one
+ * copy, in the module both directions can import without a cycle.
  */
-export function gateableMeasurements(comparison: MeasurementComparison): Measurement[] {
-  return comparison.introduced.filter((violation) => violation.blockEligible);
-}
 
 /**
  * Read the stored set for a base commit without ever letting the store's failure

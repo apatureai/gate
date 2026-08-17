@@ -98,6 +98,21 @@ const coverageSchema = z.object({
  * computes it and never overrides it; it only refuses to let a `false` one
  * change a Check Run conclusion.
  *
+ * `severity` is the engine's ordinal band for the same violation, and it is
+ * named here for the reason everything else in this file is named here: a field
+ * this schema does not name is STRIPPED, silently, and a band that never
+ * survives parsing cannot tell a contrast ratio that fell from 2.91:1 to 1.02:1
+ * apart from one that did not move at all.
+ *
+ * Deliberately NOT range-checked into a parse failure. A band Gate cannot read
+ * degrades to absent, absent means unknown, and unknown never gates, so the
+ * worst a bad value can do is switch this comparison off. Refusing the parse
+ * instead would turn a future engine's fourth band into a blocked publish, which
+ * is the strictly worse of the two errors and the one this file already refuses
+ * elsewhere (`source` is `catch`-guarded for the same reason). `.int()` and
+ * `.positive()` are there so a magnitude that leaked into the field, `2.91` or
+ * `-1`, reads as unknown rather than as a band.
+ *
  * Required WITHIN the object, optional as a whole, exactly like `coverage`:
  * `violations` without `checksRun` cannot tell "measured, clean" from "not
  * measured", and omitting the object is the supported way to say nothing.
@@ -114,6 +129,7 @@ const measurementsSchema = z.object({
       element: z.string(),
       detail: z.string(),
       blockEligible: z.boolean(),
+      severity: z.number().int().positive().optional().catch(undefined),
     }),
   ),
 });

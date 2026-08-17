@@ -20,6 +20,7 @@ import { baselineSection } from "./measurement-baseline-render.js";
 import type { MeasurementComparison } from "./measurement-baseline.js";
 import {
   blockEligibleMeasurements,
+  gateableMeasurements,
   measurementBlock,
   measurementsAreBlocking,
 } from "./measurements.js";
@@ -190,18 +191,44 @@ export function buildCheckRun(
   // open. "on their own" is exact: the grade may or may not also be failing,
   // and this sentence claims only what these measurements are sufficient for.
   if (blocking) {
-    // Counted from the SAME set that produced the conclusion. When this run was
-    // scoped against the base commit that is the introduced, block-eligible
-    // violations and nothing else, so the number a reader is given is the number
-    // of things they can fix here rather than the size of the back catalogue.
+    // Counted from the SAME set that produced the conclusion, through the same
+    // function, so the number a reader is given is the number of things they can
+    // fix here rather than the size of the back catalogue.
     const gating = ctx.baseline
-      ? ctx.baseline.introduced.filter((violation) => violation.blockEligible)
+      ? gateableMeasurements(ctx.baseline)
       : blockEligibleMeasurements(result, ctx.measurementSuppress ?? []);
+    // Two ways to be in that set, and the summary names which one applies. A
+    // violation that was already on the base and got materially worse is not a
+    // new violation, and telling an author it is sends them hunting for markup
+    // they never wrote; telling them nothing at all is what this check used to
+    // do, and it is why a ratio could fall from 2.91:1 to 1.02:1 unremarked.
+    const introducedGating = ctx.baseline
+      ? ctx.baseline.introduced.filter((violation) => violation.blockEligible)
+      : [];
+    const worsenedGating = ctx.baseline
+      ? ctx.baseline.worsened.filter((violation) => violation.blockEligible)
+      : [];
+    const scope = !ctx.baseline
+      ? ""
+      : worsenedGating.length === 0
+        ? "introduced by this pull request "
+        : introducedGating.length === 0
+          ? "already on the base and moved into a worse severity band by this pull request "
+          : "introduced by this pull request or moved into a worse severity band by it ";
+    const split =
+      introducedGating.length > 0 && worsenedGating.length > 0
+        ? ` ${introducedGating.length} of them ${introducedGating.length === 1 ? "is" : "are"} new ` +
+          `here and ${worsenedGating.length} ${worsenedGating.length === 1 ? "was" : "were"} ` +
+          "already on the base in a lower severity band, which is a different claim and is " +
+          "counted separately below."
+        : "";
     summaryParts.push(
       `**Failed by measurement.** ${gating.length} block-eligible measurement(s) ` +
-        `${ctx.baseline ? "introduced by this pull request " : ""}below are enough to ` +
+        `${scope}below are enough to ` +
         "fail this check on their own, because this repository sets " +
-        "`rules.measurements: block`. No model was involved in producing them. Set " +
+        "`rules.measurements: block`." +
+        split +
+        " No model was involved in producing them. Set " +
         "`rules.measurements: advisory` to keep seeing them without failing on them.",
     );
   }

@@ -173,10 +173,15 @@ export type MeasurementKind = "contrast" | "overflow" | "touch_target";
 /**
  * One violation the ENGINE computed from the captured DOM.
  *
- * Deliberately not a `Finding` and never convertible into one: no severity, no
- * confidence, no dimension, because no model produced it and nothing calibrated
- * it. Gate renders it in its own block, under its own heading, so a reader can
- * always tell which half of the result they are looking at.
+ * Deliberately not a `Finding` and never convertible into one: no confidence, no
+ * dimension, and no judged `Severity`, because no model produced it and nothing
+ * calibrated it. Gate renders it in its own block, under its own heading, so a
+ * reader can always tell which half of the result they are looking at.
+ *
+ * The `severity` band below is not that `Severity` and is not a judgment: it is
+ * an ordinal band the engine computes from a threshold, on the same measured
+ * facts, and `rules.min_severity_to_comment` neither reads it nor can filter on
+ * it.
  */
 export type Measurement = {
   kind: MeasurementKind;
@@ -194,6 +199,29 @@ export type Measurement = {
    * `false` violation is rendered and can never set a conclusion.
    */
   blockEligible: boolean;
+  /**
+   * The ENGINE's ordinal severity band for this measurement. Higher is worse.
+   *
+   * Comparable only WITHIN a `kind`, never across kinds, never as a magnitude
+   * and never arithmetic: it answers "which band of badness", not "how bad".
+   * The bands are coarse by construction, so ordinary re-measurement noise
+   * cannot move one and a band that DID move is a material change.
+   *
+   * The engine owns the landmarks, and they are not arbitrary:
+   *
+   *   contrast      ratio against the WCAG landmarks: >= 3.0 -> 1 (AA for large
+   *                 text), >= 1.5 -> 2, < 1.5 -> 3 (near-invisible).
+   *   touch_target  smallest dimension in px: >= 24 -> 1 (SC 2.5.8, level AA;
+   *                 44px is SC 2.5.5, level AAA), >= 10 -> 2, < 10 -> 3.
+   *   overflow      excess as a share of the viewport width: <= 10% -> 1,
+   *                 <= 50% -> 2, else 3.
+   *
+   * Optional, and ABSENT MEANS UNKNOWN, exactly as `blockEligible` is absent
+   * from an older stored baseline: an engine that predates the field, a check
+   * that computes no band, or a baseline recorded before it existed must never
+   * authorize a merge block. Unknown never gates, on either side.
+   */
+  severity?: number;
 };
 
 /**
