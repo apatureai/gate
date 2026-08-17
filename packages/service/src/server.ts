@@ -16,7 +16,12 @@ import {
   type ProductionAppServerDeps,
 } from "./production-server.js";
 import { assertProductionEnv } from "./production-readiness.js";
-import { createGitHubRepoConfigClient, type RepoConfigClient } from "./repo-config.js";
+import {
+  createGitHubComponentLibraryClient,
+  createGitHubRepoConfigClient,
+  type ComponentLibraryClient,
+  type RepoConfigClient,
+} from "./repo-config.js";
 import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
 import { createSqlRunStore, type CompletedRunRecord, type RunStore } from "./run-store.js";
 import { createSqlScreenshotRegistry, createTemplateSignedUrlProvider } from "./screenshots.js";
@@ -55,6 +60,7 @@ export interface ProductionRuntimeFactories {
   githubAuth?(opts: { appId: string; privateKey: string }): GitHubAppAuth;
   githubPullsClient?(token: string): GitHubPullsClient;
   repoConfigClient?(token: string): RepoConfigClient;
+  componentLibraryClient?(token: string): ComponentLibraryClient;
   appReviewClient?(token: string, target: AppReviewTarget): AppReviewClient;
   engineClient?(opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }): JudgmentEngineClient;
 }
@@ -137,6 +143,8 @@ export async function buildProductionDepsFromEnv(
   const feedback = createTenantFeedbackSink(sql.tenant);
   const githubPullsClient = factories.githubPullsClient ?? ((token: string) => createGitHubPullsClient(token));
   const repoConfigClient = factories.repoConfigClient ?? ((token: string) => createGitHubRepoConfigClient(token));
+  const componentLibraryClient =
+    factories.componentLibraryClient ?? ((token: string) => createGitHubComponentLibraryClient(token));
   const appReviewClient =
     factories.appReviewClient ?? ((token: string, target: AppReviewTarget) => createAppReviewClient(token, target));
   const engineClient =
@@ -195,6 +203,14 @@ export async function buildProductionDepsFromEnv(
     loadConfig: async (job) => {
       const token = await auth.getInstallationToken(Number(job.installationId));
       return repoConfigClient(token).loadConfig(job.owner, job.name, job.headSha);
+    },
+    // Read at the PR's head, like the config: the review is of this push, so the
+    // manifest that matters is this push's. Failures inside the client resolve
+    // to an empty list, so the only way this costs a review anything is by
+    // leaving its deep prompt as ungrounded as it was before the field existed.
+    componentLibraries: async (job) => {
+      const token = await auth.getInstallationToken(Number(job.installationId));
+      return componentLibraryClient(token).detect(job.owner, job.name, job.headSha);
     },
     installationClients: async (job) => {
       const token = await auth.getInstallationToken(Number(job.installationId));

@@ -31,6 +31,12 @@ export interface ReviewRequestContext {
   depth: ReviewDepth;
   /** Build/runtime diagnostics from a local-serve preview (#70 U1); additive. */
   previewBuildFacts?: GateReviewRequest["previewBuildFacts"];
+  /**
+   * Component-library ids detected in the repository under review; additive.
+   * Absent and empty mean the same thing to the engine (no addenda), so an
+   * empty list is not sent.
+   */
+  componentLibraries?: GateReviewRequest["componentLibraries"];
 }
 
 /** Assemble a GateReviewRequest from resolved preview + normalized config + PR context. */
@@ -45,6 +51,11 @@ export function buildGateReviewRequest(ctx: ReviewRequestContext): GateReviewReq
     depth: ctx.depth,
     ...(ctx.previewBuildFacts && ctx.previewBuildFacts.length > 0
       ? { previewBuildFacts: ctx.previewBuildFacts }
+      : {}),
+    // Omitted when nothing was detected, so a repository that uses none of the
+    // known libraries produces the same request body it always produced.
+    ...(ctx.componentLibraries && ctx.componentLibraries.length > 0
+      ? { componentLibraries: ctx.componentLibraries }
       : {}),
   };
 }

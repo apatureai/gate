@@ -80,6 +80,13 @@ export interface ActionRunContext {
   isFork: boolean;
   /** Existing PR comments, used for provider-bot preview discovery. */
   previewComments: ProviderComment[];
+  /**
+   * Component-library ids detected in the checked-out repository, forwarded to
+   * the engine so its deep prompt carries the matching rubric addendum.
+   * Optional and additive: a run that detected nothing sends nothing, and the
+   * review is grounded on tokens and brand exactly as it was before.
+   */
+  componentLibraries?: string[];
 }
 
 export interface ActionRunInputs {
@@ -267,6 +274,9 @@ export async function runAction(
         publishMode,
         depth: "deep",
         ...(previewBuildFacts ? { previewBuildFacts } : {}),
+        ...(ctx.componentLibraries && ctx.componentLibraries.length > 0
+          ? { componentLibraries: ctx.componentLibraries }
+          : {}),
       });
       assertReviewOutcomeIdentity(outcome, ctx);
     } catch (err) {

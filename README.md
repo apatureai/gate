@@ -340,16 +340,16 @@ What runs today, from a clean clone, with no credentials:
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
 | Baseline before/after comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the pairs; nothing on the review path calls it |
 
-Verified on 2026-08-15, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
+Verified on 2026-08-16, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
 ```
 pnpm install --frozen-lockfile   lockfile up to date, exit 0
 pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
-pnpm test                        Test Files  99 passed (99)
-                                       Tests  658 passed (658)
-                                    Duration  13.24s
+pnpm test                        Test Files  105 passed (105)
+                                       Tests  791 passed (791)
+                                    Duration  12.55s
 pnpm audit                       No known vulnerabilities found
 ```
 
@@ -425,7 +425,9 @@ jobs:
     steps:
       # Required whenever you use config-path or preview-command: both read
       # files from the workspace, and without a checkout the workspace is empty
-      # and .gate.yml is silently ignored.
+      # and .gate.yml is silently ignored. It is also what lets Gate read your
+      # package.json and tell the engine which component library to judge
+      # against; without it the review runs, one rubric note lighter.
       - uses: actions/checkout@v5
 
       # Your own deploy step, whatever it is. It has to expose the preview URL
@@ -617,6 +619,9 @@ routes:
 
 viewports: [mobile, desktop]   # mobile | tablet | desktop
 dark_mode: false
+verify_stability: false # capture every page twice and compare the bytes, so the review can say the
+                        # capture was verified deterministic instead of merely uncontradicted.
+                        # Doubles the screenshot work per route and viewport, so it is opt-in.
 brand: null
 
 rules:
@@ -630,6 +635,8 @@ tokens:
 ```
 
 Severity and suppression filter what the comment *lists*; they never change the grade or the Check Run conclusion, which reflect the holistic verdict.
+
+Two things Gate sends the engine come from the repository rather than from this file. `verify_stability` above rides along inside the config; alongside it, Gate reads the repository's `package.json` at the PR's head and names the component libraries it finds (`shadcn/ui`, `radix`, `mui`, `chakra`, `mantine`) so the engine can append that library's rubric note to its own prompt. Ids only, never prose: the note is the engine's text, so nothing in a pull request's own manifest is written into a model prompt. Both fields are additive and optional in both directions. A repository that opted into nothing and uses none of those libraries produces exactly the request Gate sent before either existed, an engine that has never heard of them ignores them, and a manifest that is missing, private or malformed costs a review its rubric addenda and nothing else.
 
 ### Configuration (environment variables)
 
@@ -686,7 +693,7 @@ pnpm workspace, TypeScript project references, Vitest, ESLint. Roughly 10k lines
 | Package | What it is |
 |---|---|
 | `packages/types` | The boundary contract: `GateReviewRequest`/`GateReviewResult`, config types, feedback events, the golden fixture loader, `deriveArtifactId`. Carries no model-specific fields by design. |
-| `packages/config` | `.gate.yml`: Zod schema, validation, defaults, normalization. |
+| `packages/config` | `.gate.yml`: Zod schema, validation, defaults, normalization. Also component-library detection from a repository's `package.json`, which is grounding the engine's hosted path cannot work out for itself. |
 | `packages/engine` | Client for the async job API: submit/poll/cancel, HMAC signing, preview-handoff verification, `x-schema-version` parsing, rate limiting, per-account endpoint routing. |
 | `packages/delivery` | Sticky comment upsert, Check Run conclusion mapping, finding validation and degradation decisions, SVG+sharp screenshot annotation, baseline before/after pairs. |
 | `packages/service` | App path: Fastify server, GitHub App auth and webhook verification, permission assertions, deployment-preview discovery, BullMQ queue, supersession, orchestrator, fail-fast env check. |
@@ -761,6 +768,7 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **Half the system is behind an HTTP contract you have to implement.** Every claim about screenshot quality, model behaviour, prompt design or finding accuracy belongs to the critique service. Gate's tests prove Gate's orchestration and delivery; they prove nothing about review quality. There is a reference implementation to run ([`verdict`](https://github.com/apatureai/verdict)) and a command that drives the whole chain against it (`pnpm demo:live`), but the review itself is still someone else's half. Roadmap item 1.
 - **Review quality is entirely the service's, and Gate can only tell you whether a model was involved at all.** The `provenance` stamp answers "did anything judge this?", not "was the judgment any good?". A service that runs a real but bad model gets a real, bad review published verbatim.
 - **The Action path constrains hostile pull request code; it does not sandbox it.** The `ulimit` caps, environment allowlist, loopback-redirect refusal and fork gating are real mitigations. The aggregate cgroup-v2 caps that would make them airtight are roadmap item 6. Read the threat model before running the Action path on a repository that accepts fork pull requests.
+- **Component-library detection reads one file, at the repository root.** Gate looks at `package.json` at the PR's head and nothing else, so a monorepo whose UI package declares Radix in `packages/web/package.json` is not detected, and neither is a library vendored without a dependency entry. The review still runs, grounded on tokens and brand; it simply carries no library rubric note, and nothing in the result distinguishes that from a repository that genuinely uses none. On the App path the read can also fail for reasons that have nothing to do with your code (a rate limit, a permission change), and it fails quietly on purpose: grounding must never be able to fail a pull request's review.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.
 - **Nothing fails CI on a new dependency advisory.** Both trees audit clean today and the history is in [SECURITY.md](SECURITY.md#dependency-advisories), but no job enforces that, so the guarantee is only as fresh as the last manual `pnpm audit`. Roadmap item 5.

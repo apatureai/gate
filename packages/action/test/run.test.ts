@@ -414,3 +414,51 @@ describe("runAction engine-failure reporting", () => {
     expect(logged.join("\n")).toContain("engine submit failed: 401 (signature_mismatch)");
   });
 });
+
+/**
+ * What the Action can tell the engine that the engine cannot work out alone.
+ *
+ * The Action runs inside the checkout, so it is the one surface that can read
+ * the repository's own `package.json` and say which component library the UI is
+ * built with. Both fields are additive: a run with nothing to add sends the
+ * request it always sent.
+ */
+describe("grounding the engine request from the repository", () => {
+  const requestFor = (engine: JudgmentEngineClient): Record<string, unknown> =>
+    (engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>;
+
+  it("forwards the component libraries it detected in the checkout", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    await runAction(
+      DEFAULT_CONFIG,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx({ componentLibraries: ["shadcn/ui", "radix"] }),
+      deps(engine),
+    );
+    expect(requestFor(engine).componentLibraries).toEqual(["shadcn/ui", "radix"]);
+  });
+
+  it("says nothing when it detected nothing", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    await runAction(
+      DEFAULT_CONFIG,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx({ componentLibraries: [] }),
+      deps(engine),
+    );
+    expect(requestFor(engine)).not.toHaveProperty("componentLibraries");
+  });
+
+  it("carries the repository's determinism-check opt-in through in the config", async () => {
+    const engine = engineReturning({ status: "completed", result: golden, jobId: "j" });
+    const config: NormalizedDesignReviewConfig = { ...DEFAULT_CONFIG, verifyStability: true };
+    await runAction(
+      config,
+      { previewUrl: "https://preview.example.com", previewCommand: null },
+      ctx(),
+      deps(engine),
+    );
+    const sent = requestFor(engine).config as NormalizedDesignReviewConfig;
+    expect(sent.verifyStability).toBe(true);
+  });
+});

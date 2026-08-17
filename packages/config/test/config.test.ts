@@ -90,6 +90,22 @@ tokens:
     expect(config.routes.always).toEqual(["/"]);
     expect(config.preview.source).toBe("vercel");
   });
+
+  it("passes a repository's determinism-check opt-in through to the engine", () => {
+    expect(loadDesignReviewConfig("verify_stability: true").verifyStability).toBe(true);
+  });
+
+  it("omits the opt-in entirely when nobody asked for it", () => {
+    // Not `false`: this field crosses to the engine inside the config object,
+    // and a repository that never asked has to produce the request Gate sent
+    // before the setting existed, so an engine that predates it sees no change.
+    expect(loadDesignReviewConfig(null)).not.toHaveProperty("verifyStability");
+    expect(loadDesignReviewConfig("verify_stability: false")).not.toHaveProperty("verifyStability");
+  });
+
+  it("still catches a typo of it, like every other key", () => {
+    expect(() => parseDesignReviewConfig({ verify_stabilty: true })).toThrow(ConfigValidationError);
+  });
 });
 
 describe("validation errors are surfaced", () => {

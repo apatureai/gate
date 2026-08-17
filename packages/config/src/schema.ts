@@ -74,6 +74,11 @@ export const DesignReviewConfigSchema = z
     routes: routesSchema,
     viewports: z.array(viewportEnum).min(1).default(["mobile", "desktop"]),
     dark_mode: z.boolean().default(false),
+    // Ask the engine to capture each page twice and compare the PNG bytes: the
+    // per-review form of verdict's `--verify-stability`. Off by default, since
+    // it doubles the screenshot work on every route and viewport. Worth turning
+    // on for a page whose animation you believe is frozen and want proof of.
+    verify_stability: z.boolean().default(false),
     brand: z.string().nullable().default(null),
     rules: rulesSchema,
     tokens: tokensSchema,

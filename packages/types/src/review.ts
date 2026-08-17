@@ -115,6 +115,22 @@ export type GateReviewRequest = {
   depth: ReviewDepth;
   /** Build/runtime diagnostics from a local-serve preview (#70 U1); additive. */
   previewBuildFacts?: PreviewBuildFact[];
+  /**
+   * Component-library ids Gate detected in the repository under review, read
+   * from its `package.json` at the PR's head (`shadcn/ui`, `radix`, `mui`,
+   * `chakra`, `mantine`).
+   *
+   * The engine appends a library-specific rubric note to its deep prompt, and
+   * on the hosted path it cannot work out which library applies: it holds no
+   * checkout of the repository. Gate does, on both paths, so Gate names what it
+   * found and the engine chooses the rubric.
+   *
+   * Ids only, never rubric prose. The text belongs to the engine, so nothing
+   * read out of a pull request's own manifest can be written into a model
+   * prompt. Additive and optional: an engine that predates the field ignores
+   * it, and a review with nothing detected omits it.
+   */
+  componentLibraries?: string[];
 };
 
 /**

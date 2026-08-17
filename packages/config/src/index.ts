@@ -11,6 +11,8 @@ export {
   gateModeEnum,
 } from "./schema.js";
 export type { RawDesignReviewConfig } from "./schema.js";
+export { COMPONENT_LIBRARY_IDS, detectComponentLibraryIds } from "./component-libraries.js";
+export type { ComponentLibraryId } from "./component-libraries.js";
 
 /** The config file Gate looks for. */
 export const CONFIG_FILENAME = ".gate.yml";
@@ -83,6 +85,11 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
     },
     viewports: raw.viewports,
     darkMode: raw.dark_mode,
+    // Present only when a repository asked for it. The engine treats the field
+    // as optional and additive, so omitting it leaves the request Gate sends
+    // byte-identical to the one it sent before this setting existed, and an
+    // engine that has never heard of it is unaffected.
+    ...(raw.verify_stability ? { verifyStability: true } : {}),
     brand: raw.brand,
     rules: {
       gate: raw.rules.gate,

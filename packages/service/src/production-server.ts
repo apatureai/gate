@@ -71,6 +71,16 @@ export interface ProductionAppServerDeps {
   installationClients(job: ReviewJobPayload): InstallationClients | Promise<InstallationClients>;
   /** Per-repo `.gate.yml` (#27); defaults to `DEFAULT_CONFIG`. */
   loadConfig?(job: ReviewJobPayload): NormalizedDesignReviewConfig | Promise<NormalizedDesignReviewConfig>;
+  /**
+   * Component-library ids from the repository's `package.json` at the job's
+   * head, forwarded to the engine as prompt grounding. Optional: unset means
+   * the review is grounded on tokens and brand, which is what every hosted
+   * review was grounded on before the engine's contract could carry this.
+   *
+   * It must never throw: detection is grounding, not a precondition, and a
+   * GitHub read that fails has to cost the review its addenda and nothing more.
+   */
+  componentLibraries?(job: ReviewJobPayload): Promise<string[]>;
   /** Preview readiness gate before engine handoff (#149); defaults to shared waitForReadiness. */
   previewReadiness?(options: ReadinessOptions): Promise<ReadinessResult>;
   feedback?: FeedbackSink;
@@ -150,20 +160,28 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
       });
       return;
     }
-    await runHostedReview(config, reviewCtx, {
-      supersession: deps.supersession,
-      windowStore: deps.windowStore,
-      engine: clients.engine,
-      comments: clients.comments,
-      publishCheckRun: clients.publishCheckRun,
-      runStore: deps.runStore,
-      screenshotRegistry: deps.screenshotRegistry,
-      screenshotVisibility: deps.screenshotVisibility,
-      feedback: deps.feedback,
-      signal: ctx.signal,
-      runUrl: deps.runUrl?.(job),
-      now: deps.now,
-    });
+    // Grounding, resolved after readiness so a preview that never came up costs
+    // no GitHub call. Detection failures are already swallowed by the client, so
+    // an empty list here means "nothing to add", never "the review failed".
+    const componentLibraries = (await deps.componentLibraries?.(job)) ?? [];
+    await runHostedReview(
+      config,
+      componentLibraries.length > 0 ? { ...reviewCtx, componentLibraries } : reviewCtx,
+      {
+        supersession: deps.supersession,
+        windowStore: deps.windowStore,
+        engine: clients.engine,
+        comments: clients.comments,
+        publishCheckRun: clients.publishCheckRun,
+        runStore: deps.runStore,
+        screenshotRegistry: deps.screenshotRegistry,
+        screenshotVisibility: deps.screenshotVisibility,
+        feedback: deps.feedback,
+        signal: ctx.signal,
+        runUrl: deps.runUrl?.(job),
+        now: deps.now,
+      },
+    );
   });
 
   const appDeps: AppServerDeps = {

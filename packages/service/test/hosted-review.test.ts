@@ -402,3 +402,36 @@ describe("runHostedReview screenshot artifact persistence (#89)", () => {
     expect(unverifiedRegistry.records.size).toBe(0);
   });
 });
+
+/**
+ * The two things the hosted engine cannot work out for itself, and the App path
+ * can. Both are additive on the wire: a review with nothing extra to say sends
+ * the request it always sent, so an engine that predates either field is
+ * unaffected.
+ */
+describe("runHostedReview grounds the engine request from the repository", () => {
+  const requestFor = (client: JudgmentEngineClient): Record<string, unknown> =>
+    (client.review as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>;
+
+  it("forwards the component libraries read from the repository at this head", async () => {
+    const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
+    await runHostedReview(DEFAULT_CONFIG, { ...ctx, componentLibraries: ["chakra"] }, d);
+    expect(requestFor(d.engine).componentLibraries).toEqual(["chakra"]);
+  });
+
+  it("says nothing when the repository named nothing", async () => {
+    const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
+    await runHostedReview(DEFAULT_CONFIG, { ...ctx, componentLibraries: [] }, d);
+    expect(requestFor(d.engine)).not.toHaveProperty("componentLibraries");
+  });
+
+  it("carries the repository's determinism-check opt-in through in the config", async () => {
+    const d = deps(engine({ status: "completed", result: golden, jobId: "j" }));
+    await recordEnqueue(d.supersession, { owner: "acme", name: "web", prNumber: 42 }, HEAD_SHA);
+    await runHostedReview({ ...DEFAULT_CONFIG, verifyStability: true }, ctx, d);
+    const sent = requestFor(d.engine).config as { verifyStability?: boolean };
+    expect(sent.verifyStability).toBe(true);
+  });
+});

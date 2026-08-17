@@ -1,5 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { CONFIG_FILENAME, loadDesignReviewConfig, resolveConfigPath } from "@gate/config";
+import {
+  CONFIG_FILENAME,
+  detectComponentLibraryIds,
+  loadDesignReviewConfig,
+  resolveConfigPath,
+} from "@gate/config";
 import { engineEndpointInvalidCheckRun, engineNotConfiguredCheckRun } from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
 import {
@@ -22,6 +27,21 @@ import { publishSetupFailureCheckRun } from "./setup-failure.js";
  */
 function input(name: string): string {
   return process.env[`INPUT_${name.toUpperCase().replace(/-/g, "_")}`]?.trim() ?? "";
+}
+
+/**
+ * Read a file from the checked-out workspace, or null when it is not there.
+ *
+ * Optional-by-construction: everything read this way is grounding a review can
+ * do without, so an unreadable file costs the review that grounding and never
+ * the review itself.
+ */
+function readWorkspaceFile(path: string): string | null {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 async function main(): Promise<void> {
@@ -180,6 +200,10 @@ async function main(): Promise<void> {
       },
       isFork,
       previewComments: await gh.listPreviewComments(),
+      // The Action runs inside the checkout, so the repository's own manifest is
+      // simply a file on disk. Names only reach the engine; the rubric text is
+      // the engine's own.
+      componentLibraries: detectComponentLibraryIds(readWorkspaceFile("package.json")),
     },
     {
       engine,

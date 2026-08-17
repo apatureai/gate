@@ -83,6 +83,18 @@ export type NormalizedDesignReviewConfig = {
   routes: NormalizedRoutesConfig;
   viewports: Viewport[];
   darkMode: boolean;
+  /**
+   * Ask the engine to capture each page twice and compare the PNG bytes
+   * (`verify_stability` in `.gate.yml`), so a review can state that its capture
+   * was verified deterministic rather than merely uncontradicted.
+   *
+   * Optional, and normalized as PRESENT ONLY WHEN ASKED FOR, on purpose: it
+   * crosses to the engine inside this config object, the engine treats it as
+   * additive, and a repository that never asked should produce exactly the
+   * request Gate sent before the setting existed. An engine that predates the
+   * field ignores it either way, so neither side hard-fails on the other.
+   */
+  verifyStability?: boolean;
   /** Brand block: product description, audience, tone, design rules. */
   brand: string | null;
   rules: NormalizedRulesConfig;

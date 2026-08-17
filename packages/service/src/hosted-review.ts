@@ -44,6 +44,13 @@ export interface HostedReviewContext {
   pullRequest: { number: number; headSha: string; baseSha: string; title: string; body: string | null };
   isFork: boolean;
   preview: { url: string; provider: GateReviewRequest["preview"]["provider"]; source: string };
+  /**
+   * Component-library ids read from the repository's `package.json` at this
+   * PR's head, forwarded so the engine's deep prompt carries the matching
+   * rubric addendum. Optional and additive: a review that detected nothing
+   * sends nothing and is grounded on tokens and brand exactly as before.
+   */
+  componentLibraries?: string[];
 }
 
 export interface HostedReviewDeps {
@@ -151,6 +158,9 @@ export async function runHostedReview(
         config: sanitizedConfig,
         publishMode: config.rules.gate === "blockers" ? "blocking" : "advisory",
         depth: depth.depth,
+        ...(ctx.componentLibraries && ctx.componentLibraries.length > 0
+          ? { componentLibraries: ctx.componentLibraries }
+          : {}),
       },
       { signal: deps.signal },
     );

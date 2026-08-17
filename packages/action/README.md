@@ -48,7 +48,9 @@ jobs:
     steps:
       # Required whenever you use config-path or preview-command: both read
       # files from the workspace, and without a checkout the workspace is empty
-      # and .gate.yml is silently ignored.
+      # and .gate.yml is silently ignored. It is also what lets Gate read your
+      # package.json and tell the engine which component library to judge
+      # against; without it the review runs, one rubric note lighter.
       - uses: actions/checkout@v5
 
       # Your own deploy step, whatever it is. It has to expose the preview URL

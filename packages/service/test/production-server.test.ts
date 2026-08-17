@@ -668,3 +668,88 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(recordedFeedback).toHaveLength(1);
   });
 });
+
+describe("component-library grounding on the App path", () => {
+  const webhook = (sha: string): string =>
+    JSON.stringify({
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha, environment: "Preview" },
+    });
+
+  function serverWith(
+    componentLibraries: ((job: { headSha: string }) => Promise<string[]>) | undefined,
+    engine: JudgmentEngineClient,
+  ) {
+    return createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      ...(componentLibraries ? { componentLibraries } : {}),
+      installationClients: () => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments: {
+          listComments: vi.fn(async () => []),
+          createComment: vi.fn(async (body: string) => ({ id: 1, nodeId: "n1", body })),
+          updateComment: vi.fn(async () => ({ updated: true })),
+        },
+        publishCheckRun: vi.fn(async () => {}),
+        engine,
+      }),
+      previewReadiness: ready,
+    });
+  }
+
+  async function deliver(server: ReturnType<typeof createProductionAppServer>, sha: string) {
+    app = server.server;
+    const payload = webhook(sha);
+    await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "deployment_status",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+  }
+
+  it("reads the manifest at the job's head and grounds the engine request with it", async () => {
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    const seenHeads: string[] = [];
+    const detect = vi.fn(async (job: { headSha: string }) => {
+      seenHeads.push(job.headSha);
+      return ["mui"];
+    });
+    await deliver(serverWith(detect, engine), "abc123");
+
+    await vi.waitFor(() => expect(engine.review).toHaveBeenCalledOnce());
+    // The review is of THIS push, so the manifest that matters is this push's.
+    expect(seenHeads).toEqual(["abc123"]);
+    expect(engine.review).toHaveBeenCalledWith(
+      expect.objectContaining({ componentLibraries: ["mui"] }),
+      expect.any(Object),
+    );
+  });
+
+  it("reviews exactly as before when nothing resolves the libraries", async () => {
+    // An App deployment with no detector wired at all: the older behaviour, and
+    // still a real review rather than an error.
+    const engine: JudgmentEngineClient = {
+      review: vi.fn(async () => ({ status: "completed", result: golden, jobId: "j" })),
+      cancel: vi.fn(async () => {}),
+    };
+    await deliver(serverWith(undefined, engine), "abc123");
+
+    await vi.waitFor(() => expect(engine.review).toHaveBeenCalledOnce());
+    const sent = (engine.review as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<string, unknown>;
+    expect(sent).not.toHaveProperty("componentLibraries");
+  });
+});

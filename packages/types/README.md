@@ -43,3 +43,14 @@ blob id to make deploy skew explicit.
 
 The Zod schema deliberately strips unknown fields (no `.strict()`), so an older
 Gate tolerates new additive fields from a newer engine.
+
+The request side follows the same rule in the other direction, and two fields
+exercise it today. `componentLibraries` names the component-library ids Gate read
+out of the repository's `package.json` (the hosted engine holds no checkout, so
+it cannot detect them itself), and `config.verifyStability` asks for the engine's
+repeat-capture determinism check on this review. Both are optional, and both are
+omitted rather than sent empty or `false`, so a repository that opted into
+nothing produces the request Gate sent before either existed. The engine's own
+request schema is non-strict too, so a newer Gate against an older engine has its
+unknown fields stripped and the review still happens.
+`packages/e2e/test/engine-version-skew.test.ts` runs both directions end to end.

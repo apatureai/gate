@@ -38,6 +38,33 @@ describe("buildGateReviewRequest", () => {
     expect(req.depth).toBe("deep");
     expect(req.config).toBe(DEFAULT_CONFIG);
   });
+
+  it("names the component libraries Gate detected in the repository", () => {
+    // Ids, never rubric prose: the engine owns the text its prompt carries, so
+    // nothing read out of a pull request's own manifest is written into it.
+    const req = buildGateReviewRequest({ ...ctx, componentLibraries: ["mui", "radix"] });
+    expect(req.componentLibraries).toEqual(["mui", "radix"]);
+  });
+
+  it("sends the same body it always sent when there is nothing new to say", () => {
+    // The additive-field rule from Gate's side. An engine that predates these
+    // fields must see the request it has always seen from a repository that
+    // detected no library and asked for no determinism check, so absent beats
+    // an empty array.
+    const baseline = buildGateReviewRequest(ctx);
+    expect(baseline).not.toHaveProperty("componentLibraries");
+    expect(baseline.config).not.toHaveProperty("verifyStability");
+    expect(buildGateReviewRequest({ ...ctx, componentLibraries: [] })).toEqual(baseline);
+  });
+
+  it("carries a repository's determinism-check opt-in inside the config it already sends", () => {
+    const config = { ...DEFAULT_CONFIG, verifyStability: true };
+    const req = buildGateReviewRequest({ ...ctx, config });
+    expect(req.config.verifyStability).toBe(true);
+    // And nothing else about the request moved: it is one added field, not a
+    // different shape.
+    expect({ ...req, config: DEFAULT_CONFIG }).toEqual(buildGateReviewRequest(ctx));
+  });
 });
 
 describe("extractReviewMetadata", () => {
