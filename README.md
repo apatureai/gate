@@ -747,6 +747,30 @@ unrelated work whose only escape hatch, `measurement_suppress`, would hide the r
 carried over this way are marked as such on the pull request rather than folded silently into the
 count.
 
+**Two more misses in the same direction, stated because they are silent.** Both call a genuinely new
+violation pre-existing, which means Gate still reports it, still counts it and still shows it to the
+reader; neither turns a check red on unrelated work. First, the second key is matched rather than
+spent, so **one element gaining a second defect of the same check** answers to the stored entry it
+already had: a button that was merely low-contrast and is now invisible reads as unchanged. Second,
+the third key is **blind to magnitudes and thresholds**, because every number in the engine's
+sentence is replaced before hashing. "Same stated defect" therefore means *the same sentence once
+every number in it is replaced*, not the same sentence, so a normal-text contrast failure can claim
+the entry of a deleted large-text one on the same page.
+
+**An engine upgrade is the one time the engine's sentence lies.** The detail is the engine's own
+wording, and a new engine version can reword it while the page holds still. A reword on its own is
+absorbed, since the element key does not include the detail. A reword on a violation whose markup
+*also* moved misses all three keys at once, and an untouched defect would read as introduced. So the
+engine version that recorded a baseline is compared, not merely stored. When it differs from the
+engine running now, a violation that matched nothing may spend an unaccounted-for entry recorded for
+the same page and check, and is then reported as **not classified**: never gated, and never called
+pre-existing either, because nothing has shown it is the same violation. The entry is spent, so two
+new violations cannot both shelter behind one that went missing, and a violation on a page where
+nothing went missing gates as usual. The pull request says which two engine versions were involved.
+An unknown version on either side is **not** treated as skew: Gate cannot show two engines differ
+from a missing field. The next run on the base branch re-records the baseline and restores the
+normal rule.
+
 Gate stores only what it needs to answer "is this the same violation": the check and the route in the
 clear, and the element, the detail and the defect as SHA-256 digests. Selectors and engine sentences
 derive from the customer's page and are never kept.

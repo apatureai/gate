@@ -39,6 +39,13 @@ const UNCLASSIFIED_REASON: Record<UnclassifiedReason, string> = {
   // seen rather than a page whose violations it can place.
   route_not_measured: "the base run never captured that route, new or renamed",
   check_not_run: "the base run never ran that check",
+  // Deliberately says what Gate cannot tell rather than what it suspects. The
+  // reader's next question is whether to trust the green check, and the honest
+  // answer is that one violation on that page went missing and this one could be
+  // it wearing new wording.
+  engine_skew:
+    "a different engine version recorded the baseline and a violation on that page is " +
+    "unaccounted for, so a reworded old violation and a new one cannot be told apart",
 };
 
 const SHORT_SHA = 7;
@@ -146,6 +153,22 @@ export function baselineSection(
   }
 
   const lines = [comparedHeading(comparison)];
+
+  // Said whenever the two engines differ, not only when a row was withheld,
+  // because the reader is being told which rulebook produced the counts above.
+  // A run that quietly used a weaker rule and a run that used the normal one
+  // must not print the same page.
+  if (comparison.engineSkew) {
+    lines.push(
+      "ℹ️ The baseline was recorded by engine " +
+        `${sanitizeCodeSpan(comparison.engineSkew.baseline, 60)} and this run is engine ` +
+        `${sanitizeCodeSpan(comparison.engineSkew.current, 60)}. An engine can reword its own ` +
+        "findings, so on any page where a recorded violation is unaccounted for, a violation here " +
+        "that matches nothing is reported as not classified instead of new. It is not being called " +
+        "pre-existing, and it is not gating. The next run on the base branch re-records the " +
+        "baseline under this engine and restores the normal rule.",
+    );
+  }
 
   if (comparison.introduced.length > 0) {
     const shown = comparison.introduced.slice(0, MAX_MEASUREMENT_LINES);

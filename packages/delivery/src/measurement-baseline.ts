@@ -70,6 +70,52 @@ import { suppressMeasurements } from "./measurements.js";
  * false "introduced" is a red check on somebody's unrelated pull request, and
  * the only escape from it is a suppression that also hides the real defect.
  *
+ * WHO GETS THE CLAIM WHEN THERE ARE NOT ENOUGH (added August 17, 2026). Entries
+ * sharing a defect key are interchangeable, so when more violations want one
+ * than exist, the ones served last are called introduced. Serving them in the
+ * engine's order let a violation MUTED by `rules.measurement_suppress` take the
+ * entry an innocent refactored violation needed, and the muted one is invisible
+ * while the innocent one turned the check red. A repository's only escape hatch
+ * from a false red check was manufacturing one. Visible violations are therefore
+ * served first, and a muted violation left without an entry is called introduced
+ * where nothing renders it and nothing gates on it. Muted violations still spend
+ * entries, because a mute hides a violation and does not fix it, and a spent
+ * entry is one that cannot also be counted as resolved.
+ *
+ * AN ENGINE UPGRADE IS THE ONE TIME THE DETAIL LIES (added August 17, 2026). The
+ * detail is the engine's own sentence, and the engine can reword it between two
+ * runs while the page holds still. On its own that is absorbed: a reworded
+ * violation on an unmoved element hits the `elementKey`. But a violation whose
+ * markup ALSO moved misses the fingerprint, misses the elementKey, and misses
+ * the defect key that the new wording no longer matches, so all three fail at
+ * once and an untouched defect reads as introduced. That is the same false red
+ * check the defect key was added to remove, reachable one engine release later.
+ *
+ * So the stored engine version is compared, not merely recorded. When it differs
+ * from the engine that produced this run, a violation that missed every key may
+ * spend an unaccounted-for entry recorded for the same page and check, and is
+ * then reported as `engine_skew`: unclassified, never gating, and never called
+ * pre-existing either, because nothing has shown it is the same violation. The
+ * entry is spent, so two new violations cannot both shelter behind one that went
+ * missing, and a violation on a page where nothing went missing gates as usual.
+ * An unknown version on either side is not skew: Gate cannot show two engines
+ * differ, and reading a missing field as skew would weaken every comparison on a
+ * path that does not record it.
+ *
+ * WHAT THIS STILL MISSES, stated because the miss is silent and the alternative
+ * is worse. Both are cases where a genuinely new violation is called
+ * pre-existing, which Gate still reports and still shows the reader:
+ *
+ *   - The same element gaining a SECOND defect of the same check hits the
+ *     `elementKey`, which is matched rather than spent. One stored entry can
+ *     answer for both, so a button that was merely low-contrast and is now
+ *     invisible reads as unchanged.
+ *   - The defect key is magnitude-blind and threshold-blind, because the numbers
+ *     are stripped from the detail. A normal-text contrast failure can therefore
+ *     claim the entry of a deleted large-text one on the same page. The rule is
+ *     not "the same sentence"; it is "the same sentence once every number is
+ *     replaced".
+ *
  * THE ROUTE IS NEVER FUZZY, AND A RENAMED PAGE IS THEREFORE UNCLASSIFIED. `/`
  * becoming `/home` is a markup refactor's cousin, and it is deliberately NOT
  * absorbed: the route is the last coordinate that keeps two pages apart, and a
@@ -274,7 +320,14 @@ export type UnclassifiedReason =
   /** The base run never captured this route. */
   | "route_not_measured"
   /** The base run never executed this check. */
-  | "check_not_run";
+  | "check_not_run"
+  /**
+   * A different engine version recorded the baseline, and a violation recorded
+   * on this route and check is unaccounted for in this run. A reworded violation
+   * that also moved and a genuinely new one are indistinguishable there, so
+   * neither reading is asserted.
+   */
+  | "engine_skew";
 
 export interface ClassifiedMeasurement {
   measurement: Measurement;
@@ -314,6 +367,16 @@ export interface MeasurementComparison {
   detail?: string;
   /** The identity version the stored set was computed under, on `version_skew`. */
   baselineVersion?: string;
+  /**
+   * Set when the stored set was recorded by a DIFFERENT engine version than the
+   * one that produced this run, which is the only circumstance under which the
+   * engine's own sentence may have changed without the page changing.
+   *
+   * Reported so the reader knows a weaker rule was in force, and so that a run
+   * which withheld gating for this reason can be told apart from one that had
+   * nothing to gate on.
+   */
+  engineSkew?: { baseline: string; current: string };
   /** How many violations the stored set holds. Zero under `compared` is a clean base. */
   baselineSize: number;
   /** Every visible violation with its origin, in the engine's order. */
@@ -422,21 +485,61 @@ export function compareMeasurementsToBaseline(
   // has it on the page, and the entry it accounts for is not free.
   const presentKeys = new Set(all.map(measurementElementKey));
   const claimable = new Map<string, number[]>();
+  // The same unaccounted-for entries, indexed only by the page and the check.
+  // Consulted under engine skew and never otherwise: it is weaker than the
+  // defect key, which is already the weakest key Gate is willing to match on.
+  const claimableHere = new Map<string, number[]>();
+  const routeKind = (kind: MeasurementKind, route: string): string => `${kind} ${route}`;
   snapshot.entries.forEach((entry, index) => {
     if (presentKeys.has(entry.elementKey)) return;
     const waiting = claimable.get(entry.defectKey);
     if (waiting) waiting.push(index);
     else claimable.set(entry.defectKey, [index]);
+    const here = routeKind(entry.kind, entry.route);
+    const waitingHere = claimableHere.get(here);
+    if (waitingHere) waitingHere.push(index);
+    else claimableHere.set(here, [index]);
   });
   const claimedEntries = new Set<number>();
 
-  /** Spend one unaccounted-for entry on this violation, or report there is none. */
-  const claim = (measurement: Measurement): boolean => {
-    const index = claimable.get(measurementDefectKey(measurement))?.pop();
-    if (index === undefined) return false;
-    claimedEntries.add(index);
-    return true;
+  /**
+   * Spend one unaccounted-for entry from an index, or report there is none.
+   *
+   * Both indices point into the same entries, so a pop has to walk past
+   * anything the other index already spent. An entry is claimable exactly once,
+   * whichever door it is reached through.
+   */
+  const spend = (index: Map<string, number[]>, key: string): boolean => {
+    const waiting = index.get(key);
+    while (waiting && waiting.length > 0) {
+      const entry = waiting.pop();
+      if (entry === undefined) break;
+      if (claimedEntries.has(entry)) continue;
+      claimedEntries.add(entry);
+      return true;
+    }
+    return false;
   };
+
+  // A baseline recorded by one engine and a run produced by another are the only
+  // pair where the engine's own sentence can move without the page moving. When
+  // it does move on a violation whose selector ALSO moved, every key here misses
+  // at once and an untouched defect reads as introduced, which is the false red
+  // check this whole module exists to prevent.
+  //
+  // An unknown version on either side is NOT skew. Gate cannot show the two
+  // engines differ, and inventing skew from a missing field would weaken every
+  // comparison on a path that does not record it.
+  const currentEngine = result.metadata.engineVersion;
+  const baselineEngine = snapshot.engineVersion;
+  const engineSkew =
+    typeof baselineEngine === "string" &&
+    baselineEngine.length > 0 &&
+    typeof currentEngine === "string" &&
+    currentEngine.length > 0 &&
+    baselineEngine !== currentEngine
+      ? { baseline: baselineEngine, current: currentEngine }
+      : undefined;
 
   const place = (measurement: Measurement): ClassifiedMeasurement => {
     if (!baseRoutes.has(normalizeRoute(measurement.route))) {
@@ -452,22 +555,45 @@ export function compareMeasurementsToBaseline(
     if (elementKeys.has(measurementElementKey(measurement))) {
       return { measurement, origin: "pre_existing" as const, detailChanged: true };
     }
-    if (claim(measurement)) {
+    if (spend(claimable, measurementDefectKey(measurement))) {
       return { measurement, origin: "pre_existing" as const, elementChanged: true };
+    }
+    // Under skew, and only under skew, a violation that missed every key may
+    // still be an old one the engine reworded while the markup moved. It is not
+    // called pre-existing, because nothing here shows it is the same violation;
+    // it is called unclassified, which reports it and gates on nothing. The
+    // entry is spent all the same, so two new violations cannot both shelter
+    // behind one that vanished, and a violation on a page where nothing went
+    // missing still gates normally.
+    if (engineSkew && spend(claimableHere, routeKind(measurement.kind, normalizeRoute(measurement.route)))) {
+      return { measurement, origin: "unclassified" as const, reason: "engine_skew" as const };
     }
     return { measurement, origin: "introduced" as const };
   };
 
   // Placed over EVERY violation and rendered for the visible ones, because a
   // claim spends a shared resource: a muted violation still sitting on an old
-  // element must take its own entry with it, or the next violation in the list
-  // inherits an entry that was never free.
+  // element must take its own entry with it, or a mute would read as a fix.
+  //
+  // VISIBLE VIOLATIONS CLAIM FIRST, and the order is the whole point. Entries
+  // sharing a defect key are interchangeable, so when there are fewer of them
+  // than claimants, whoever is served last is called introduced. Serving the
+  // engine's order instead would let a MUTED violation take the entry an
+  // innocent refactored one needed, and `rules.measurement_suppress` would then
+  // manufacture the red check it is the escape hatch from. A muted violation
+  // left with no entry is called introduced too, and is rendered by nothing and
+  // gates on nothing, which is what a repository asked for when it muted it.
   const shown = new Set(visible);
-  const classified: ClassifiedMeasurement[] = [];
-  for (const measurement of all) {
-    const row = place(measurement);
-    if (shown.has(measurement)) classified.push(row);
-  }
+  const rows: (ClassifiedMeasurement | undefined)[] = new Array(all.length);
+  all.forEach((measurement, index) => {
+    if (shown.has(measurement)) rows[index] = place(measurement);
+  });
+  all.forEach((measurement, index) => {
+    if (!shown.has(measurement)) rows[index] = place(measurement);
+  });
+  const classified = rows.filter(
+    (row): row is ClassifiedMeasurement => row !== undefined && shown.has(row.measurement),
+  );
 
   // A fix is measured against EVERY violation this run reported, not just the
   // visible ones: muting a violation with `rules.measurement_suppress` hides it,
@@ -487,6 +613,7 @@ export function compareMeasurementsToBaseline(
   return {
     status: "compared",
     baseSha: snapshot.commitSha,
+    ...(engineSkew ? { engineSkew } : {}),
     baselineSize: snapshot.entries.length,
     classified,
     introduced: classified.filter((row) => row.origin === "introduced").map((row) => row.measurement),
