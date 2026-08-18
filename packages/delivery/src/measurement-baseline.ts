@@ -668,8 +668,24 @@ export function compareMeasurementsToBaseline(
    * anything another index already spent. An entry is claimable exactly once,
    * whichever door it is reached through.
    *
-   * Served oldest first, which pairs the two runs the way a reader would: first
-   * with first. NOTHING OBSERVABLE DEPENDS ON THAT, and the reason is worth
+   * VIEWPORT-COMPATIBLE FIRST, and this is not a preference. Rows of one identity
+   * are interchangeable claimants only while nothing distinguishes them, and the
+   * viewport does. A base that measured mobile alone stores one row; a pull
+   * request that widens `viewports:` produces two rows of that identity on
+   * untouched markup. Letting the DESKTOP row claim the mobile entry left the
+   * mobile row, byte for byte what the base recorded, with nothing to claim, and
+   * it was called introduced and failed the check. Which of the two ran first
+   * decided whether the pull request went green or red, and the engine captures
+   * in the repository's own `viewports:` order, so a repository that listed its
+   * new breakpoint first got the bad order on every run.
+   *
+   * A claim therefore skips a stored row measured nowhere this violation was.
+   * When either side has no viewports the two cannot be separated that way and
+   * the claim goes ahead on identity alone, which is what this did before rows
+   * carried viewports at all.
+   *
+   * Served oldest first among the compatible ones, which pairs the two runs the
+   * way a reader would: first with first. NOTHING OBSERVABLE DEPENDS ON THAT, and the reason is worth
    * knowing, because it did once. Entries under one key are interchangeable for
    * classification, so which one a violation claims changes no output; taking
    * them from the back is indistinguishable from taking them from the front. The
@@ -686,12 +702,24 @@ export function compareMeasurementsToBaseline(
    * caller can tell "claimed nothing" from "claimed entry zero". Position `0` is
    * a real answer, so every caller tests `!== undefined` and never truthiness.
    */
-  const spend = (index: Map<string, number[]>, key: string): number | undefined => {
+  const spend = (
+    index: Map<string, number[]>,
+    key: string,
+    measurement: Measurement,
+  ): number | undefined => {
     const waiting = index.get(key);
-    while (waiting && waiting.length > 0) {
-      const entry = waiting.shift();
-      if (entry === undefined) break;
+    if (!waiting) return undefined;
+    const here = new Set<string>(measurement.viewports);
+    for (let position = 0; position < waiting.length; position += 1) {
+      const entry = waiting[position]!;
       if (claimedEntries.has(entry)) continue;
+      const stored = snapshot.entries[entry]?.viewports;
+      // Viewports unknown on either side means they cannot separate these two,
+      // and the claim goes ahead on identity alone, which is what this did
+      // before entries carried viewports.
+      const separable = stored !== undefined && stored.length > 0 && here.size > 0;
+      if (separable && !stored.some((viewport) => here.has(viewport))) continue;
+      waiting.splice(position, 1);
       claimedEntries.add(entry);
       return entry;
     }
@@ -781,10 +809,11 @@ export function compareMeasurementsToBaseline(
     const comparable = placed
       ? candidates.filter((entry) => entry.viewports?.some((viewport) => here.has(viewport)))
       : candidates;
-    // No stored row was measured where this one was. That is not "it was fine
-    // before", it is "nobody looked before", and the two must never render or
-    // gate alike.
-    if (comparable.length === 0) return undefined;
+    // No stored row measured where this one was needs no test of its own: with
+    // nothing comparable, `covered` below is empty and the coverage guard
+    // declines for any row that names a viewport, while a row that names none
+    // falls through the loop and answers unknown anyway. Both say the same
+    // thing, which is "nobody looked before" rather than "it was fine before".
     // AND EVERY VIEWPORT THIS ROW SPEAKS FOR HAS TO BE COVERED. A band is the
     // worst measurement across the viewports its row was measured at, so a row
     // covering mobile and desktop compared against a stored row that only ever
@@ -878,7 +907,7 @@ export function compareMeasurementsToBaseline(
   });
 
   const afterExact = tier(comparable, (measurement) => {
-    const entry = spend(byFingerprint, measurementFingerprint(measurement));
+    const entry = spend(byFingerprint, measurementFingerprint(measurement), measurement);
     if (entry === undefined) return null;
     // The tier that most needs the band. A fingerprint hit means the engine's
     // sentence matched ONCE EVERY NUMBER IN IT WAS REPLACED, so 2.91:1 and
@@ -903,13 +932,13 @@ export function compareMeasurementsToBaseline(
       answeredLeniently.add(key);
       return carried(measurement, worstForElement(measurement, key), { detailChanged: true });
     }
-    const entry = spend(byElementKey, key);
+    const entry = spend(byElementKey, key, measurement);
     if (entry === undefined) return null;
     return carried(measurement, worstForElement(measurement, key), { detailChanged: true });
   });
 
   const afterDefect = tier(afterElement, (measurement) => {
-    const entry = spend(byDefectKey, measurementDefectKey(measurement));
+    const entry = spend(byDefectKey, measurementDefectKey(measurement), measurement);
     if (entry === undefined) return null;
     // The element moved, so nothing is recorded under its key. The defect key is
     // the one that matched, and it is the one whose worst band answers here.
@@ -927,7 +956,7 @@ export function compareMeasurementsToBaseline(
   // gates normally.
   const introduced = tier(afterDefect, (measurement) =>
     engineSkew &&
-    spend(byRouteKind, routeKind(measurement.kind, normalizeRoute(measurement.route))) !== undefined
+    spend(byRouteKind, routeKind(measurement.kind, normalizeRoute(measurement.route)), measurement) !== undefined
       ? { measurement, origin: "unclassified" as const, reason: "engine_skew" as const }
       : null,
   );
@@ -967,12 +996,21 @@ export function compareMeasurementsToBaseline(
   // violation claimed is not a fix either: the defect moved, it did not go.
   const nowRoutes = new Set(measuredRoutes(result));
   const nowChecks = new Set(measuredKinds(result));
+  // And the viewports, for exactly the reason the route and the check are here.
+  // A stored row measured only at desktop, on a run that captured mobile alone,
+  // was reported as a violation that is GONE. Nobody looked at desktop. This
+  // counter is the one surface that speaks in the flattering direction, so an
+  // unmeasured coordinate has to silence it wherever it appears.
+  const nowViewports = new Set(measuredViewports(result));
   const resolved = snapshot.entries.filter(
     (entry, index) =>
       nowRoutes.has(entry.route) &&
       nowChecks.has(entry.kind) &&
       !claimedEntries.has(index) &&
-      !answeredLeniently.has(entry.elementKey),
+      !answeredLeniently.has(entry.elementKey) &&
+      (entry.viewports === undefined ||
+        entry.viewports.length === 0 ||
+        entry.viewports.some((viewport) => nowViewports.has(viewport))),
   ).length;
 
   return {

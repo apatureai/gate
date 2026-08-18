@@ -820,6 +820,19 @@ already in the worst band hide a desktop regression from `3.40:1` to `1.02:1`, w
 own landmark on the only rendering that changed. When no stored row was measured where this one was,
 there is nothing to compare and nothing gates: that is "nobody looked there", not "it was fine".
 
+**A claim never reaches across viewports.** Stored rows of one identity are interchangeable
+claimants only while nothing tells them apart, and the viewport does. When a base that measured
+mobile alone meets a pull request that widened `viewports:`, the untouched markup produces two rows
+of that identity, and letting the desktop row take the mobile row's stored entry left the mobile row
+with nothing to claim: byte for byte what the base recorded, reported as introduced, failing the
+check. Whether it went green or red depended on the order the engine listed two rows in. A claim now
+skips a stored row measured nowhere this violation was, and when either side records no viewports
+the claim goes ahead on identity alone.
+
+**A violation is not "gone" from a viewport nobody measured.** The resolved counter is scoped by
+route, by check and by viewport, all for one reason: it is the only line here that speaks in the
+flattering direction, so every coordinate nobody looked at has to silence it.
+
 **A violation found only where the base never looked is not new.** Widening `viewports:` renders the
 same markup at a size nobody measured before, and the engine reports a row for it that matches no
 stored row, because there was never one to match. That row is reported as not classified rather than

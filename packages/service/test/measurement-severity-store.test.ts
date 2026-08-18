@@ -126,3 +126,84 @@ describe("the severity band round-trips through jsonb", () => {
     }
   });
 });
+
+describe("the viewports on a stored row survive jsonb the same way the band does", () => {
+  /**
+   * These decide which stored rows a band is compared against and which
+   * violations the unseen-viewport screen excuses, so a value read back wrong is
+   * a wrong verdict rather than a cosmetic loss. Every rule here is stated in
+   * the reader's own comments and none of them was asserted.
+   */
+  it("writes NULL rather than an empty list when the snapshot does not know", async () => {
+    const store = newStore();
+    const snapshot = storedFor([violation()]);
+    const { viewportsMeasured: _unknown, ...older } = snapshot;
+    await store.record({ ...key, snapshot: older });
+
+    const { rows } = await query<{ viewports_measured: unknown }>(
+      "SELECT viewports_measured FROM measurement_baselines",
+    );
+    // An empty list is a positive claim that this run measured no viewports at
+    // all, and it screens every new violation out of gating. Absent is the only
+    // honest value for "this snapshot does not carry the field".
+    expect(rows[0]?.viewports_measured).toBeNull();
+  });
+
+  it("brings a NULL column back as absent rather than as an empty list", async () => {
+    const store = newStore();
+    const snapshot = storedFor([violation()]);
+    const { viewportsMeasured: _unknown, ...older } = snapshot;
+    await store.record({ ...key, snapshot: older });
+
+    const lookup = await lookupMeasurementBaseline(store, key);
+    expect(lookup.status).toBe("found");
+    if (lookup.status !== "found") return;
+    expect(lookup.snapshot).not.toHaveProperty("viewportsMeasured");
+  });
+
+  it("round-trips a row's own viewport list", async () => {
+    const store = newStore();
+    await store.record({ ...key, snapshot: storedFor([violation()]) });
+
+    const lookup = await lookupMeasurementBaseline(store, key);
+    expect(lookup.status).toBe("found");
+    if (lookup.status !== "found") return;
+    expect(lookup.snapshot.entries[0]?.viewports).toEqual(["mobile"]);
+  });
+
+  it("refuses a half-read viewport list instead of coercing it", async () => {
+    // A list with a non-string in it is not a viewport list, and silently
+    // keeping the readable half would quietly change which stored rows a band is
+    // compared against. Same rule the band already follows for a `"3"`.
+    const store = newStore();
+    const snapshot = storedFor([violation()]);
+    const damaged = {
+      ...snapshot,
+      entries: snapshot.entries.map((entry) => ({ ...entry, viewports: ["mobile", 7] })),
+    };
+    await store.record({ ...key, snapshot: damaged as typeof snapshot });
+
+    const lookup = await lookupMeasurementBaseline(store, key);
+    expect(lookup.status).toBe("found");
+    if (lookup.status !== "found") return;
+    expect(lookup.snapshot.entries[0]).not.toHaveProperty("viewports");
+  });
+
+  it("keeps a legitimately empty list as an empty list", async () => {
+    // Empty and absent are different claims and the reader must not fold one
+    // into the other: empty says this row was measured nowhere, absent says
+    // nobody recorded where it was measured.
+    const store = newStore();
+    const snapshot = storedFor([violation()]);
+    const nowhere = {
+      ...snapshot,
+      entries: snapshot.entries.map((entry) => ({ ...entry, viewports: [] })),
+    };
+    await store.record({ ...key, snapshot: nowhere });
+
+    const lookup = await lookupMeasurementBaseline(store, key);
+    expect(lookup.status).toBe("found");
+    if (lookup.status !== "found") return;
+    expect(lookup.snapshot.entries[0]?.viewports).toEqual([]);
+  });
+});

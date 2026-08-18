@@ -767,7 +767,7 @@ describe("an unplaceable band and a partly unseen row", () => {
     commitSha: "basesha0000",
   });
 
-  it("compares nothing when no stored row was measured where this one was", () => {
+  it("calls a violation new when the base measured that viewport and recorded nothing", () => {
     // The violation matches a stored row exactly, so it is carried over, but
     // every stored row of that identity was measured somewhere else. There is
     // no band to compare against. Reading that as band zero would make any
@@ -782,7 +782,12 @@ describe("an unplaceable band and a partly unseen row", () => {
       lookup: { status: "found", snapshot: base },
     });
 
-    expect(comparison.preExisting).toEqual([now]);
+    // The stored row of this identity was measured at mobile, and a claim may
+    // not reach across viewports: letting it made the leftover row, byte for
+    // byte what the base recorded, read as the new one. The base looked at
+    // desktop and recorded nothing there, so a desktop violation is genuinely
+    // new and no band question arises.
+    expect(comparison.introduced).toEqual([now]);
     expect(comparison.worsened).toEqual([]);
     expect(comparison.classified[0]?.baselineSeverity).toBeUndefined();
   });
@@ -962,5 +967,319 @@ describe("a baseline whose rows are only partly placeable", () => {
     // Band 3 is on the record for this identity. Band 2 is not a regression
     // against it, whatever happened to that row's viewport list.
     expect(comparison.worsened).toEqual([]);
+  });
+});
+
+describe("which row the engine happens to report first decides nothing", () => {
+  /**
+   * A claim used to reach across viewports. A base that measured mobile alone
+   * stores one row; a pull request that widens `viewports:` produces two rows of
+   * that identity on untouched markup. If the DESKTOP row claimed the mobile
+   * entry, the mobile row, byte for byte what the base recorded, had nothing
+   * left to claim and was called introduced. The check went red or green
+   * depending on the order the engine listed two rows in, and verdict captures
+   * in the repository's own `viewports:` order, so a repository that listed its
+   * new breakpoint first got the bad order on every run.
+   */
+  const at = (viewport: "mobile" | "desktop" | "tablet", over: Partial<Measurement> = {}): Measurement => ({
+    ...TAGLINE,
+    viewports: [viewport],
+    severity: 2,
+    ...over,
+  });
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: viewportsReviewed,
+      viewportsReviewed,
+    },
+  });
+  const base = buildMeasurementBaseline(covering([at("mobile")], ["mobile"]), {
+    commitSha: "basesha0000",
+  });
+
+  const placeIn = (order: Measurement[]) =>
+    compareMeasurementsToBaseline(covering(order, ["mobile", "desktop"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+  it("classifies a widened run the same way whichever row comes first", () => {
+    const mobileFirst = placeIn([at("mobile"), at("desktop")]);
+    const desktopFirst = placeIn([at("desktop"), at("mobile")]);
+
+    for (const comparison of [mobileFirst, desktopFirst]) {
+      expect(comparison.introduced).toEqual([]);
+      expect(comparison.preExisting.map((row) => row.viewports)).toEqual([["mobile"]]);
+      expect(comparison.unclassified.map((row) => row.viewports)).toEqual([["desktop"]]);
+    }
+  });
+
+  it("fails no check in either order", () => {
+    for (const order of [
+      [at("mobile"), at("desktop")],
+      [at("desktop"), at("mobile")],
+    ]) {
+      expect(
+        buildCheckRun(covering(order, ["mobile", "desktop"]), "none", {
+          measurements: "block",
+          baseline: placeIn(order),
+        }).conclusion,
+      ).not.toBe("failure");
+    }
+  });
+
+  it("still lets a claim go ahead when a stored row carries no viewports", () => {
+    // Viewports cannot separate two rows when one side does not have them, and
+    // a baseline written before the field existed must keep matching on
+    // identity alone rather than losing every claim at once.
+    const legacy = {
+      ...base,
+      entries: base.entries.map(({ viewports: _drop, ...entry }) => entry),
+    };
+    const comparison = compareMeasurementsToBaseline(covering([at("desktop")], ["desktop"]), {
+      lookup: { status: "found", snapshot: legacy },
+    });
+
+    expect(comparison.preExisting).toHaveLength(1);
+    expect(comparison.introduced).toEqual([]);
+  });
+});
+
+describe("a violation is not gone from a viewport nobody measured", () => {
+  // `resolved` is the one counter here that speaks in the flattering direction,
+  // and it was scoped by route and by check but not by viewport. A base that
+  // measured mobile and desktop, on a run that captured mobile alone, reported
+  // its desktop violation as fixed.
+  const desktopOnly: Measurement = { ...TAGLINE, viewports: ["desktop"], severity: 2 };
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: viewportsReviewed,
+      viewportsReviewed,
+    },
+  });
+  const base = buildMeasurementBaseline(covering([desktopOnly], ["mobile", "desktop"]), {
+    commitSha: "basesha0000",
+  });
+
+  it("does not count it as resolved when this run never looked there", () => {
+    const comparison = compareMeasurementsToBaseline(covering([], ["mobile"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.resolved).toBe(0);
+  });
+
+  it("does count it when this run did look there and found nothing", () => {
+    // The control. Scoping by viewport must not make a real fix invisible.
+    const comparison = compareMeasurementsToBaseline(covering([], ["mobile", "desktop"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.resolved).toBe(1);
+  });
+});
+
+describe("guards the band rules rest on that nothing was asserting", () => {
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+    viewportsRequested = viewportsReviewed,
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested,
+      viewportsReviewed,
+    },
+  });
+  const row = (viewports: Measurement["viewports"], severity: number, over: Partial<Measurement> = {}): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity,
+    ...over,
+  });
+
+  it("compares against a stored row that covers MORE viewports than this one", () => {
+    // The engine groups identical wording across viewports into ONE row, so a
+    // stored row covering mobile and tablet against a row here covering mobile
+    // is the normal shape rather than the exception. Requiring the stored row's
+    // viewports to be a subset instead of an overlap loses the comparison.
+    const base = buildMeasurementBaseline(
+      covering([row(["mobile", "tablet"], 2)], ["mobile", "tablet"]),
+      { commitSha: "basesha0000" },
+    );
+    const worse = row(["mobile"], 3);
+    const comparison = compareMeasurementsToBaseline(covering([worse], ["mobile", "tablet"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.worsened).toEqual([worse]);
+  });
+
+  it("compares a legacy baseline rather than declining every band on it", () => {
+    // The whole-identity fallback has to actually answer. Applying the viewport
+    // coverage rule to rows that cannot be placed at a viewport would switch
+    // regression detection off for every baseline stored before the column.
+    const base = buildMeasurementBaseline(runOf([row(["mobile"], 1)]), {
+      commitSha: "basesha0000",
+    });
+    const legacy = { ...base, entries: base.entries.map(({ viewports: _d, ...e }) => e) };
+    const worse = row(["mobile"], 3);
+    const comparison = compareMeasurementsToBaseline(runOf([worse]), {
+      lookup: { status: "found", snapshot: legacy },
+    });
+
+    expect(comparison.worsened).toEqual([worse]);
+  });
+
+  it("still calls a violation new when the snapshot records no viewports at all", () => {
+    // Unknown base viewports must not screen everything: that would turn `block`
+    // into a no-op against a legacy baseline instead of a narrower rule.
+    const base = buildMeasurementBaseline(runOf([row(["mobile"], 1)]), {
+      commitSha: "basesha0000",
+    });
+    const { viewportsMeasured: _dropped, ...older } = base;
+    const fresh = row(["mobile"], 2, { element: "#brand-new .cta" });
+    const comparison = compareMeasurementsToBaseline(runOf([row(["mobile"], 1), fresh]), {
+      lookup: { status: "found", snapshot: older },
+    });
+
+    expect(comparison.introduced).toEqual([fresh]);
+  });
+
+  it("declines to compare against a stored row measured nowhere", () => {
+    // An empty list is not an absent one. Absent says nobody recorded the
+    // viewports; empty says this row was measured at none of them, and a band
+    // from nowhere cannot be the base for a regression.
+    const base = buildMeasurementBaseline(runOf([row(["mobile"], 1)]), {
+      commitSha: "basesha0000",
+    });
+    const nowhere = { ...base, entries: base.entries.map((e) => ({ ...e, viewports: [] })) };
+    const comparison = compareMeasurementsToBaseline(runOf([row(["mobile"], 3)]), {
+      lookup: { status: "found", snapshot: nowhere },
+    });
+
+    expect(comparison.worsened).toEqual([]);
+  });
+
+  it("does not excuse a violation whose own viewport list is empty", () => {
+    // The engine contract does not require a viewport list to be non-empty, and
+    // a row that names none must not fall through the unseen-viewport screen:
+    // that would let an engine switch `block` off by omitting a field.
+    const base = buildMeasurementBaseline(covering([row(["mobile"], 1)], ["mobile"]), {
+      commitSha: "basesha0000",
+    });
+    // A distinct sentence as well as a distinct element, so the markup-refactor
+    // tier has nothing to carry over and the row really does reach the screen.
+    const fresh = row([], 2, {
+      element: "#brand-new .cta",
+      detail: "the control has no accessible name",
+    });
+    const comparison = compareMeasurementsToBaseline(covering([fresh], ["mobile"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.introduced).toEqual([fresh]);
+  });
+
+  it("records the viewports a run REVIEWED, not the ones it asked for", () => {
+    // A base run that asked for desktop and never captured it has not measured
+    // desktop, and treating the request as evidence makes every desktop
+    // violation on the next pull request read as introduced.
+    const base = buildMeasurementBaseline(
+      covering([row(["mobile"], 1)], ["mobile"], ["mobile", "desktop"]),
+      { commitSha: "basesha0000" },
+    );
+    const atDesktop = row(["desktop"], 2, { element: "#only-wide .cta" });
+    const comparison = compareMeasurementsToBaseline(
+      covering([atDesktop], ["mobile", "desktop"]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.classified[0]?.reason).toBe("viewport_not_measured");
+  });
+
+  it("counts a violation's own viewport as proof that viewport was measured", () => {
+    // Coverage is one source of evidence and the violations are the other. A
+    // violation reported at tablet is proof tablet was captured, whatever the
+    // coverage block says.
+    const base = buildMeasurementBaseline(
+      covering([row(["tablet"], 1, { element: "#wide .thing" })], ["mobile"]),
+      { commitSha: "basesha0000" },
+    );
+
+    expect(base.viewportsMeasured).toContain("tablet");
+  });
+
+  it("says viewport in the unplaceable reason, not check", () => {
+    const base = buildMeasurementBaseline(covering([row(["mobile"], 1)], ["mobile"]), {
+      commitSha: "basesha0000",
+    });
+    const comparison = compareMeasurementsToBaseline(
+      covering([row(["mobile"], 1), row(["desktop"], 2, { element: "#x .y" })], ["mobile", "desktop"]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+    const section = baselineSection(comparison, { mode: "block" }) ?? "";
+
+    expect(section).toContain("never measured that viewport");
+  });
+
+  it("does not blame the overflow exclusion on a run where it decided nothing", () => {
+    // The note explains why a deepened overflow did not fail the check. An
+    // overflow the engine already refuses to stand behind was never a candidate,
+    // so claiming the exclusion is the reason is a false explanation.
+    const advisoryOverflow = row(["mobile"], 3, {
+      kind: "overflow",
+      element: "#plans .grid",
+      detail: "element is 412px wide inside a 390px viewport",
+      blockEligible: false,
+    });
+    const base = buildMeasurementBaseline(
+      covering([{ ...advisoryOverflow, severity: 1 }], ["mobile"]),
+      { commitSha: "basesha0000" },
+    );
+    const section =
+      baselineSection(
+        compareMeasurementsToBaseline(covering([advisoryOverflow], ["mobile"]), {
+          lookup: { status: "found", snapshot: base },
+        }),
+        { mode: "block" },
+      ) ?? "";
+
+    expect(section).not.toMatch(/never fails a check on one/);
+  });
+
+  it("does not tell an author an advisory-only violation failed their check", () => {
+    // The closing sentence picks its wording from the worsened rows that can
+    // gate. A worsening the engine marked advisory-only is not one of them.
+    const advisoryWorse = row(["mobile"], 3, { element: "#soft .thing", blockEligible: false });
+    const fresh = row(["mobile"], 2, { element: "#brand-new .cta" });
+    const base = buildMeasurementBaseline(
+      covering([{ ...advisoryWorse, severity: 1 }], ["mobile"]),
+      { commitSha: "basesha0000" },
+    );
+    const section =
+      baselineSection(
+        compareMeasurementsToBaseline(covering([advisoryWorse, fresh], ["mobile"]), {
+          lookup: { status: "found", snapshot: base },
+        }),
+        { mode: "block", blocking: true },
+      ) ?? "";
+
+    expect(section).toContain("so the new block-eligible violation(s)");
+    expect(section).not.toMatch(/either introduced or moved into a worse severity band/);
   });
 });
