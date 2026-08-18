@@ -228,6 +228,18 @@ export interface MeasurementBaselineSnapshot {
   checksRun: MeasurementKind[];
   /** Normalized routes the run demonstrably measured. */
   routesMeasured: string[];
+  /**
+   * Viewports the run demonstrably measured. Optional because baselines stored
+   * before severity bands existed do not carry it, and absent means unknown
+   * rather than none.
+   *
+   * Only the BAND comparison reads this. Identity deliberately excludes the
+   * viewport, so a violation that used to show at mobile and now also shows at
+   * desktop is the same violation. Its worst band across viewports is not the
+   * same number, though, so a repository that widened its `viewports:` config
+   * can raise the worst band on a page whose markup nobody touched.
+   */
+  viewportsMeasured?: string[];
   entries: MeasurementBaselineEntry[];
   /** Engine version that produced it, for audit. Never part of the identity. */
   engineVersion?: string | null;
@@ -271,6 +283,25 @@ export function measuredRoutes(result: GateReviewResult): string[] {
   return [...routes].sort();
 }
 
+/**
+ * Viewports a result proves were measured.
+ *
+ * Same two sources as `measuredRoutes` and the same rule: evidence, never
+ * inference. A violation reported at a viewport is proof that viewport was
+ * measured, and a viewport in `coverage.viewportsReviewed` is proof the capture
+ * ran there.
+ */
+export function measuredViewports(result: GateReviewResult): string[] {
+  const report = result.measurements;
+  if (report === undefined) return [];
+  const viewports = new Set<string>();
+  for (const viewport of result.coverage?.viewportsReviewed ?? []) viewports.add(viewport);
+  for (const violation of report.violations) {
+    for (const viewport of violation.viewports) viewports.add(viewport);
+  }
+  return [...viewports].sort();
+}
+
 export interface BuildBaselineOptions {
   /** The commit this result was produced for. */
   commitSha: string;
@@ -295,6 +326,7 @@ export function buildMeasurementBaseline(
     commitSha: options.commitSha,
     checksRun: measuredKinds(result),
     routesMeasured: measuredRoutes(result),
+    viewportsMeasured: measuredViewports(result),
     entries: violations.map((violation) => ({
       kind: violation.kind,
       route: normalizeRoute(violation.route),
@@ -612,21 +644,32 @@ export function compareMeasurementsToBaseline(
   /**
    * Spend one unclaimed entry from an index, or report there is none.
    *
-   * Every index points into the same entries, so a pop has to walk past
+   * Every index points into the same entries, so a take has to walk past
    * anything another index already spent. An entry is claimable exactly once,
    * whichever door it is reached through.
    *
-   * Returns the POSITION of the entry it spent rather than a bare `true`,
-   * because the band comparison has to read the stored severity off the very
-   * entry this violation claimed. Any other entry on the page is a different
-   * violation's band, and comparing against it would report a regression that
-   * belongs to something else. Position `0` is a real answer, so every caller
-   * tests `!== undefined` and never truthiness.
+   * Served oldest first, which pairs the two runs the way a reader would: first
+   * with first. NOTHING OBSERVABLE DEPENDS ON THAT, and the reason is worth
+   * knowing, because it did once. Entries under one key are interchangeable for
+   * classification, so which one a violation claims changes no output; taking
+   * them from the back is indistinguishable from taking them from the front. The
+   * band comparison was briefly the exception, when it read the severity off the
+   * individual entry a violation claimed. Entries in reverse then paired one
+   * page's two viewports against each other, so a page compared against ITSELF
+   * reported one violation improved and one made worse and an empty pull request
+   * failed its check. That is fixed where it belonged, in `worstRecorded`, which
+   * asks the whole group instead of one arbitrary member. This order is kept
+   * because it is the one a reader would guess, not because anything rests on
+   * it.
+   *
+   * Returns the POSITION of the entry it spent rather than a bare `true` so a
+   * caller can tell "claimed nothing" from "claimed entry zero". Position `0` is
+   * a real answer, so every caller tests `!== undefined` and never truthiness.
    */
   const spend = (index: Map<string, number[]>, key: string): number | undefined => {
     const waiting = index.get(key);
     while (waiting && waiting.length > 0) {
-      const entry = waiting.pop();
+      const entry = waiting.shift();
       if (entry === undefined) break;
       if (claimedEntries.has(entry)) continue;
       claimedEntries.add(entry);
@@ -638,8 +681,8 @@ export function compareMeasurementsToBaseline(
   /**
    * A carried-over violation, with the band comparison attached.
    *
-   * `stored` is the band recorded for the entry this violation claimed, or
-   * `undefined` when there is none to read. UNKNOWN ON EITHER SIDE IS NOT A
+   * `stored` is the worst band recorded under the key that matched this
+   * violation, or `undefined` when there is none to read. UNKNOWN ON EITHER SIDE IS NOT A
    * COMPARISON: no band reaches the row, `worsened` is not set, and the
    * violation stays an ordinary pre-existing one that gates on nothing. That is
    * the rule an absent `blockEligible` already follows, and it is what keeps an
@@ -653,6 +696,29 @@ export function compareMeasurementsToBaseline(
    * violation that did not get worse, and `>=` would turn every unchanged
    * carry-over on the page into a red check.
    */
+  /**
+   * Whether a band recorded on the base is comparable to a band measured now.
+   *
+   * A band is the WORST measurement across the viewports a run looked at, and
+   * identity excludes the viewport on purpose. So a repository that widened its
+   * `viewports:` config measures the same markup at a viewport the base run
+   * never visited, the worst band rises, and byte-identical HTML reads as a
+   * regression this pull request caused. That is a false red check produced by a
+   * config edit, which is exactly the shape this module exists to prevent.
+   *
+   * The rule is therefore a subset test, not an equality test: every viewport
+   * measured now must be one the base run measured too. Measuring FEWER is fine,
+   * since a band that fell because nobody looked cannot be a worsening. A
+   * baseline stored before this field existed says nothing about its viewports,
+   * and unknown never gates.
+   */
+  const bandsComparable = ((): boolean => {
+    const recorded = snapshot.viewportsMeasured;
+    if (recorded === undefined) return false;
+    const base = new Set(recorded);
+    return measuredViewports(result).every((viewport) => base.has(viewport));
+  })();
+
   const carried = (
     measurement: Measurement,
     stored: number | undefined,
@@ -660,7 +726,7 @@ export function compareMeasurementsToBaseline(
   ): ClassifiedMeasurement => {
     const row: ClassifiedMeasurement = { measurement, origin: "pre_existing", ...extra };
     const current = measurement.severity;
-    if (stored === undefined || current === undefined) return row;
+    if (!bandsComparable || stored === undefined || current === undefined) return row;
     row.baselineSeverity = stored;
     row.currentSeverity = current;
     if (current > stored) row.worsened = true;
@@ -668,28 +734,43 @@ export function compareMeasurementsToBaseline(
   };
 
   /**
-   * The band to compare against when an element key was MATCHED and not spent.
+   * The band a carried-over violation is compared against: the WORST band
+   * recorded under the key that matched it.
    *
-   * Exactly one path reaches this: the lenient element tier under engine skew,
-   * where there is no single claimed entry to read a band off. The WORST band
-   * recorded for that element is taken, and one entry without a band makes the
-   * whole answer unknown.
+   * NOT the band on the individual entry the violation claimed, and the
+   * difference is the whole correctness of this comparison. Several stored
+   * violations can share one identity, because identity deliberately excludes
+   * the viewport: one element measured at mobile and at desktop is one identity
+   * and two entries, and a colour token behind a media query gives them
+   * different bands. Reading the claimed entry made the answer depend on which
+   * of those two a violation happened to be paired with, so a page compared
+   * against ITSELF reported one violation improved and one made worse, and an
+   * empty pull request failed its check.
    *
-   * Both halves lean the same way, away from calling a violation worsened. Under
-   * skew a new engine may report as several rows what the old one reported as
-   * one, so the row in hand is not necessarily the whole of what was stored, and
-   * a false "worsened" is a red check on work that did not cause it: the one
-   * error this module spends everything else avoiding.
+   * Asking instead whether ANY violation of this identity was already this bad
+   * is order-independent, and it leans away from calling something worsened.
+   * The cost is on the record: when one of two viewports regresses to a band the
+   * other viewport already had, that regression is reported and never gated. A
+   * missed "worse" is a violation Gate still renders; a false "worse" is a red
+   * check on work that did not cause it, which is the error this module spends
+   * everything else avoiding.
+   *
+   * One entry without a band makes the whole answer unknown, for the same
+   * reason: an entry that might have been worse cannot be ruled out.
    */
-  const worstRecordedSeverity = (elementKey: string): number | undefined => {
+  const worstRecorded = (matches: (entry: MeasurementBaselineEntry) => boolean): number | undefined => {
     let worst: number | undefined;
     for (const entry of snapshot.entries) {
-      if (entry.elementKey !== elementKey) continue;
+      if (!matches(entry)) continue;
       if (entry.severity === undefined) return undefined;
       if (worst === undefined || entry.severity > worst) worst = entry.severity;
     }
     return worst;
   };
+  const worstForElement = (key: string): number | undefined =>
+    worstRecorded((entry) => entry.elementKey === key);
+  const worstForDefect = (key: string): number | undefined =>
+    worstRecorded((entry) => entry.defectKey === key);
 
   // A baseline recorded by one engine and a run produced by another are the only
   // pair where the engine's own sentence can move without the page moving. When
@@ -767,7 +848,7 @@ export function compareMeasurementsToBaseline(
     // sentence matched ONCE EVERY NUMBER IN IT WAS REPLACED, so 2.91:1 and
     // 1.02:1 on one element land here as the same violation. Before the band,
     // that was where a real regression went silent.
-    return carried(measurement, snapshot.entries[entry]?.severity);
+    return carried(measurement, worstForElement(measurementElementKey(measurement)));
   });
 
   // Same check, same page, same element, and the engine's sentence differs.
@@ -784,17 +865,21 @@ export function compareMeasurementsToBaseline(
       // recorded as accounted for all the same: a violation Gate just called
       // pre-existing must never also be counted among the ones that are gone.
       answeredLeniently.add(key);
-      return carried(measurement, worstRecordedSeverity(key), { detailChanged: true });
+      return carried(measurement, worstForElement(key), { detailChanged: true });
     }
     const entry = spend(byElementKey, key);
     if (entry === undefined) return null;
-    return carried(measurement, snapshot.entries[entry]?.severity, { detailChanged: true });
+    return carried(measurement, worstForElement(key), { detailChanged: true });
   });
 
   const afterDefect = tier(afterElement, (measurement) => {
     const entry = spend(byDefectKey, measurementDefectKey(measurement));
     if (entry === undefined) return null;
-    return carried(measurement, snapshot.entries[entry]?.severity, { elementChanged: true });
+    // The element moved, so nothing is recorded under its key. The defect key is
+    // the one that matched, and it is the one whose worst band answers here.
+    return carried(measurement, worstForDefect(measurementDefectKey(measurement)), {
+      elementChanged: true,
+    });
   });
 
   // Under skew, and only under skew, a violation that missed every key may still

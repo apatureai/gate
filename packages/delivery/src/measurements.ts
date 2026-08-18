@@ -127,12 +127,26 @@ export function blockEligibleMeasurements(
  * `compareMeasurementsToBaseline` has already established before it puts a
  * violation in `worsened` at all: unknown never gates.
  *
+ * ONE KIND IS EXCLUDED FROM THE SECOND WAY IN, and only from the second.
+ * `overflow` bands are cut at 10% and 50% of the viewport width, which are
+ * proportions Gate chose rather than anything a standard published, and they sit
+ * close enough to ordinary layout that an unrelated edit crosses one: a single
+ * pixel of body padding moved a measured overflow across the 10% landmark and
+ * failed a build. A band that cannot be crossed by accident is what makes
+ * "worse" a safe thing to gate on, and this one can, so an overflow that
+ * deepened is reported and never fails a check. Contrast and touch-target
+ * landmarks are WCAG's own (3.0:1 for large text, 24px for SC 2.5.8), and a
+ * change that crosses one of those is a change a standard already calls
+ * material.
+ *
+ * An overflow this pull request INTRODUCED still gates exactly as before. The
+ * exclusion is about a band moving, not about the check.
+ *
  * Introduced first, because that is the order both surfaces list them in.
  */
 export function gateableMeasurements(comparison: MeasurementComparison): Measurement[] {
-  return [...comparison.introduced, ...comparison.worsened].filter(
-    (violation) => violation.blockEligible,
-  );
+  const worsened = comparison.worsened.filter((violation) => violation.kind !== "overflow");
+  return [...comparison.introduced, ...worsened].filter((violation) => violation.blockEligible);
 }
 
 /**

@@ -778,7 +778,7 @@ ordinal severity band per violation, Gate stores it beside the keys, and Gate co
 nothing else. Raw magnitudes still never cross the boundary.
 
 The bands are the engine's, and they are coarse on purpose, so ordinary re-measurement noise cannot
-move one and a band that did move is a material change by construction:
+move one:
 
 | Check | Band 1 | Band 2 | Band 3 |
 |---|---|---|---|
@@ -795,6 +795,31 @@ looking for markup they never wrote. It gets its own count and its own section, 
 pull request*, with the band before and after on the row. Under `block` it fails the check on the
 same terms an introduced violation does: the engine must have marked it `blockEligible`, and the
 comparison must be strictly greater, so a band that did not move is never a regression.
+
+**A band that moved is not automatically a merge blocker, and one check is excluded by name.** The
+`contrast` and `touch_target` landmarks are WCAG's own, so crossing one is material by a definition
+nobody here invented. The `overflow` cuts at 10% and 50% of the viewport are proportions Gate chose,
+and they sit close enough to ordinary layout that an unrelated edit crosses one: a single pixel of
+body padding was enough to move a measured overflow past the 10% mark. So **an overflow that deepened
+is reported and never fails a check**, while an overflow this pull request introduced gates exactly
+as before. The exclusion is about a band moving, not about the check.
+
+**A band is only comparable across the same viewports.** A band is the worst measurement across the
+viewports a run looked at, and identity excludes the viewport deliberately, so widening `viewports:`
+in your config measures the same markup somewhere the base run never visited and the worst band
+rises on markup nobody edited. Gate therefore compares bands only when every viewport measured now
+is one the base run measured too. Measuring fewer is fine, since a band that fell because nobody
+looked is not a fix. A baseline recorded before Gate stored its viewports says nothing about them,
+and is not compared.
+
+**The comparison asks the whole group, not one stored row.** Several stored violations can share one
+identity, because identity excludes the viewport: one element measured at mobile and at desktop is
+one identity and two stored rows, and a colour token behind a media query gives them different
+bands. So the question is whether ANY violation of this identity was already this bad. Asking one
+arbitrary row instead made the answer depend on which row a violation happened to be paired with,
+and a page compared against itself reported one violation improved and one made worse. The cost of
+the group rule is on the record: when one viewport regresses to a band another viewport already had,
+that regression is reported and never gated.
 
 **An unknown band never gates, on either side.** An engine that does not state one, a baseline
 recorded before the field existed, and a check that computes no band all leave one side unknown, and

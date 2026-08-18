@@ -341,3 +341,193 @@ describe("what engine skew does NOT do", () => {
     expect(comparison.introduced).toEqual([moved]);
   });
 });
+
+describe("a page compared against itself is never a regression", () => {
+  /**
+   * The pairing bug this pins was invisible until entries carried a band.
+   *
+   * Entries under one key are recorded in the base run's order, and this run's
+   * violations arrive in the same engine's order. Taking entries from the BACK
+   * paired the two runs in reverse, so a page whose colour token differs
+   * between two viewports had its bands swapped and read as one violation
+   * improved plus one made worse. On an empty pull request that is a red check,
+   * and every test passed either way because nothing else in a stored entry
+   * depends on which of two identical-identity entries a violation claims.
+   *
+   * A run compared against a baseline built from itself is the whole invariant
+   * in one line: whatever the pairing, it cannot produce a change.
+   */
+  const identical = (severities: number[]): Measurement[] =>
+    severities.map((severity) => ({ ...TAGLINE, severity }));
+
+  it("reports no regression when the run and the base are the same run", () => {
+    // Two violations sharing an identity and differing only in band, which is
+    // exactly what one element measured at two viewports produces.
+    const violations = identical([1, 2]);
+    const comparison = compare(violations, { baseline: baselineOf(violations) });
+
+    expect(comparison.worsened).toEqual([]);
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.preExisting).toHaveLength(2);
+    expect(blocks(comparison, violations)).toBe(false);
+  });
+
+  it("holds whichever order the engine reported the two in", () => {
+    const violations = identical([2, 1]);
+    const comparison = compare(violations, { baseline: baselineOf(identical([1, 2])) });
+
+    expect(comparison.worsened).toEqual([]);
+    expect(blocks(comparison, violations)).toBe(false);
+  });
+
+  it("still catches a band that really did move", () => {
+    // The control. If the assertions above passed because nothing is compared
+    // at all, this one fails.
+    const violations = identical([1, 3]);
+    const comparison = compare(violations, { baseline: baselineOf(identical([1, 2])) });
+
+    expect(comparison.worsened).toHaveLength(1);
+    expect(blocks(comparison, violations)).toBe(true);
+  });
+});
+
+describe("a band is only comparable across the same viewports", () => {
+  /**
+   * A band is the worst measurement across the viewports a run looked at, and
+   * identity excludes the viewport deliberately. So widening `viewports:` in
+   * the repository config measures the same markup somewhere the base run never
+   * visited, the worst band rises, and byte-identical HTML reads as a regression
+   * this pull request caused. A config edit must not fail a build.
+   */
+  const mobileOnly = (violations: Measurement[]): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: ["mobile"],
+      viewportsReviewed: ["mobile"],
+    },
+  });
+  const alsoDesktop = (violations: Measurement[]): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: ["mobile", "desktop"],
+      viewportsReviewed: ["mobile", "desktop"],
+    },
+  });
+
+  it("does not call a widened viewport set a regression", () => {
+    const base = buildMeasurementBaseline(mobileOnly([{ ...TAGLINE, severity: 1 }]), {
+      commitSha: "basesha0000",
+    });
+    const now = alsoDesktop([{ ...TAGLINE, viewports: ["mobile", "desktop"], severity: 3 }]);
+    const comparison = compareMeasurementsToBaseline(now, {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.preExisting).toHaveLength(1);
+    expect(comparison.worsened).toEqual([]);
+  });
+
+  it("still compares when the run measured the same viewports or fewer", () => {
+    // The control. Narrowing is safe: a band that fell because nobody looked is
+    // not a fix, and a band that rose on viewports the base also measured is a
+    // real comparison.
+    const base = buildMeasurementBaseline(alsoDesktop([{ ...TAGLINE, severity: 1 }]), {
+      commitSha: "basesha0000",
+    });
+    const comparison = compareMeasurementsToBaseline(alsoDesktop([{ ...TAGLINE, severity: 3 }]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.worsened).toHaveLength(1);
+  });
+
+  it("compares nothing against a baseline stored before viewports were recorded", () => {
+    // Unknown never gates, the same rule an absent band already follows.
+    const base = buildMeasurementBaseline(runOf([{ ...TAGLINE, severity: 1 }]), {
+      commitSha: "basesha0000",
+    });
+    const { viewportsMeasured: _dropped, ...older } = base;
+    const comparison = compareMeasurementsToBaseline(runOf([{ ...TAGLINE, severity: 3 }]), {
+      lookup: { status: "found", snapshot: older },
+    });
+
+    expect(comparison.worsened).toEqual([]);
+  });
+});
+
+describe("an overflow that deepened is reported and never gates", () => {
+  // Overflow bands are cut at 10% and 50% of the viewport, which are Gate's own
+  // proportions rather than a published standard, and one pixel of body padding
+  // can cross one. Contrast and touch-target landmarks are WCAG's own, so a
+  // change that crosses those is material by a definition nobody here invented.
+  const WIDE: Measurement = {
+    kind: "overflow",
+    route: "/",
+    viewports: ["mobile"],
+    element: "#plans .grid",
+    detail: "element is 412px wide inside a 390px viewport",
+    blockEligible: true,
+    severity: 1,
+  };
+  const WIDER: Measurement = { ...WIDE, severity: 3 };
+
+  it("marks it worsened", () => {
+    const comparison = compare([WIDER], { baseline: baselineOf([WIDE]) });
+
+    expect(comparison.worsened).toEqual([WIDER]);
+  });
+
+  it("does not fail the check on it", () => {
+    expect(blocks(compare([WIDER], { baseline: baselineOf([WIDE]) }), [WIDER])).toBe(false);
+  });
+
+  it("still fails on a contrast band that moved the same distance", () => {
+    // The control that keeps the exclusion from quietly becoming a blanket one.
+    const worse = { ...TAGLINE, severity: 3 };
+    const comparison = compare([worse], { baseline: baselineOf([{ ...TAGLINE, severity: 1 }]) });
+
+    expect(blocks(comparison, [worse])).toBe(true);
+  });
+
+  it("still fails on an overflow this pull request introduced", () => {
+    // The exclusion is about a band moving, not about the check.
+    const fresh = { ...WIDE, element: "#new .grid" };
+    const comparison = compare([fresh], { baseline: baselineOf([]) });
+
+    expect(comparison.introduced).toEqual([fresh]);
+    expect(blocks(comparison, [fresh])).toBe(true);
+  });
+});
+
+describe("the surfaces keep worse apart from new", () => {
+  // Both of these survived an auditor's mutation with the whole suite green.
+  const worse = { ...TAGLINE, severity: 3 };
+  const worsened = () => compare([worse], { baseline: baselineOf([{ ...TAGLINE, severity: 1 }]) });
+
+  it("names a worsened violation as already present rather than introduced", () => {
+    const section = baselineSection(worsened(), { mode: "block", blocking: true }) ?? "";
+
+    expect(section).toMatch(/worse/i);
+    expect(section).not.toMatch(/New in this pull request/);
+  });
+
+  it("takes the worst recorded band under engine skew, not the best", () => {
+    // Under skew the element tier is matched rather than spent, so several
+    // stored rows can answer for one violation. Taking the best of them would
+    // report a regression against a row that was never the worst thing there.
+    const base = baselineOf(
+      [
+        { ...TAGLINE, severity: 1 },
+        { ...TAGLINE, severity: 3 },
+      ],
+      ENGINE_THEN,
+    );
+    const comparison = compare([{ ...TAGLINE, severity: 3 }], { baseline: base });
+
+    expect(comparison.worsened).toEqual([]);
+  });
+});

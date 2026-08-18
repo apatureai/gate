@@ -31,13 +31,15 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
       await query(
         `INSERT INTO measurement_baselines
            (installation_id, repo_owner, repo_name, commit_sha,
-            fingerprint_version, engine_version, checks_run, routes_measured, entries, recorded_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10)
+            fingerprint_version, engine_version, checks_run, routes_measured, viewports_measured,
+            entries, recorded_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11)
          ON CONFLICT (repo_owner, repo_name, commit_sha) DO UPDATE SET
            fingerprint_version = EXCLUDED.fingerprint_version,
            engine_version = EXCLUDED.engine_version,
            checks_run = EXCLUDED.checks_run,
            routes_measured = EXCLUDED.routes_measured,
+           viewports_measured = EXCLUDED.viewports_measured,
            entries = EXCLUDED.entries,
            recorded_at = EXCLUDED.recorded_at`,
         [
@@ -49,6 +51,10 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
           snapshot.engineVersion ?? null,
           JSON.stringify(snapshot.checksRun),
           JSON.stringify(snapshot.routesMeasured),
+          // Null rather than `[]` when the snapshot does not know: an empty list
+          // would assert this run measured no viewports, which is a different
+          // claim and a false one.
+          snapshot.viewportsMeasured ? JSON.stringify(snapshot.viewportsMeasured) : null,
           JSON.stringify(snapshot.entries),
           new Date(snapshot.recordedAtMs ?? Date.now()).toISOString(),
         ],
@@ -62,11 +68,12 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         engine_version: string | null;
         checks_run: unknown;
         routes_measured: unknown;
+        viewports_measured: unknown;
         entries: unknown;
         recorded_at: Date | string | null;
       }>(
         `SELECT commit_sha, fingerprint_version, engine_version, checks_run, routes_measured,
-                entries, recorded_at
+                viewports_measured, entries, recorded_at
            FROM measurement_baselines
           WHERE repo_owner = $1 AND repo_name = $2 AND commit_sha = $3`,
         [key.owner, key.name, key.commitSha],
@@ -79,6 +86,12 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         commitSha: row.commit_sha,
         checksRun: asKinds(row.checks_run),
         routesMeasured: asStrings(row.routes_measured),
+        // A row written before the column existed comes back NULL, and stays
+        // absent rather than becoming an empty list: it does not know which
+        // viewports it covered, and unknown never gates.
+        ...(row.viewports_measured === null || row.viewports_measured === undefined
+          ? {}
+          : { viewportsMeasured: asStrings(row.viewports_measured) }),
         entries: asEntries(row.entries),
         engineVersion: row.engine_version,
         ...(recordedAtMs !== undefined && Number.isFinite(recordedAtMs) ? { recordedAtMs } : {}),
