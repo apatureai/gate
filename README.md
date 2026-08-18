@@ -812,14 +812,28 @@ is one the base run measured too. Measuring fewer is fine, since a band that fel
 looked is not a fix. A baseline recorded before Gate stored its viewports says nothing about them,
 and is not compared.
 
-**The comparison asks the whole group, not one stored row.** Several stored violations can share one
+**A band is compared against the viewport it was measured at.** Each stored row records the
+viewports its violation was found at, and a band is only compared against stored rows measured
+somewhere this one was too. Comparing against the whole identity instead let a mobile row that was
+already in the worst band hide a desktop regression from `3.40:1` to `1.02:1`, which crosses WCAG's
+own landmark on the only rendering that changed. When no stored row was measured where this one was,
+there is nothing to compare and nothing gates: that is "nobody looked there", not "it was fine".
+
+**A violation found only where the base never looked is not new.** Widening `viewports:` renders the
+same markup at a size nobody measured before, and the engine reports a row for it that matches no
+stored row, because there was never one to match. That row is reported as not classified rather than
+introduced, alongside `route_not_measured` and `check_not_run`, which say the same thing about a
+different coordinate. A row seen at a measured viewport as well is still answerable there, so this
+never excuses a genuinely new violation.
+
+**The comparison asks the whole group when a stored row predates viewports.** Several stored violations can share one
 identity, because identity excludes the viewport: one element measured at mobile and at desktop is
 one identity and two stored rows, and a colour token behind a media query gives them different
-bands. So the question is whether ANY violation of this identity was already this bad. Asking one
-arbitrary row instead made the answer depend on which row a violation happened to be paired with,
-and a page compared against itself reported one violation improved and one made worse. The cost of
-the group rule is on the record: when one viewport regresses to a band another viewport already had,
-that regression is reported and never gated.
+bands. Asking one arbitrary row made the answer depend on which row a violation happened to be
+paired with, and a page compared against itself reported one violation improved and one made worse.
+A baseline recorded before rows carried viewports cannot be placed at one, so its whole identity is
+taken as a single group and the worst band in it answers. That is order-independent, and it errs
+away from calling something worse.
 
 **An unknown band never gates, on either side.** An engine that does not state one, a baseline
 recorded before the field existed, and a check that computes no band all leave one side unknown, and

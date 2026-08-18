@@ -192,6 +192,20 @@ export interface MeasurementBaselineEntry {
    */
   defectKey: string;
   /**
+   * Viewports this violation was measured at, sorted. Optional: rows stored
+   * before the field existed do not carry it, and absent means unknown.
+   *
+   * NOT part of any key, and it must never become one. Identity excludes the
+   * viewport on purpose, so this never decides whether two violations are the
+   * same violation. It decides which stored rows a BAND may be compared
+   * against, which is a different question with a different answer: an element
+   * behind a media query is one identity measured at two viewports, and its two
+   * bands are two facts about two renderings rather than one fact about the
+   * element. Comparing a desktop band against the worst of both hid a desktop
+   * regression from 3.40:1 to 1.02:1 behind a mobile row that was already worse.
+   */
+  viewports?: string[];
+  /**
    * The ENGINE's ordinal severity band as it stood on the base commit. Higher is
    * worse, comparable only within a `kind`.
    *
@@ -338,6 +352,7 @@ export function buildMeasurementBaseline(
       // through jsonb says "this engine did not state a band" rather than
       // "this engine stated the best band there is".
       ...(violation.severity !== undefined ? { severity: violation.severity } : {}),
+      viewports: [...violation.viewports].sort(),
     })),
     engineVersion: result.metadata.engineVersion ?? null,
     ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
@@ -422,6 +437,11 @@ export type UnclassifiedReason =
   | "route_not_measured"
   /** The base run never executed this check. */
   | "check_not_run"
+  /**
+   * The base run never measured the viewport this violation was found at, so
+   * nothing stored can say whether it was already there.
+   */
+  | "viewport_not_measured"
   /**
    * A different engine version recorded the baseline, and a violation recorded
    * on this route and check is unaccounted for in this run. A reworded violation
@@ -758,19 +778,34 @@ export function compareMeasurementsToBaseline(
    * One entry without a band makes the whole answer unknown, for the same
    * reason: an entry that might have been worse cannot be ruled out.
    */
-  const worstRecorded = (matches: (entry: MeasurementBaselineEntry) => boolean): number | undefined => {
+  const worstRecorded = (
+    measurement: Measurement,
+    matches: (entry: MeasurementBaselineEntry) => boolean,
+  ): number | undefined => {
+    const here = new Set<string>(measurement.viewports);
+    const candidates = snapshot.entries.filter(matches);
+    // A row stored before viewports were recorded cannot be placed at a
+    // viewport, so the whole identity is taken as one group, which is what this
+    // did before entries carried viewports at all.
+    const placed = candidates.every((entry) => entry.viewports !== undefined);
+    const comparable = placed
+      ? candidates.filter((entry) => entry.viewports?.some((viewport) => here.has(viewport)))
+      : candidates;
+    // No stored row was measured where this one was. That is not "it was fine
+    // before", it is "nobody looked before", and the two must never render or
+    // gate alike.
+    if (comparable.length === 0) return undefined;
     let worst: number | undefined;
-    for (const entry of snapshot.entries) {
-      if (!matches(entry)) continue;
+    for (const entry of comparable) {
       if (entry.severity === undefined) return undefined;
       if (worst === undefined || entry.severity > worst) worst = entry.severity;
     }
     return worst;
   };
-  const worstForElement = (key: string): number | undefined =>
-    worstRecorded((entry) => entry.elementKey === key);
-  const worstForDefect = (key: string): number | undefined =>
-    worstRecorded((entry) => entry.defectKey === key);
+  const worstForElement = (measurement: Measurement, key: string): number | undefined =>
+    worstRecorded(measurement, (entry) => entry.elementKey === key);
+  const worstForDefect = (measurement: Measurement, key: string): number | undefined =>
+    worstRecorded(measurement, (entry) => entry.defectKey === key);
 
   // A baseline recorded by one engine and a run produced by another are the only
   // pair where the engine's own sentence can move without the page moving. When
@@ -848,7 +883,7 @@ export function compareMeasurementsToBaseline(
     // sentence matched ONCE EVERY NUMBER IN IT WAS REPLACED, so 2.91:1 and
     // 1.02:1 on one element land here as the same violation. Before the band,
     // that was where a real regression went silent.
-    return carried(measurement, worstForElement(measurementElementKey(measurement)));
+    return carried(measurement, worstForElement(measurement, measurementElementKey(measurement)));
   });
 
   // Same check, same page, same element, and the engine's sentence differs.
@@ -865,11 +900,11 @@ export function compareMeasurementsToBaseline(
       // recorded as accounted for all the same: a violation Gate just called
       // pre-existing must never also be counted among the ones that are gone.
       answeredLeniently.add(key);
-      return carried(measurement, worstForElement(key), { detailChanged: true });
+      return carried(measurement, worstForElement(measurement, key), { detailChanged: true });
     }
     const entry = spend(byElementKey, key);
     if (entry === undefined) return null;
-    return carried(measurement, worstForElement(key), { detailChanged: true });
+    return carried(measurement, worstForElement(measurement, key), { detailChanged: true });
   });
 
   const afterDefect = tier(afterElement, (measurement) => {
@@ -877,7 +912,7 @@ export function compareMeasurementsToBaseline(
     if (entry === undefined) return null;
     // The element moved, so nothing is recorded under its key. The defect key is
     // the one that matched, and it is the one whose worst band answers here.
-    return carried(measurement, worstForDefect(measurementDefectKey(measurement)), {
+    return carried(measurement, worstForDefect(measurement, measurementDefectKey(measurement)), {
       elementChanged: true,
     });
   });
@@ -895,8 +930,29 @@ export function compareMeasurementsToBaseline(
       ? { measurement, origin: "unclassified" as const, reason: "engine_skew" as const }
       : null,
   );
+  // LAST SCREEN BEFORE ANYTHING IS CALLED NEW: a viewport the base run never
+  // measured. Widening `viewports:` in the repository config renders the same
+  // markup at a size nobody looked at before, and the engine reports a row for
+  // it. That row matches no stored entry, because there was never a stored
+  // entry to match, and it read as a violation this pull request introduced: a
+  // red check on byte-identical HTML, produced by a config edit.
+  //
+  // Scoped to the violations that would otherwise be NEW, so a violation which
+  // matched a stored row is still carried over normally, and scoped to rows
+  // measured ONLY where the base did not look: a violation seen at both mobile
+  // and a newly added tablet is still answerable against mobile. It joins
+  // `route_not_measured` and `check_not_run`, which are the same sentence about
+  // a different coordinate: Gate did not look there, so Gate does not guess.
+  const baseViewports = snapshot.viewportsMeasured;
   for (const index of introduced) {
-    rows[index] = { measurement: all[index]!, origin: "introduced" as const };
+    const measurement = all[index]!;
+    const unseen =
+      baseViewports !== undefined &&
+      measurement.viewports.length > 0 &&
+      measurement.viewports.every((viewport) => !baseViewports.includes(viewport));
+    rows[index] = unseen
+      ? { measurement, origin: "unclassified" as const, reason: "viewport_not_measured" as const }
+      : { measurement, origin: "introduced" as const };
   }
 
   const classified = rows.filter(

@@ -39,6 +39,10 @@ const UNCLASSIFIED_REASON: Record<UnclassifiedReason, string> = {
   // seen rather than a page whose violations it can place.
   route_not_measured: "the base run never captured that route, new or renamed",
   check_not_run: "the base run never ran that check",
+  // A widened `viewports:` config lands here. The violation may well have been
+  // there all along at a size nobody rendered before, so calling it new would
+  // fail a build over a config edit.
+  viewport_not_measured: "the base run never measured that viewport",
   // Deliberately says what Gate cannot tell rather than what it suspects. The
   // reader's next question is whether to trust the green check, and the honest
   // answer is that one violation on that page went missing and this one could be
@@ -299,19 +303,35 @@ export function baselineSection(
     // not the reason for anything, and naming it here would send an author to
     // fix the wrong row.
     const worsenedGating = comparison.worsened.filter((violation) => violation.blockEligible).length;
+    // Named on the surface, not only in the README. Without this the green run
+    // that carries a deepened overflow printed a row satisfying every condition
+    // the closing sentence listed, and then said nothing failed: an explanation
+    // that contradicts the evidence directly above it is worse than no
+    // explanation, because a reader concludes the check is broken.
+    const excludedByKind = comparison.worsened.some(
+      (violation) => violation.blockEligible && violation.kind === "overflow",
+    );
+    const overflowNote = excludedByKind
+      ? " One violation above is an `overflow` that deepened. Gate reports those and never fails a " +
+        "check on one, because the overflow severity bands are cut at shares of the viewport that " +
+        "an unrelated layout edit can cross. An `overflow` this pull request introduced still fails."
+      : "";
     lines.push(
       options.blocking
         ? worsenedGating > 0
           ? "This repository sets `rules.measurements: block`, so the block-eligible violation(s) " +
             "above that this pull request either introduced or moved into a worse severity band " +
             "failed this check. A pre-existing violation whose band did not move never does, and " +
-            "neither does an unclassified one."
+            "neither does an unclassified one." +
+            overflowNote
           : "This repository sets `rules.measurements: block`, so the new block-eligible violation(s) " +
-            "above failed this check. Pre-existing and unclassified violations never do."
+            "above failed this check. Pre-existing and unclassified violations never do." +
+            overflowNote
         : "This repository sets `rules.measurements: block`. Nothing here failed the check: a " +
           "violation fails one only when the engine marked it block-eligible and it is either new " +
           "in this pull request or one this pull request moved into a worse severity band, with a " +
-          "band known on both sides.",
+          "band known on both sides." +
+          overflowNote,
     );
   }
 

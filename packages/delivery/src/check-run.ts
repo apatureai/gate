@@ -202,12 +202,18 @@ export function buildCheckRun(
     // new violation, and telling an author it is sends them hunting for markup
     // they never wrote; telling them nothing at all is what this check used to
     // do, and it is why a ratio could fall from 2.91:1 to 1.02:1 unremarked.
-    const introducedGating = ctx.baseline
-      ? ctx.baseline.introduced.filter((violation) => violation.blockEligible)
-      : [];
-    const worsenedGating = ctx.baseline
-      ? ctx.baseline.worsened.filter((violation) => violation.blockEligible)
-      : [];
+    //
+    // SPLIT OUT OF `gating` ITSELF, never recounted from the comparison. Recounting
+    // reapplied only the block-eligibility filter and missed the kind exclusion
+    // inside `gateableMeasurements`, so a pull request that introduced one
+    // contrast violation while deepening an overflow published "1 measurement is
+    // enough to fail this check ... 1 of them is new here and 1 was already on
+    // the base", which is 1 = 1 + 1, and named the overflow as a cause of a
+    // failure it cannot cause. Partitioning the set that produced the conclusion
+    // makes the two numbers add up by construction.
+    const worsenedGate = new Set(ctx.baseline?.worsened ?? []);
+    const introducedGating = gating.filter((violation) => !worsenedGate.has(violation));
+    const worsenedGating = gating.filter((violation) => worsenedGate.has(violation));
     const scope = !ctx.baseline
       ? ""
       : worsenedGating.length === 0

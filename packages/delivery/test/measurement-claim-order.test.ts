@@ -531,3 +531,268 @@ describe("the surfaces keep worse apart from new", () => {
     expect(comparison.worsened).toEqual([]);
   });
 });
+
+describe("a widened viewports config is not a pull request's fault", () => {
+  /**
+   * The false red check that survived the first fix, reached through a door the
+   * fix did not cover. Guarding only the BAND comparison left the entry budget
+   * alone: an element behind a media query emits one row per viewport, so adding
+   * `tablet` adds a row sharing the identity, the baseline has no spare entry
+   * for it, and it was called introduced. Byte-identical HTML, red check.
+   */
+  const at = (viewports: Measurement["viewports"], severity: number): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity,
+  });
+  const baseRun = (violations: Measurement[]): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: ["mobile", "desktop"],
+      viewportsReviewed: ["mobile", "desktop"],
+    },
+  });
+  const widened = (violations: Measurement[]): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: ["mobile", "desktop", "tablet"],
+      viewportsReviewed: ["mobile", "desktop", "tablet"],
+    },
+  });
+  const base = buildMeasurementBaseline(baseRun([at(["mobile"], 2), at(["desktop"], 1)]), {
+    commitSha: "basesha0000",
+  });
+
+  it("does not call the new viewport's row introduced", () => {
+    const now = widened([at(["mobile"], 2), at(["desktop"], 1), at(["tablet"], 1)]);
+    const comparison = compareMeasurementsToBaseline(now, {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.unclassified).toHaveLength(1);
+    expect(comparison.classified.at(-1)?.reason).toBe("viewport_not_measured");
+  });
+
+  it("does not fail the check on it", () => {
+    const violations = [at(["mobile"], 2), at(["desktop"], 1), at(["tablet"], 1)];
+    const comparison = compareMeasurementsToBaseline(widened(violations), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(
+      buildCheckRun(widened(violations), "none", {
+        measurements: "block",
+        baseline: comparison,
+      }).conclusion,
+    ).not.toBe("failure");
+  });
+
+  it("still calls a violation new when the base did measure that viewport", () => {
+    // The control. The screen is about a viewport nobody looked at, not about
+    // viewports in general, and a genuinely new row at a measured viewport must
+    // still gate.
+    const fresh = { ...at(["mobile"], 2), element: "#brand-new .cta" };
+    const violations = [at(["mobile"], 2), at(["desktop"], 1), fresh];
+    const comparison = compareMeasurementsToBaseline(baseRun(violations), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.introduced).toEqual([fresh]);
+  });
+
+  it("still answers for a row seen at both an old viewport and a new one", () => {
+    // Measured where the base looked AND where it did not: the base can speak
+    // to it, so it is placed rather than excused.
+    const both = at(["mobile", "tablet"], 2);
+    const comparison = compareMeasurementsToBaseline(widened([both, at(["desktop"], 1)]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.unclassified).toEqual([]);
+    expect(comparison.preExisting).toContain(both);
+  });
+});
+
+describe("a band is compared against the viewport it was measured at", () => {
+  /**
+   * A regression crossing WCAG's own landmark passed silently. Taking the worst
+   * band across the whole identity let a mobile row that was already band 3 hide
+   * a desktop row falling from 3.40:1 to 1.02:1, which is band 1 to band 3 on the
+   * only rendering that changed.
+   */
+  const at = (viewports: Measurement["viewports"], severity: number): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity,
+  });
+  const twoViewports = (violations: Measurement[]): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: ["mobile", "desktop"],
+      viewportsReviewed: ["mobile", "desktop"],
+    },
+  });
+  const base = buildMeasurementBaseline(twoViewports([at(["mobile"], 3), at(["desktop"], 1)]), {
+    commitSha: "basesha0000",
+  });
+
+  it("catches a desktop regression that a worse mobile row used to hide", () => {
+    const worse = at(["desktop"], 3);
+    const comparison = compareMeasurementsToBaseline(twoViewports([at(["mobile"], 3), worse]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.worsened).toEqual([worse]);
+    expect(
+      buildCheckRun(twoViewports([at(["mobile"], 3), worse]), "none", {
+        measurements: "block",
+        baseline: comparison,
+      }).conclusion,
+    ).toBe("failure");
+  });
+
+  it("does not call the unchanged viewport worsened", () => {
+    const comparison = compareMeasurementsToBaseline(
+      twoViewports([at(["mobile"], 3), at(["desktop"], 1)]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+
+    expect(comparison.worsened).toEqual([]);
+  });
+
+  it("falls back to the whole identity when a stored row has no viewports", () => {
+    // A baseline written before entries carried viewports cannot be placed at
+    // one, and the group rule is what this did before the field existed.
+    const legacy = {
+      ...base,
+      entries: base.entries.map(({ viewports: _drop, ...entry }) => entry),
+    };
+    const comparison = compareMeasurementsToBaseline(
+      twoViewports([at(["mobile"], 3), at(["desktop"], 3)]),
+      { lookup: { status: "found", snapshot: legacy } },
+    );
+
+    expect(comparison.worsened).toEqual([]);
+  });
+});
+
+describe("the block-mode surfaces agree with themselves", () => {
+  const at = (kind: Measurement["kind"], severity: number): Measurement => ({
+    ...TAGLINE,
+    kind,
+    element: kind === "overflow" ? "#plans .grid" : "#hero .tagline",
+    detail: kind === "overflow" ? "element is 412px wide inside a 390px viewport" : DETAIL,
+    severity,
+  });
+
+  it("names the overflow exclusion on the run where it decided the outcome", () => {
+    // A green run that prints a row satisfying every condition the closing
+    // sentence lists is an explanation contradicting its own evidence, and a
+    // reader concludes the check is broken.
+    const violations = [at("overflow", 3)];
+    const comparison = compare(violations, { baseline: baselineOf([at("overflow", 1)]) });
+    const section = baselineSection(comparison, { mode: "block" }) ?? "";
+
+    expect(comparison.worsened).toHaveLength(1);
+    expect(section).toContain("`overflow`");
+    expect(section).toMatch(/never fails a check/i);
+  });
+
+  it("splits the failing count into parts that add up to it", () => {
+    // The count came from the gating set and the split came from the comparison,
+    // so a deepened overflow beside an introduced contrast violation published
+    // "1 measurement ... 1 of them is new here and 1 was already on the base".
+    const fresh = { ...at("contrast", 1), element: "#brand-new .cta" };
+    const violations = [fresh, at("overflow", 3)];
+    const comparison = compare(violations, { baseline: baselineOf([at("overflow", 1)]) });
+    const summary = buildCheckRun(runOf(violations), "none", {
+      measurements: "block",
+      baseline: comparison,
+    }).summary;
+
+    expect(summary).toContain("1 block-eligible measurement(s)");
+    expect(summary).not.toMatch(/1 of them is new here and 1 /);
+  });
+
+  it("keeps the made-worse heading distinct from the introduced one", () => {
+    // Retitling this heading passed the whole suite: nothing asserted the
+    // string, and a worsened violation rendered as new while the counts line
+    // still said zero were introduced.
+    const worse = { ...TAGLINE, severity: 3 };
+    const comparison = compare([worse], { baseline: baselineOf([{ ...TAGLINE, severity: 1 }]) });
+    const section = baselineSection(comparison, { mode: "block", blocking: true }) ?? "";
+
+    expect(section).toContain("**Made worse by this pull request**");
+    expect(section).not.toContain("**Introduced by this pull request**");
+  });
+});
+
+describe("an unplaceable band and a partly unseen row", () => {
+  /**
+   * Two guards that survived mutation with the whole suite green, both of them
+   * one character wide and both of them a wrong answer in a different direction.
+   */
+  const at = (viewports: Measurement["viewports"], severity: number, over: Partial<Measurement> = {}): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity,
+    ...over,
+  });
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: viewportsReviewed,
+      viewportsReviewed,
+    },
+  });
+  const base = buildMeasurementBaseline(covering([at(["mobile"], 1)], ["mobile", "desktop"]), {
+    commitSha: "basesha0000",
+  });
+
+  it("compares nothing when no stored row was measured where this one was", () => {
+    // The violation matches a stored row exactly, so it is carried over, but
+    // every stored row of that identity was measured somewhere else. There is
+    // no band to compare against. Reading that as band zero would make any
+    // stated band look like a regression, which is the "absent means the best
+    // there is" mistake in a new place.
+    // Narrowed rather than widened, so the viewport-subset guard does NOT
+    // short-circuit first and this line is the one under test: the base looked
+    // at mobile and desktop, this run looked only at desktop, and the one
+    // stored row of this identity was measured at mobile.
+    const now = at(["desktop"], 3);
+    const comparison = compareMeasurementsToBaseline(covering([now], ["desktop"]), {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.preExisting).toEqual([now]);
+    expect(comparison.worsened).toEqual([]);
+    expect(comparison.classified[0]?.baselineSeverity).toBeUndefined();
+  });
+
+  it("still calls a new row introduced when it was also seen where the base looked", () => {
+    // The unseen-viewport screen excuses a row measured ONLY where the base
+    // never looked. A row seen at a measured viewport too is answerable there,
+    // and excusing it would let a genuinely new violation through by adding a
+    // viewport to the config.
+    const fresh = at(["desktop", "tablet"], 2, { element: "#brand-new .cta" });
+    const comparison = compareMeasurementsToBaseline(
+      covering([at(["mobile"], 1), fresh], ["mobile", "desktop", "tablet"]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+
+    expect(comparison.introduced).toEqual([fresh]);
+    expect(comparison.unclassified).toEqual([]);
+  });
+});

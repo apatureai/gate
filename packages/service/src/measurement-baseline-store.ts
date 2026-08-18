@@ -160,6 +160,17 @@ function asEntries(value: unknown): MeasurementBaselineEntry[] {
       typeof severity === "number" && Number.isInteger(severity) && severity > 0
         ? { severity }
         : {};
+    // Same rule as the band, for the same reason. A row written before entries
+    // carried viewports comes back without them, which reads as "this row
+    // cannot be placed at a viewport" and falls back to comparing the identity
+    // as one group. Anything that is not a list of strings is dropped to absent
+    // rather than coerced, because a half-read viewport list would silently
+    // narrow which stored rows a band is compared against.
+    const stored = row.viewports;
+    const viewports =
+      Array.isArray(stored) && stored.every((item) => typeof item === "string")
+        ? { viewports: stored as string[] }
+        : {};
     entries.push({
       kind: kind as MeasurementKind,
       route,
@@ -167,6 +178,7 @@ function asEntries(value: unknown): MeasurementBaselineEntry[] {
       fingerprint,
       defectKey,
       ...banded,
+      ...viewports,
     });
   }
   return entries;
