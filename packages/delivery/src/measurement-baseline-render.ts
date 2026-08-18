@@ -227,7 +227,17 @@ export function baselineSection(
     // that this pull request added nothing.
     lines.push(
       "No measured violation above is new: every one Gate could place against the base was " +
-        "already there before this pull request.",
+        "already there before this pull request." +
+        // The hedge in that sentence is doing real work, and a reader skimming
+        // will not weigh it. A pull request that adds a breakpoint and a
+        // violation only visible at it produces exactly this shape: nothing
+        // placed, nothing gating, and a green check. Say the number out loud so
+        // the qualifier cannot be read past.
+        (comparison.unclassified.length > 0
+          ? ` It is not a statement about the ${comparison.unclassified.length} violation(s) Gate ` +
+            "could not place, listed below. Those are neither new nor carried over as far as Gate " +
+            "knows, and none of them can fail this check."
+          : ""),
     );
   }
 

@@ -804,13 +804,14 @@ body padding was enough to move a measured overflow past the 10% mark. So **an o
 is reported and never fails a check**, while an overflow this pull request introduced gates exactly
 as before. The exclusion is about a band moving, not about the check.
 
-**A band is only comparable across the same viewports.** A band is the worst measurement across the
-viewports a run looked at, and identity excludes the viewport deliberately, so widening `viewports:`
-in your config measures the same markup somewhere the base run never visited and the worst band
-rises on markup nobody edited. Gate therefore compares bands only when every viewport measured now
-is one the base run measured too. Measuring fewer is fine, since a band that fell because nobody
-looked is not a fix. A baseline recorded before Gate stored its viewports says nothing about them,
-and is not compared.
+**The viewport rule is per row, not per run.** A band is the worst measurement across the viewports
+its row covers, so a row is compared only against stored rows measured somewhere it was, and only
+when every viewport it covers was measured before. A row covering desktop and a newly added tablet
+is not comparable to a stored row that only ever saw desktop, because the band may have risen on the
+breakpoint nobody had measured. An earlier version of this rule was a single run-wide switch, and it
+was worse than the problem: one new viewport anywhere discarded every band comparison on every route
+and every check, so widening `viewports:` (or a base run that simply lost a capture) silently turned
+regression detection off for a whole run and still printed a check promising it was on.
 
 **A band is compared against the viewport it was measured at.** Each stored row records the
 viewports its violation was found at, and a band is only compared against stored rows measured

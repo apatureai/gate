@@ -445,17 +445,23 @@ describe("a band is only comparable across the same viewports", () => {
     expect(comparison.worsened).toHaveLength(1);
   });
 
-  it("compares nothing against a baseline stored before viewports were recorded", () => {
-    // Unknown never gates, the same rule an absent band already follows.
+  it("still compares bands when the snapshot records no viewport list of its own", () => {
+    // A run-wide switch used to live here and discard EVERY band comparison the
+    // moment this run touched a viewport the base did not. One new viewport
+    // anywhere silenced regression detection on every route and every check,
+    // which is a worse failure than the false red it was added to prevent. The
+    // snapshot-level list now feeds only the unseen-viewport screen; the bands
+    // are placed from the viewports on the stored rows themselves.
     const base = buildMeasurementBaseline(runOf([{ ...TAGLINE, severity: 1 }]), {
       commitSha: "basesha0000",
     });
     const { viewportsMeasured: _dropped, ...older } = base;
-    const comparison = compareMeasurementsToBaseline(runOf([{ ...TAGLINE, severity: 3 }]), {
+    const worse = { ...TAGLINE, severity: 3 };
+    const comparison = compareMeasurementsToBaseline(runOf([worse]), {
       lookup: { status: "found", snapshot: older },
     });
 
-    expect(comparison.worsened).toEqual([]);
+    expect(comparison.worsened).toEqual([worse]);
   });
 });
 
@@ -794,5 +800,167 @@ describe("an unplaceable band and a partly unseen row", () => {
 
     expect(comparison.introduced).toEqual([fresh]);
     expect(comparison.unclassified).toEqual([]);
+  });
+});
+
+describe("one new viewport does not switch regression detection off", () => {
+  /**
+   * The worst thing either fix could have done, and it did it. A run-wide
+   * `bandsComparable` flag discarded every band comparison whenever this run
+   * measured any viewport the base did not, so widening `viewports:` or simply
+   * losing a capture on the base run silenced worsening detection for the whole
+   * run. The check went green and its closing sentence still promised that a
+   * violation moved into a worse band would have failed it.
+   */
+  const at = (viewports: Measurement["viewports"], severity: number, over: Partial<Measurement> = {}): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity,
+    ...over,
+  });
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: viewportsReviewed,
+      viewportsReviewed,
+    },
+  });
+  const base = buildMeasurementBaseline(covering([at(["desktop"], 1)], ["desktop"]), {
+    commitSha: "basesha0000",
+  });
+
+  it("still catches a desktop regression on a run that also added a breakpoint", () => {
+    const worse = at(["desktop"], 3);
+    const now = covering([worse], ["desktop", "tablet"]);
+    const comparison = compareMeasurementsToBaseline(now, {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.worsened).toEqual([worse]);
+    expect(
+      buildCheckRun(now, "none", { measurements: "block", baseline: comparison }).conclusion,
+    ).toBe("failure");
+  });
+
+  it("still catches it when the base run simply lost a capture", () => {
+    // Not a config edit at all. The base measured desktop, this run got desktop
+    // and mobile, and the desktop regression is still answerable against desktop.
+    const worse = at(["desktop"], 3);
+    const now = covering([worse, at(["mobile"], 1, { element: "#other .x" })], ["desktop", "mobile"]);
+    const comparison = compareMeasurementsToBaseline(now, {
+      lookup: { status: "found", snapshot: base },
+    });
+
+    expect(comparison.worsened).toEqual([worse]);
+  });
+
+  it("does not compare a row spanning a viewport the base never measured", () => {
+    // The other side of the same rule. A band is the worst across the viewports
+    // its row covers, so a row covering desktop AND tablet against a stored row
+    // that only saw desktop compares two different aggregates: the band may have
+    // risen because tablet is worse, and nobody measured tablet before.
+    const spanning = at(["desktop", "tablet"], 3);
+    const comparison = compareMeasurementsToBaseline(
+      covering([spanning], ["desktop", "tablet"]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+
+    expect(comparison.worsened).toEqual([]);
+    expect(comparison.preExisting).toEqual([spanning]);
+  });
+});
+
+describe("a violation Gate could not place is said out loud", () => {
+  // A pull request that adds a breakpoint and a violation only visible at it
+  // gates nothing, correctly: the base never looked there. The risk is the
+  // sentence beside it, which reads as a clean bill of health to anyone who does
+  // not weigh the "could place" qualifier.
+  const at = (viewports: Measurement["viewports"], over: Partial<Measurement> = {}): Measurement => ({
+    ...TAGLINE,
+    viewports,
+    severity: 2,
+    ...over,
+  });
+  const covering = (
+    violations: Measurement[],
+    viewportsReviewed: GateReviewResult["coverage"]["viewportsReviewed"],
+  ): GateReviewResult => ({
+    ...runOf(violations),
+    coverage: {
+      routesRequested: ROUTES,
+      routesReviewed: ROUTES,
+      viewportsRequested: viewportsReviewed,
+      viewportsReviewed,
+    },
+  });
+
+  it("counts them beside the sentence that says nothing is new", () => {
+    const base = buildMeasurementBaseline(covering([at(["desktop"])], ["desktop"]), {
+      commitSha: "basesha0000",
+    });
+    const onlyAtTheNewBreakpoint = at(["mobile"], { element: "nav .cta" });
+    const comparison = compareMeasurementsToBaseline(
+      covering([at(["desktop"]), onlyAtTheNewBreakpoint], ["desktop", "mobile"]),
+      { lookup: { status: "found", snapshot: base } },
+    );
+    const section = baselineSection(comparison, { mode: "block" }) ?? "";
+
+    expect(comparison.introduced).toEqual([]);
+    expect(comparison.unclassified).toEqual([onlyAtTheNewBreakpoint]);
+    expect(section).toContain("No measured violation above is new");
+    expect(section).toMatch(/not a statement about the 1 violation\(s\) Gate could not place/);
+  });
+
+  it("does not add the qualifier when everything was placed", () => {
+    const base = buildMeasurementBaseline(covering([at(["desktop"])], ["desktop"]), {
+      commitSha: "basesha0000",
+    });
+    const section =
+      baselineSection(
+        compareMeasurementsToBaseline(covering([at(["desktop"])], ["desktop"]), {
+          lookup: { status: "found", snapshot: base },
+        }),
+        { mode: "block" },
+      ) ?? "";
+
+    expect(section).toContain("No measured violation above is new");
+    expect(section).not.toMatch(/could not place/);
+  });
+});
+
+describe("a baseline whose rows are only partly placeable", () => {
+  // Entries are written together, so a mixed snapshot means a stored row was
+  // written or read back damaged: the jsonb reader drops a malformed viewport
+  // list to absent one row at a time. Treating that snapshot as placeable would
+  // quietly drop the damaged rows out of the comparison, and a violation could
+  // be called worse than a band that is sitting right there in the baseline.
+  it("falls back to the whole identity rather than ignoring the unplaceable rows", () => {
+    const base = buildMeasurementBaseline(
+      runOf([
+        { ...TAGLINE, viewports: ["mobile"], severity: 1 },
+        { ...TAGLINE, viewports: ["mobile"], severity: 3 },
+      ]),
+      { commitSha: "basesha0000" },
+    );
+    const damaged = {
+      ...base,
+      entries: base.entries.map((entry, index) =>
+        index === 1 ? (({ viewports: _lost, ...rest }) => rest)(entry) : entry,
+      ),
+    };
+    const now = { ...TAGLINE, viewports: ["mobile"] as const, severity: 2 };
+
+    const comparison = compareMeasurementsToBaseline(runOf([now]), {
+      lookup: { status: "found", snapshot: damaged },
+    });
+
+    // Band 3 is on the record for this identity. Band 2 is not a regression
+    // against it, whatever happened to that row's viewport list.
+    expect(comparison.worsened).toEqual([]);
   });
 });

@@ -716,28 +716,18 @@ export function compareMeasurementsToBaseline(
    * violation that did not get worse, and `>=` would turn every unchanged
    * carry-over on the page into a red check.
    */
-  /**
-   * Whether a band recorded on the base is comparable to a band measured now.
-   *
-   * A band is the WORST measurement across the viewports a run looked at, and
-   * identity excludes the viewport on purpose. So a repository that widened its
-   * `viewports:` config measures the same markup at a viewport the base run
-   * never visited, the worst band rises, and byte-identical HTML reads as a
-   * regression this pull request caused. That is a false red check produced by a
-   * config edit, which is exactly the shape this module exists to prevent.
-   *
-   * The rule is therefore a subset test, not an equality test: every viewport
-   * measured now must be one the base run measured too. Measuring FEWER is fine,
-   * since a band that fell because nobody looked cannot be a worsening. A
-   * baseline stored before this field existed says nothing about its viewports,
-   * and unknown never gates.
+  /*
+   * A run-wide "are bands comparable at all" switch used to live here, set false
+   * whenever this run measured any viewport the base did not. It was the first
+   * attempt at the problem the viewport rules above now solve properly, and it
+   * was worse than nothing: ONE new viewport anywhere discarded every band
+   * comparison on every route and every check, including rows measured at
+   * viewports the base covered perfectly well. A pull request that widened
+   * `viewports:`, or one whose base run simply lost a capture, silently switched
+   * regression detection off for the whole run and printed a green check whose
+   * closing sentence said a worsened violation would have failed it. The rule is
+   * per row now, because that is the granularity the question actually has.
    */
-  const bandsComparable = ((): boolean => {
-    const recorded = snapshot.viewportsMeasured;
-    if (recorded === undefined) return false;
-    const base = new Set(recorded);
-    return measuredViewports(result).every((viewport) => base.has(viewport));
-  })();
 
   const carried = (
     measurement: Measurement,
@@ -746,7 +736,7 @@ export function compareMeasurementsToBaseline(
   ): ClassifiedMeasurement => {
     const row: ClassifiedMeasurement = { measurement, origin: "pre_existing", ...extra };
     const current = measurement.severity;
-    if (!bandsComparable || stored === undefined || current === undefined) return row;
+    if (stored === undefined || current === undefined) return row;
     row.baselineSeverity = stored;
     row.currentSeverity = current;
     if (current > stored) row.worsened = true;
@@ -795,6 +785,17 @@ export function compareMeasurementsToBaseline(
     // before", it is "nobody looked before", and the two must never render or
     // gate alike.
     if (comparable.length === 0) return undefined;
+    // AND EVERY VIEWPORT THIS ROW SPEAKS FOR HAS TO BE COVERED. A band is the
+    // worst measurement across the viewports its row was measured at, so a row
+    // covering mobile and desktop compared against a stored row that only ever
+    // saw mobile is comparing two different aggregates: the band may have risen
+    // because desktop is worse, and nobody ever measured desktop before. Only a
+    // row whose viewports were all previously measured has a band that means the
+    // same thing on both sides.
+    if (placed) {
+      const covered = new Set(comparable.flatMap((entry) => entry.viewports ?? []));
+      if (measurement.viewports.some((viewport) => !covered.has(viewport))) return undefined;
+    }
     let worst: number | undefined;
     for (const entry of comparable) {
       if (entry.severity === undefined) return undefined;
