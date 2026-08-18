@@ -1283,3 +1283,46 @@ describe("guards the band rules rest on that nothing was asserting", () => {
     expect(section).not.toMatch(/either introduced or moved into a worse severity band/);
   });
 });
+
+describe("what a snapshot is allowed to record", () => {
+  // Two states that reach a stored row without going through the engine
+  // contract, and one determinism property. None of them changes a verdict on
+  // its own, which is exactly why nothing was watching them.
+  it("refuses a band of zero rather than storing the best band there is", () => {
+    // The engine contract rejects a zero at ingestion and the SQL reader rejects
+    // it coming back, but the in-memory store rejects nothing. Without a refusal
+    // here the hosted path and the Action path would disagree about the same
+    // repository, and a zero compares as better than every real band.
+    const snapshot = buildMeasurementBaseline(runOf([{ ...TAGLINE, severity: 0 }]), {
+      commitSha: "basesha0000",
+    });
+
+    expect(snapshot.entries[0]).not.toHaveProperty("severity");
+  });
+
+  it("refuses a fractional band, which is a magnitude wearing a band's name", () => {
+    const snapshot = buildMeasurementBaseline(runOf([{ ...TAGLINE, severity: 2.91 }]), {
+      commitSha: "basesha0000",
+    });
+
+    expect(snapshot.entries[0]).not.toHaveProperty("severity");
+  });
+
+  it("stores a viewport list in a stable order", () => {
+    // Every consumer builds a set out of this and would never notice the order,
+    // so an unsorted list rots quietly. The snapshot is idempotent on
+    // (repository, commit), and rewriting the same facts should not rewrite the
+    // bytes.
+    const one = buildMeasurementBaseline(
+      runOf([{ ...TAGLINE, viewports: ["mobile", "desktop"] }]),
+      { commitSha: "basesha0000" },
+    );
+    const other = buildMeasurementBaseline(
+      runOf([{ ...TAGLINE, viewports: ["desktop", "mobile"] }]),
+      { commitSha: "basesha0000" },
+    );
+
+    expect(one.entries[0]?.viewports).toEqual(other.entries[0]?.viewports);
+    expect(JSON.stringify(one)).toBe(JSON.stringify(other));
+  });
+});

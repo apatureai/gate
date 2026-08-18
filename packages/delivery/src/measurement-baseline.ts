@@ -347,11 +347,29 @@ export function buildMeasurementBaseline(
       elementKey: measurementElementKey(violation),
       fingerprint: measurementFingerprint(violation),
       defectKey: measurementDefectKey(violation),
-      // Recorded only when the engine stated one. The key is left off entirely
-      // rather than written as `undefined` or `0`, so a snapshot round-tripped
-      // through jsonb says "this engine did not state a band" rather than
-      // "this engine stated the best band there is".
-      ...(violation.severity !== undefined ? { severity: violation.severity } : {}),
+      // Recorded only when the engine stated a real one. The key is left off
+      // entirely rather than written as `undefined` or `0`, so a snapshot
+      // round-tripped through jsonb says "this engine did not state a band"
+      // rather than "this engine stated the best band there is".
+      //
+      // A band has to be a POSITIVE INTEGER here and not merely present. The
+      // engine contract already refuses a `0`, a fraction and a `"3"` at
+      // ingestion, and the SQL reader refuses them again coming back out of
+      // jsonb, but the in-memory store refuses nothing: an in-process caller
+      // could put a zero in one and the two delivery paths would then disagree
+      // about the same repository. Refusing at the point the entry is built is
+      // the one place that covers both.
+      ...(typeof violation.severity === "number" &&
+      Number.isInteger(violation.severity) &&
+      violation.severity > 0
+        ? { severity: violation.severity }
+        : {}),
+      // Sorted, so two runs that measured the same violation at the same
+      // viewports store byte-identical jsonb. Every consumer builds a set out of
+      // this and would not notice the order, which is exactly why an unsorted
+      // list would rot quietly: the snapshot is idempotent on (repository,
+      // commit), and an upsert that rewrites the same facts should not rewrite
+      // the bytes.
       viewports: [...violation.viewports].sort(),
     })),
     engineVersion: result.metadata.engineVersion ?? null,
@@ -960,6 +978,15 @@ export function compareMeasurementsToBaseline(
       ? { measurement, origin: "unclassified" as const, reason: "engine_skew" as const }
       : null,
   );
+  // A ROW THAT NAMES NO VIEWPORT IS TREATED TWO DIFFERENT WAYS, on purpose, and
+  // both of them lean the same way. Its band is never compared, because a band
+  // that belongs to no rendering cannot be placed against one that does. But it
+  // can still be called introduced, because identity does not need a viewport to
+  // establish that nothing like it was stored. Excusing it instead would let an
+  // engine switch `block` off for a whole repository by omitting a field the
+  // contract does not require, and that is a worse failure than declining one
+  // comparison.
+  //
   // LAST SCREEN BEFORE ANYTHING IS CALLED NEW: a viewport the base run never
   // measured. Widening `viewports:` in the repository config renders the same
   // markup at a size nobody looked at before, and the engine reports a row for
