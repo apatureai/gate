@@ -9,6 +9,7 @@ import {
 } from "@gate/secrets";
 import { resolveActionConfig } from "./action-config.js";
 import { formatActionError } from "./action-error.js";
+import { isForkPullRequest } from "./fork.js";
 import { createGitHubApi } from "./github.js";
 import { buildAllowlistedEnv, startLocalServer as runLocalServer, type LocalServerHandle } from "./local-serve.js";
 import { runAction } from "./run.js";
@@ -49,7 +50,7 @@ async function main(): Promise<void> {
       number: number;
       title: string;
       body: string | null;
-      head: { sha: string; repo?: { full_name?: string } | null };
+      head: { sha: string; repo?: { full_name?: string; fork?: boolean } | null };
       base: { sha: string; repo?: { full_name?: string } | null };
     };
   };
@@ -95,9 +96,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const isFork =
-    !!pr.head.repo?.full_name && !!pr.base.repo?.full_name &&
-    pr.head.repo.full_name !== pr.base.repo.full_name;
+  const isFork = isForkPullRequest(pr);
 
   const engineEnv = resolveEngineClientEnv(process.env);
   for (const { legacyName, canonicalName } of engineEnv.legacyNamesUsed) {

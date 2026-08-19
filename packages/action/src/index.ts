@@ -64,6 +64,8 @@ export { setupFailureCheckRun, publishSetupFailureCheckRun } from "./setup-failu
 export type { SetupFailurePublisher } from "./setup-failure.js";
 export { GateModeInputError, resolveActionConfig } from "./action-config.js";
 export type { ActionConfigInputs } from "./action-config.js";
+export { isForkPullRequest } from "./fork.js";
+export type { ForkPullRequestPayload } from "./fork.js";
 
 /**
  * Minimal GitHub token permissions the Action path requires.

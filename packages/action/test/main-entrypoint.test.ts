@@ -23,6 +23,7 @@ const HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
 const golden = loadGoldenReviewResult();
 
 const published: CheckRun[] = [];
+const submitted: ReviewContext[] = [];
 const gh = {
   comments: {
     listComments: vi.fn(async () => []),
@@ -44,12 +45,15 @@ vi.mock("@gate/engine", async (importOriginal) => {
     ...actual,
     createHttpEngineTransport: () => ({}),
     createJudgmentEngineClient: () => ({
-      review: async (reviewCtx: ReviewContext) => ({
-        status: "completed" as const,
-        result: { ...golden, grade: "blocked" as const },
-        jobId: "j",
-        reviewIdentity: canonicalReviewIdentity(reviewCtx),
-      }),
+      review: async (reviewCtx: ReviewContext) => {
+        submitted.push(reviewCtx);
+        return {
+          status: "completed" as const,
+          result: { ...golden, grade: "blocked" as const },
+          jobId: "j",
+          reviewIdentity: canonicalReviewIdentity(reviewCtx),
+        };
+      },
       cancel: async () => {},
     }),
   };
@@ -57,7 +61,7 @@ vi.mock("@gate/engine", async (importOriginal) => {
 
 const ORIGINAL_ENV = { ...process.env };
 
-function writeEventPayload(dir: string): string {
+function writeEventPayload(dir: string, head: unknown = { sha: HEAD_SHA, repo: { full_name: "acme/web" } }): string {
   const path = join(dir, "event.json");
   writeFileSync(
     path,
@@ -66,7 +70,7 @@ function writeEventPayload(dir: string): string {
         number: 42,
         title: "Redesign",
         body: null,
-        head: { sha: HEAD_SHA, repo: { full_name: "acme/web" } },
+        head,
         base: { sha: "fedcba9876543210fedcba9876543210fedcba98", repo: { full_name: "acme/web" } },
       },
     }),
@@ -77,6 +81,7 @@ function writeEventPayload(dir: string): string {
 /** Run the entrypoint exactly as the container does: import it and let it run. */
 async function runEntrypoint(): Promise<CheckRun[]> {
   published.length = 0;
+  submitted.length = 0;
   vi.resetModules();
   await import("../src/main.js");
   await vi.waitFor(() => expect(gh.publishCheckRun).toHaveBeenCalled());
@@ -89,7 +94,10 @@ describe("the Action entrypoint", () => {
   beforeEach(() => {
     workspace = mkdtempSync(join(tmpdir(), "gate-main-"));
     const configPath = join(workspace, ".gate.yml");
-    writeFileSync(configPath, "rules:\n  gate: blockers\n");
+    // `protection_bypass` is here because it is the fork answer made visible:
+    // the secret name survives to the engine on a same-repository pull request
+    // and is stripped on a fork, before any handoff.
+    writeFileSync(configPath, "rules:\n  gate: blockers\npreview:\n  protection_bypass: BYPASS\n");
     process.env.GITHUB_REPOSITORY = "acme/web";
     process.env.GITHUB_EVENT_PATH = writeEventPayload(workspace);
     process.env.INPUT_CONFIG_PATH = configPath;
@@ -122,6 +130,21 @@ describe("the Action entrypoint", () => {
     process.env.INPUT_GATE_MODE = "none";
     const [run] = await runEntrypoint();
     expect(run?.conclusion).toBe("neutral");
+  });
+
+  it("hands the preview-bypass secret over on a pull request from the repository itself", async () => {
+    await runEntrypoint();
+    expect(submitted[0]?.config.preview.protectionBypassSecretName).toBe("BYPASS");
+  });
+
+  it("treats a payload with no head repository as a fork, and strips the secret", async () => {
+    // The check this replaced answered "not a fork" whenever the payload did not
+    // say, so an unreadable head repository unlocked every gate a fork is held
+    // out of. Asserted at the engine boundary, which is the last place the
+    // answer can still matter.
+    process.env.GITHUB_EVENT_PATH = writeEventPayload(workspace, { sha: HEAD_SHA, repo: null });
+    await runEntrypoint();
+    expect(submitted[0]?.config.preview.protectionBypassSecretName).toBeNull();
   });
 
   it("publishes a neutral setup failure naming gate-mode when the input is not a gate mode", async () => {
