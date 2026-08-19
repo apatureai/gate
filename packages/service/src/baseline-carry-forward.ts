@@ -83,6 +83,8 @@ export type BaselineCarryOutcome =
   | { status: "unreadable_commit"; headSha: string; mergeSha: string }
   /** The merge produced a tree nobody measured. Recording anything would be a fiction. */
   | { status: "tree_changed"; headSha: string; mergeSha: string }
+  /** A set was already stored for the merge commit, and an observed one outranks a copy. */
+  | { status: "already_recorded"; mergeSha: string }
   /** The store or the GitHub read threw. Logged, never raised. */
   | { status: "failed"; detail: string };
 
@@ -225,6 +227,28 @@ export async function carryBaselineOnMerge(
           `no measurement set describes ${mergeSha}, so none was recorded`,
       );
       return { status: "tree_changed", headSha, mergeSha };
+    }
+
+    // AN OBSERVED SET OUTRANKS A COPIED ONE, and this is what makes the outcome
+    // independent of webhook arrival order. A merge whose tree did match fires
+    // both mechanisms on the same commit: this copy, and the default-branch push
+    // that measures it directly. The store upserts on (repository, commit), so
+    // without this the winner was whichever webhook arrived second, and the two
+    // do not measure the same thing: the copy came from the pull request's
+    // preview deployment, the push from the default branch's own URL. Declining
+    // to overwrite means the directly observed measurement always wins, whether
+    // it lands before this or after.
+    const existing = await store.find({
+      installationId: String(installationId),
+      owner,
+      name,
+      commitSha: mergeSha,
+    });
+    if (existing) {
+      console.log(
+        `[gate] baseline carry-forward skipped for ${repo}: ${mergeSha} already has a measurement set`,
+      );
+      return { status: "already_recorded", mergeSha };
     }
 
     await store.record({

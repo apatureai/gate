@@ -815,6 +815,17 @@ A ref that records nothing is never captured at all.
   which on a repository that deploys after CI is still the previous commit's build, and the set is
   then filed under the new commit. If you want the set to be certainly about the commit it names, make
   `default_branch_url` a per-commit address using `{sha}` or `{short_sha}`.
+- **The two sides of a comparison are now rendered by two different deployments.** This is the one way
+  the feature can be worse than the problem, and it is new: a baseline recorded from a push is
+  measured at `preview.default_branch_url`, which is usually production, while the pull request it is
+  compared against is measured at that pull request's preview. Anything that differs between those two
+  environments and is not the pull request's doing (seed data, feature flags, a signed-out state, a
+  consent banner, a different CDN) produces a violation on one side and not the other. Under `block`
+  that reads as **introduced** and fails a build the pull request did not break. Before default-branch
+  measuring, both sides were preview-rendered and this could not happen. If your preview and
+  production render differently in ways you cannot remove, keep `rules.measurements: advisory` until
+  they do not, or point `default_branch_url` at a preview-equivalent deployment of the default branch
+  rather than at production.
 - **Every commit that landed before you installed Gate, and the first pull request after you install
   it.** Nothing backfills. A repository's default branch acquires baselines from the first push after
   the App is installed, so a pull request opened before that push has a base Gate never measured, and

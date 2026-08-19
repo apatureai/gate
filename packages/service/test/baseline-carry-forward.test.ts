@@ -641,3 +641,49 @@ describe("a merged pull request gives the next one a base to be gated against", 
     expect(check?.summary).toContain("1 introduced by this pull request");
   });
 });
+
+describe("a merge that fires both mechanisms has one predictable winner", () => {
+  /**
+   * A merge whose tree matched fires the carry-forward AND the default-branch
+   * push on the same commit. The store upserts on (repository, commit), so the
+   * winner used to be whichever webhook arrived second, and the two do not
+   * measure the same thing: the copy comes from the pull request's preview
+   * deployment, the push from the default branch's own URL. A team could not
+   * predict which set their next pull request was scoped against.
+   *
+   * The rule is that a directly observed set outranks a copy, in either order.
+   */
+  it("declines to overwrite a set the push already observed", async () => {
+    const store = await storeWithHeadSet();
+    // The push landed first and measured the merge commit directly.
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: MERGE_SHA,
+      snapshot: buildMeasurementBaseline(measured, { commitSha: MERGE_SHA, recordedAtMs: 2_000 }),
+    });
+
+    const outcome = await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: store,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+    });
+
+    expect(outcome.status).toBe("already_recorded");
+    expect((await findMerge(store))?.carriedFrom).toBeUndefined();
+  });
+
+  it("still carries when nothing has been observed for that commit", async () => {
+    // The control: the rule is about not overwriting, not about declining to
+    // work. Most merges carry, because the push arrives later.
+    const store = await storeWithHeadSet();
+
+    const outcome = await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: store,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+    });
+
+    expect(outcome.status).toBe("carried");
+    expect((await findMerge(store))?.carriedFrom).toBe(HEAD_SHA);
+  });
+});

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { DEFAULT_CONFIG } from "@gate/config";
 import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import type { QueryFn, TenantTxRunner } from "@gate/db";
@@ -360,5 +361,53 @@ describe("installProductionSignalHandlers", () => {
 
     await vi.waitFor(() => expect(signalSource.exitCode).toBe(1));
     expect(onError).toHaveBeenCalledOnce();
+  });
+});
+
+describe("the composition root actually supplies the default-branch baseline wiring", () => {
+  /**
+   * `createProductionAppServer` is covered: dropping either wire from IT fails a
+   * test. The layer above it was not, and that is the layer the process runs.
+   * Deleting `measure` or `loadDefaultBranchConfig` from `buildProductionDepsFromEnv`
+   * left the whole suite green while the shipped binary recorded zero baselines
+   * forever, logging `not_configured` or `no_default_branch_url` on every push.
+   * That reads exactly like a healthy deployment with nothing to measure, which
+   * is the failure this feature exists to remove, one layer up from where it was
+   * being tested.
+   */
+  it("hands the push handler something to measure with", async () => {
+    const deps = await buildProductionDepsFromEnv(fullEnv(), baseFactories());
+
+    expect(deps.measure).toBeDefined();
+    expect(deps.measure?.measure).toBeTypeOf("function");
+  });
+
+  it("reads the pushed commit's own config rather than falling back to defaults", async () => {
+    // A missing loader is not inert: the handler falls back to DEFAULT_CONFIG,
+    // finds no `preview.default_branch_url`, and skips every push. The wire has
+    // to reach the repository config client, so this asserts where it reads
+    // from and not merely that a function is present.
+    const asked: Array<[string, string, string]> = [];
+    const deps = await buildProductionDepsFromEnv(
+      fullEnv(),
+      baseFactories({
+        repoConfigClient: () => ({
+          loadConfig: async (owner: string, name: string, ref: string) => {
+            asked.push([owner, name, ref]);
+            return DEFAULT_CONFIG;
+          },
+        }),
+      }),
+    );
+
+    expect(deps.loadDefaultBranchConfig).toBeTypeOf("function");
+    await deps.loadDefaultBranchConfig?.({
+      installationId: "99",
+      owner: "acme",
+      name: "web",
+      commitSha: "deadbeef",
+    });
+
+    expect(asked).toContainEqual(["acme", "web", "deadbeef"]);
   });
 });
