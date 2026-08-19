@@ -52,6 +52,17 @@ export type NormalizedPreviewConfig = {
    * every repository starts.
    */
   defaultBranchUrl: string | null;
+  /**
+   * The repository's assertion that `defaultBranchUrl` renders like its pull
+   * request previews.
+   *
+   * Read at COMPARISON time, never at record time: a stored set always says
+   * where it was actually rendered, so flipping this key takes effect on the
+   * next pull request rather than on the next push, and a set recorded under a
+   * mistaken claim is not poisoned by it. Default false, which makes a
+   * default-branch baseline reportable and never gating.
+   */
+  defaultBranchRendersLikePreview: boolean;
   /** Seconds to wait after the preview is reachable before capture. */
   waitSeconds: number;
   /** CSS selector signaling the page is ready, or null. */

@@ -1,4 +1,5 @@
 import {
+  baselineSupersedes,
   carryMeasurementBaselineForward,
   type MeasurementBaselineStore,
 } from "@gate/delivery";
@@ -22,6 +23,17 @@ import {
  * every race, by measuring the commit wherever it came from. This stays because
  * it is nearly free where it applies: the set already exists and the copy is two
  * commit reads, against a capture the other path has to pay for.
+ *
+ * AND BECAUSE IT IS THE BETTER BASELINE WHERE BOTH APPLY (added August 19,
+ * 2026). The two paths do not render the same thing. This one carries a set
+ * measured at the merged pull request's own PREVIEW; the push path measures
+ * whatever `preview.default_branch_url` names, which for most teams is
+ * production. The next pull request is measured at a preview too, so the carried
+ * set compares like against like, and the pushed one compares production against
+ * a preview and turns seed data, feature flags, a signed-out state or a consent
+ * banner into a violation that pull request appears to have introduced. So on a
+ * merge that fires both, this one now wins, which reverses the rule of the day
+ * before. The argument is written out where the code decides it, below.
  *
  * THE DISCIPLINE, WHICH IS THE WHOLE DESIGN. A set is copied ONLY when the merge
  * commit's tree sha is identical to the tree sha of the head that was reviewed.
@@ -83,7 +95,11 @@ export type BaselineCarryOutcome =
   | { status: "unreadable_commit"; headSha: string; mergeSha: string }
   /** The merge produced a tree nobody measured. Recording anything would be a fiction. */
   | { status: "tree_changed"; headSha: string; mergeSha: string }
-  /** A set was already stored for the merge commit, and an observed one outranks a copy. */
+  /**
+   * A set was already stored for the merge commit, and it is not one this copy
+   * improves on: it was already measured at a pull request's preview, which is
+   * the property that makes a copy worth preferring in the first place.
+   */
   | { status: "already_recorded"; mergeSha: string }
   /** The store or the GitHub read threw. Logged, never raised. */
   | { status: "failed"; detail: string };
@@ -229,24 +245,49 @@ export async function carryBaselineOnMerge(
       return { status: "tree_changed", headSha, mergeSha };
     }
 
-    // AN OBSERVED SET OUTRANKS A COPIED ONE, and this is what makes the outcome
-    // independent of webhook arrival order. A merge whose tree did match fires
-    // both mechanisms on the same commit: this copy, and the default-branch push
-    // that measures it directly. The store upserts on (repository, commit), so
-    // without this the winner was whichever webhook arrived second, and the two
-    // do not measure the same thing: the copy came from the pull request's
-    // preview deployment, the push from the default branch's own URL. Declining
-    // to overwrite means the directly observed measurement always wins, whether
-    // it lands before this or after.
+    // THE PREVIEW-MEASURED SET OUTRANKS THE OTHER ONE, WHICHEVER ARRIVES FIRST,
+    // and this reverses what this code said on August 18, 2026.
+    //
+    // A merge whose tree matched fires both mechanisms on the same commit: this
+    // copy, and the default-branch push that captures the commit at
+    // `preview.default_branch_url`. The store upserts on (repository, commit),
+    // so something has to rank them, and the old rule ranked them by directness:
+    // "an observed measurement outranks a copy". That is the right instinct
+    // about evidence and the wrong question. BOTH are observed. Tree equality is
+    // what allowed this copy, and equal trees are byte-identical content, so the
+    // carried set is a real capture of exactly this commit's content; the only
+    // thing deduced about it is which commit to file it under.
+    //
+    // What separates them is WHERE they were rendered, and a baseline is not an
+    // archive of the branch. Its whole job is to be the left-hand side of a
+    // comparison whose right-hand side is the next pull request, measured at
+    // that pull request's own preview. The carried set was measured at a preview
+    // too, so it compares like against like. The pushed set was measured at the
+    // default branch's deployment, which for most teams is production, and every
+    // difference between production and a preview that is not the pull request's
+    // doing then reads as a violation the pull request introduced. Ranking by
+    // comparability rather than by directness is what makes the next comparison
+    // answerable at all.
+    //
+    // ORDER-INDEPENDENCE IS PRESERVED, which is what the old rule was really
+    // protecting. This copy REPLACES a default-branch set that landed first, and
+    // the push path declines to overwrite a preview-measured set that landed
+    // first (`default-branch-baseline.ts`). Both directions end at the same
+    // stored row, so the two webhooks may finish in either order.
     const existing = await store.find({
       installationId: String(installationId),
       owner,
       name,
       commitSha: mergeSha,
     });
-    if (existing) {
+    const snapshot = carryMeasurementBaselineForward(stored, {
+      commitSha: mergeSha,
+      recordedAtMs: (deps.now ?? Date.now)(),
+    });
+    if (existing && !baselineSupersedes(snapshot, existing)) {
       console.log(
-        `[gate] baseline carry-forward skipped for ${repo}: ${mergeSha} already has a measurement set`,
+        `[gate] baseline carry-forward skipped for ${repo}: ${mergeSha} already has a measurement set ` +
+          "this copy does not improve on",
       );
       return { status: "already_recorded", mergeSha };
     }
@@ -256,10 +297,7 @@ export async function carryBaselineOnMerge(
       owner,
       name,
       commitSha: mergeSha,
-      snapshot: carryMeasurementBaselineForward(stored, {
-        commitSha: mergeSha,
-        recordedAtMs: (deps.now ?? Date.now)(),
-      }),
+      snapshot,
     });
     console.log(
       `[gate] baseline carried forward for ${repo}: ${headSha} -> ${mergeSha} (identical tree ${headTree})`,

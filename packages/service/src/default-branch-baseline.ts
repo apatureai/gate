@@ -1,5 +1,10 @@
 import { DEFAULT_CONFIG } from "@gate/config";
-import { buildMeasurementBaseline, type MeasurementBaselineStore } from "@gate/delivery";
+import {
+  buildMeasurementBaseline,
+  isPreviewMeasured,
+  measurementEnvironment,
+  type MeasurementBaselineStore,
+} from "@gate/delivery";
 import { type MeasurementProbe, verifyPreviewHandoff } from "@gate/engine";
 import type { GateMeasurementRequest, NormalizedDesignReviewConfig } from "@gate/types";
 
@@ -37,6 +42,35 @@ import type { GateMeasurementRequest, NormalizedDesignReviewConfig } from "@gate
  * arrive in the webhook payload; the configuration read is the same
  * `contents: read` load a review already does. Nothing here writes to the
  * customer's repository.
+ */
+
+/**
+ * WHAT THIS PATH MEASURES IS NOT WHERE THE NEXT PULL REQUEST WILL BE MEASURED
+ * (added August 19, 2026). `preview.default_branch_url` is production on most
+ * teams, and the pull request this baseline will be compared against renders at
+ * that pull request's own preview. Everything that differs between the two and
+ * is not the pull request's doing (seed data, feature flags, a signed-out state,
+ * a consent banner, a different CDN) becomes a violation on one side and not the
+ * other. Two things follow, and both of them are here rather than in the
+ * comparison:
+ *
+ * THE SET RECORDS WHERE IT WAS RENDERED (`measuredAt`), so the comparison can
+ * decline to attribute what it cannot attribute instead of calling it
+ * introduced. A stored row that could not say where it came from left the
+ * comparison no way to ask.
+ *
+ * AND THIS PATH YIELDS TO A PREVIEW-MEASURED SET FOR THE SAME COMMIT. A
+ * tree-identical merge fires both mechanisms: the carry-forward copies the
+ * reviewed head's set onto the merge commit, and this path captures the default
+ * branch's own deployment of it. Both are real measurements of the same tree, so
+ * directness does not separate them; comparability does, and the carried set is
+ * the one rendered where the next pull request will be. So a preview-measured
+ * row already stored for this commit ends the job BEFORE it spends a capture,
+ * and one that lands DURING the capture is checked for again before the store is
+ * written. Between those two checks the stored row does not depend on which
+ * webhook finished first. It applies to the installation sweep for the same
+ * reason it applies to a push: both of them measure the default branch's own
+ * deployment, and neither is where the next pull request will be rendered.
  */
 
 /** The repository and commit a push wants a baseline for. */
@@ -92,7 +126,13 @@ export type PushSkipReason =
   /** The payload is missing the repository, installation, ref, default branch or commit. */
   | "incomplete_event"
   /** The repository has not said where its default branch is deployed. */
-  | "no_default_branch_url";
+  | "no_default_branch_url"
+  /**
+   * A preview-measured set is already stored for this commit, and it is the
+   * better baseline: it was rendered at a preview, and so is the pull request it
+   * will be compared against.
+   */
+  | "preview_baseline_exists";
 
 interface RawPushEnvelope {
   ref?: unknown;
@@ -251,7 +291,32 @@ export async function measureDefaultBranchBaseline(
   if (!store || !probe) return { status: "skipped", reason: "not_configured" };
 
   const repo = `${target.owner}/${target.name}`;
+  const key = {
+    installationId: target.installationId,
+    owner: target.owner,
+    name: target.name,
+    commitSha: target.commitSha,
+  };
+  /** Whether a preview-measured set is already filed under this commit. */
+  const previewBaselineExists = async (): Promise<boolean> => {
+    const stored = await store.find(key);
+    return stored !== null && isPreviewMeasured(stored);
+  };
+  const yielded = (): DefaultBranchBaselineOutcome => {
+    console.log(
+      `[gate] default-branch baseline skipped for ${repo}: ${target.commitSha} already has a ` +
+        "preview-measured set, and a preview compares like-for-like against the next pull request's own preview",
+    );
+    return { status: "skipped", reason: "preview_baseline_exists" };
+  };
   try {
+    // ASKED TWICE, AND BOTH ASKINGS EARN THEIR KEEP. Here, because the cheapest
+    // way to yield to the carry-forward is not to spend a browser at all. And
+    // again after the capture, because a merge fires both mechanisms at once and
+    // the carry can land during the minute this one spends measuring; without
+    // the second ask, the winner would still be whichever finished last.
+    if (await previewBaselineExists()) return yielded();
+
     const config = (await deps.loadConfig?.(target)) ?? DEFAULT_CONFIG;
     const template = config.preview.defaultBranchUrl;
     if (!template) {
@@ -311,7 +376,19 @@ export async function measureDefaultBranchBaseline(
     const snapshot = buildMeasurementBaseline(measured, {
       commitSha: target.commitSha,
       recordedAtMs: (deps.now ?? Date.now)(),
+      // The surface is `default_branch` whatever the URL turns out to be. It is
+      // a statement about which deployment was rendered, not a guess about
+      // whether that deployment is production: Gate cannot read that off an
+      // address, and the repository is the one that gets to say so, with
+      // `preview.default_branch_renders_like_preview`.
+      measuredAt: measurementEnvironment("default_branch", verified.url),
     });
+    // The second ask. The capture took a minute, and a merge that fired both
+    // mechanisms may have carried the reviewed head's preview-measured set onto
+    // this commit while it ran. The measurement is discarded rather than stored:
+    // the store upserts on (repository, commit), so writing it would replace the
+    // better baseline with the one this whole path exists to be careful about.
+    if (await previewBaselineExists()) return yielded();
     await store.record({
       installationId: target.installationId,
       owner: target.owner,

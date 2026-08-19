@@ -194,3 +194,100 @@ describe("the App path scopes gating to what the pull request introduced", () =>
     expect(d._published[0]?.summary).toContain("could not read a stored measurement set");
   });
 });
+
+describe("the App path refuses to blame a pull request for the deployment it was compared against", () => {
+  /**
+   * THE LAST WAY THIS FEATURE COULD BE WORSE THAN THE PROBLEM. A baseline
+   * recorded by a push is measured at `preview.default_branch_url`, which for
+   * most teams is production; this pull request is measured at its own preview.
+   * Seed data, feature flags, a signed-out state or a consent banner then
+   * produce a violation on one side and not the other, and under `block` that
+   * used to read as introduced and fail a build nobody broke.
+   *
+   * The pair below is the whole claim: the same review, the same violations, the
+   * same store, and the only thing that differs is WHERE the stored set was
+   * rendered.
+   */
+  const cleanBase: GateReviewResult = {
+    ...measured,
+    measurements: { checksRun: measured.measurements?.checksRun ?? [], violations: [] },
+  };
+
+  async function runAgainstBase(measuredAt: { surface: "pull_request_preview" | "default_branch"; origin?: string }) {
+    const store = createInMemoryMeasurementBaselineStore();
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: BASE_SHA,
+      snapshot: buildMeasurementBaseline(cleanBase, { commitSha: BASE_SHA, measuredAt }),
+    });
+    const d = deps(measured, store);
+    await run(d);
+    return d._published[0];
+  }
+
+  it("fails the check when the base was measured at a preview, as it always did", async () => {
+    // The control, and the thing that must never stop working: an ordinary team
+    // whose baseline came from a review or from a merge carry-forward.
+    const check = await runAgainstBase({
+      surface: "pull_request_preview",
+      origin: "https://acme-git-main.vercel.app",
+    });
+
+    expect(check?.conclusion).toBe("failure");
+    expect(check?.summary).toContain("introduced by this pull request");
+  });
+
+  it("does not fail the check when the base was measured at the default branch's deployment", async () => {
+    const check = await runAgainstBase({ surface: "default_branch", origin: "https://app.example.com" });
+
+    expect(check?.conclusion).not.toBe("failure");
+    expect(check?.summary).toContain("not classified");
+    expect(check?.summary).toContain("rendered by different deployments");
+    // And it does not read as a clean pull request: the reason is on the surface.
+    expect(check?.summary).toContain("cannot be attributed");
+  });
+
+  it("fails it again once the repository declares the two render alike", async () => {
+    // The escape hatch, and the reason this is a declaration rather than an
+    // inference: the URL is opaque, so a staging deployment built like a preview
+    // and production are the same string to Gate.
+    const store = createInMemoryMeasurementBaselineStore();
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: BASE_SHA,
+      snapshot: buildMeasurementBaseline(cleanBase, {
+        commitSha: BASE_SHA,
+        measuredAt: { surface: "default_branch", origin: "https://staging.example.com" },
+      }),
+    });
+    const d = deps(measured, store);
+    await run(d, {
+      ...blockMode,
+      preview: { ...blockMode.preview, defaultBranchRendersLikePreview: true },
+    });
+
+    expect(d._published[0]?.conclusion).toBe("failure");
+    expect(d._published[0]?.summary).toContain("introduced by this pull request");
+  });
+
+  it("records this run's own preview address with the set it stores", async () => {
+    // Which is what makes the NEXT pull request's comparison answerable at all.
+    const store = createInMemoryMeasurementBaselineStore();
+    await run(deps(measured, store));
+
+    const stored = await store.find({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: HEAD_SHA,
+    });
+    expect(stored?.measuredAt).toEqual({
+      surface: "pull_request_preview",
+      origin: "https://acme.vercel.app",
+    });
+  });
+});

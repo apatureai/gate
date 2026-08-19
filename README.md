@@ -617,6 +617,11 @@ preview:
                         # https://{short_sha}.myapp.example.com. A push to the default branch is
                         # measured here to record that commit's baseline. Unset -> pushes record
                         # nothing. Not url_template: that one's {pr} has no value on a branch.
+  default_branch_renders_like_preview: false # does the address above render the way your PR previews
+                        # do? Default false, and false means a baseline measured there is compared,
+                        # reported, and never gated: production differs from a preview in ways no pull
+                        # request caused. Set it true only if default_branch_url points at a
+                        # preview-equivalent deployment, which turns gating back on for those merges.
   wait_seconds: 0
   ready_selector: null    # wait for this selector before capture
   ready_path: null        # poll this path for readiness instead of the base URL
@@ -748,6 +753,13 @@ unmeasured, the next pull request reads `no baseline` on both surfaces, and `blo
 it. The same holds when the pull request's head was never successfully reviewed, when GitHub's commit
 API cannot be read, and when the pull request is closed without merging.
 
+**The carried set is also the better baseline where both mechanisms apply,** and the two are not
+interchangeable. A carried set was measured at the merged pull request's own preview; a pushed one is
+measured at `preview.default_branch_url`, which for most teams is production. The next pull request is
+measured at a preview too, so the carried set compares like with like. A merge whose trees matched
+therefore ends with the carried set stored, whichever of the two webhooks finishes first, and the push
+skips its capture rather than spending one on a measurement it would not keep.
+
 **The carry-forward covers a quiet repository and abandons a busy one.** Tree equality holds exactly
 when the base has not moved since the branch point, so any merge that raced another landing carries
 nothing, the next pull request against that branch reads `no baseline`, and the gate goes silent on
@@ -822,17 +834,47 @@ A ref that records nothing is never captured at all.
   which on a repository that deploys after CI is still the previous commit's build, and the set is
   then filed under the new commit. If you want the set to be certainly about the commit it names, make
   `default_branch_url` a per-commit address using `{sha}` or `{short_sha}`.
-- **The two sides of a comparison are now rendered by two different deployments.** This is the one way
-  the feature can be worse than the problem, and it is new: a baseline recorded from a push is
-  measured at `preview.default_branch_url`, which is usually production, while the pull request it is
-  compared against is measured at that pull request's preview. Anything that differs between those two
-  environments and is not the pull request's doing (seed data, feature flags, a signed-out state, a
-  consent banner, a different CDN) produces a violation on one side and not the other. Under `block`
-  that reads as **introduced** and fails a build the pull request did not break. Before default-branch
-  measuring, both sides were preview-rendered and this could not happen. If your preview and
-  production render differently in ways you cannot remove, keep `rules.measurements: advisory` until
-  they do not, or point `default_branch_url` at a preview-equivalent deployment of the default branch
-  rather than at production.
+- **A baseline measured at your default branch's deployment is compared, reported, and never gated.**
+  This is the one way the feature could have been worse than the problem: a baseline recorded from a
+  push is measured at `preview.default_branch_url`, which is usually production, while the pull
+  request it is compared against is measured at that pull request's preview. Anything that differs
+  between those two and is not the pull request's doing (seed data, feature flags, a signed-out state,
+  a consent banner, a different CDN) produces a violation on one side and not the other, and under
+  `block` that read as **introduced** and failed a build the pull request did not break.
+
+  Every stored set now records *where* it was rendered, and a comparison whose two sides came from
+  different **surfaces** (one a pull request preview, one the default branch's own deployment)
+  stops attributing: a violation that matches nothing on the base is reported as `not classified`
+  rather than new, a severity band that rose is not called worse, and no recorded violation is counted
+  as resolved. Violations that *did* match are still reported as already on the base. Both surfaces
+  say which run this was and why. Nothing about it is silent, and nothing about it gates.
+
+  **It is not an origin check, because that would be a kill switch.** Preview URLs differ from each
+  other on every pull request, so a rule of the form "the two addresses must match" would refuse every
+  comparison Gate has ever made. What is compared is the *kind* of deployment, so two previews stay
+  comparable however different their hostnames. That is the ordinary case, and the case that still
+  fails a build when a pull request really does introduce a violation. Two sides that happen to share
+  one address are comparable too.
+
+  **If your default branch deploys to something that renders like your previews, say so** with
+  `preview.default_branch_renders_like_preview: true`, and those comparisons gate normally again. It
+  is a declaration rather than something Gate infers, because the URL is opaque: a staging deployment
+  built exactly like a preview and a production deployment are the same string from here.
+
+  **On a tree-identical merge, the preview-measured set wins.** Such a merge fires both mechanisms on
+  one commit: the carry-forward copies the reviewed head's set onto the merge commit, and the push
+  measures the default branch's deployment of it. Both are real measurements of the same tree, so what
+  ranks them is comparability, not directness: the carried set was rendered at a preview, and so is
+  the next pull request. The push yields to it (before spending a capture where it can, and again
+  after, since the carry can land mid-capture), and the carry replaces a pushed set that landed first,
+  so the stored row is the same whichever webhook finishes first.
+
+  **What remains.** A baseline stored before this shipped carries no environment, and `unknown` is
+  compared normally rather than refused, so those sets keep the old behaviour until the next push or
+  merge re-records them. A team that sets `default_branch_renders_like_preview: true` and is wrong
+  gets the old failure back, by their own choice. And nothing here detects drift *within* one surface:
+  two previews built from different branches can still differ by seed data, and Gate compares them as
+  though they could not.
 - **Every commit that landed before you installed Gate.** Nothing backfills history. The default
   branch's current tip is measured at install time (below), and every later commit on it is measured
   as it lands, but a pull request whose base is some older commit has a base Gate never measured and
@@ -1208,14 +1250,18 @@ flowchart TD
   O -- no --> Z
   O -- yes --> N2["Per repository, 2 at a time:<br/>read its default branch + that branch's tip sha"]
   N2 -- "unreadable or empty" --> Z
-  N2 --> R
-  Q -- yes --> R["Read .gate.yml at that commit"]
+  N2 --> Y1
+  Q -- yes --> Y1{"A preview-measured set already stored for this commit?"}
+  Y1 -- yes --> Z3["Yield to it. No capture is asked for"]
+  Y1 -- no --> R["Read .gate.yml at that commit"]
   R --> S{"preview.default_branch_url set and verifiable?"}
   S -- no --> Z
   S -- yes --> T["POST /measurements (HMAC-signed) then poll, 5-min deadline, no retry"]
   T --> U{"Measured facts only, no grade or findings?"}
   U -- no --> Z2["Refuse the payload and record nothing"]
-  U -- yes --> V["Store the set for that commit in measurement_baselines"]
+  U -- yes --> Y2{"Did a carry land during the capture?"}
+  Y2 -- yes --> Z3
+  Y2 -- no --> V["Store the set, and where it was measured, in measurement_baselines"]
   V --> W["Stop. No comment, no Check Run, no run row"]
 ```
 
@@ -1303,6 +1349,7 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **Component-library detection reads one file, at the repository root.** Gate looks at `package.json` at the PR's head and nothing else, so a monorepo whose UI package declares Radix in `packages/web/package.json` is not detected, and neither is a library vendored without a dependency entry. The review still runs, grounded on tokens and brand; it simply carries no library rubric note, and nothing in the result distinguishes that from a repository that genuinely uses none. On the App path the read can also fail for reasons that have nothing to do with your code (a rate limit, a permission change), and it fails quietly on purpose: grounding must never be able to fail a pull request's review.
 - **A measurement baseline can carry a violation to the wrong element, and it errs that way on purpose.** After the selector keys miss, a violation is matched on check, page and the substance of the engine's sentence, and it may claim one stored violation that nothing else accounts for. That is what makes a wrapper div, a tightened combinator or a renamed class stop reading as a new defect. It also means a pull request that fixes one contrast failure and adds another with the same sentence on the same page is reported as one fixed and one already on the base, rather than one fixed and one introduced, so that one does not fail the check. It is still rendered, still counted, and still in the review. The count is the guard: the number of same-defect violations on a page cannot grow without something being called introduced. What Gate will not do is match across pages, so a renamed route is *Not classified* rather than carried over.
 - **A default-branch baseline is only as true as what was deployed when the push arrived.** The push fires the moment the commit lands; a repository that deploys after CI is still serving the previous build at that instant, so a *stable* `default_branch_url` can be captured, measured, and filed under a commit whose UI it does not show. Gate cannot tell the two apart from the outside: the URL answers 200 either way. Point `default_branch_url` at a per-commit address with `{sha}` or `{short_sha}` if you need the set to be certainly about the commit it names.
+- **A baseline measured at your default branch's deployment cannot be attributed, so it is reported and never gated.** Production and a preview differ for reasons no pull request caused, so a comparison whose two sides came from those two surfaces reports what it cannot place instead of calling it new, and `rules.measurements: block` does nothing on that run. Two previews stay comparable however different their addresses, which is the ordinary case and still fails a build on a violation a pull request really did introduce. If your default branch deploys somewhere that renders like your previews, `preview.default_branch_renders_like_preview: true` restores gating there; Gate will not infer that from a URL. Sets stored before the environment was recorded compare as they always did, because unknown is not a difference.
 - **Nothing backfills history, so only the branch *tip* is scoped when you install.** Installing the App measures the default branch's current commit, and every commit that lands on it afterwards is measured as it lands. Everything older than that has no baseline, a pull request based on one of those commits reads `no baseline`, and there is no command that goes and measures history. A repository that has not set `preview.default_branch_url`, or whose deployment is not reachable at install time, gets nothing even at the tip and waits for its first push.
 - **The measure endpoint is a contract nobody has implemented yet.** Gate's `push` handling, guards, client and store write are here and tested; `POST /measurements` is the critique service's half and `verdict` does not implement it. Until one does, a push on a live deployment records nothing, and the honest reading is that this closes the gap in Gate and not yet in the system. Roadmap item 3c.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.

@@ -6,6 +6,7 @@ import {
   decideDeliveryForError,
   type GitHubCommentsApi,
   lookupMeasurementBaseline,
+  measurementEnvironment,
   type MeasurementBaselineStore,
   upsertStickyComment,
 } from "@gate/delivery";
@@ -181,6 +182,16 @@ export async function runHostedReview(
     },
   };
 
+  // WHERE this run is rendered, recorded with the set it produces and stated
+  // again when the set for the BASE commit is compared against it. A review
+  // always renders a pull request's own preview, whichever provider resolved the
+  // URL, so the surface is a constant here and only the address varies. The
+  // address is taken from the VERIFIED url, not from `ctx.preview.url`: the
+  // verifier is what decided which address a browser is allowed to be pointed
+  // at, and recording the unverified one would file a claim about a capture that
+  // did not happen there.
+  const measuredAt = measurementEnvironment("pull_request_preview", verified.url);
+
   const depth = await decideReviewDepth(deps.windowStore, repo, now());
   traceDepthDecision(repo, depth);
 
@@ -282,6 +293,7 @@ export async function runHostedReview(
           snapshot: buildMeasurementBaseline(outcome.result, {
             commitSha: ctx.pullRequest.headSha,
             recordedAtMs: at,
+            measuredAt,
           }),
         });
       } catch (err) {
@@ -312,6 +324,8 @@ export async function runHostedReview(
     measurements: config.rules.measurements,
     measurementSuppress: config.rules.measurementSuppress,
     measurementBaseline,
+    measuredAt,
+    environmentsDeclaredEquivalent: config.preview.defaultBranchRendersLikePreview,
     runUrl: deps.runUrl,
   });
   if (decision.publishComment && decision.comment) {

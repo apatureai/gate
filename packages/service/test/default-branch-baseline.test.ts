@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG } from "@gate/config";
 import {
+  buildMeasurementBaseline,
   createInMemoryMeasurementBaselineStore,
   MEASUREMENT_IDENTITY_VERSION,
   type MeasurementBaselineSnapshot,
@@ -579,5 +580,111 @@ describe("the push handler publishes nothing and calls no model", () => {
 
     await built.onPush(pushPayload());
     await expect(Promise.all(jobs)).resolves.toBeDefined();
+  });
+});
+
+describe("a push yields to a preview-measured set for the same commit", () => {
+  /**
+   * A tree-identical merge fires both mechanisms on one commit: the carry
+   * copies the reviewed head's set onto the merge commit, and this path captures
+   * the default branch's own deployment of it. Both are real measurements of the
+   * same tree, so directness does not separate them. Where they were RENDERED
+   * does: the carried set came from a pull request's preview, and the pull
+   * request this baseline will be compared against is measured at a preview too.
+   * Like against like wins, so this path stands down.
+   */
+  const carriedSet = (): MeasurementBaselineSnapshot =>
+    buildMeasurementBaseline(measured(), {
+      commitSha: COMMIT,
+      measuredAt: { surface: "pull_request_preview", origin: "https://web-git-pr41.example.app" },
+    });
+
+  it("records nothing and spends no capture when the carry landed first", async () => {
+    const probe = probeReturning();
+    const d = deps({ measure: probe });
+    await d.measurementBaselines.record({
+      installationId: "7",
+      owner: "acme",
+      name: "web",
+      commitSha: COMMIT,
+      snapshot: carriedSet(),
+    });
+
+    const outcome = await recordDefaultBranchBaseline(pushPayload(), d);
+
+    expect(outcome).toEqual({ status: "skipped", reason: "preview_baseline_exists" });
+    // The browser is the expensive part, and yielding before it is the cheap
+    // version of yielding.
+    expect(probe.requests).toHaveLength(0);
+    expect((await findBaseline(d.measurementBaselines))?.measuredAt?.surface).toBe("pull_request_preview");
+  });
+
+  it("discards its own measurement when the carry lands DURING the capture", async () => {
+    // The race the second check exists for. Without it the winner is whichever
+    // webhook finished last, which is exactly the unpredictability the
+    // precedence rule is supposed to remove.
+    const store = createInMemoryMeasurementBaselineStore();
+    const d = deps({
+      measurementBaselines: store,
+      measure: {
+        async measure() {
+          await store.record({
+            installationId: "7",
+            owner: "acme",
+            name: "web",
+            commitSha: COMMIT,
+            snapshot: carriedSet(),
+          });
+          return measured();
+        },
+      },
+    });
+
+    const outcome = await recordDefaultBranchBaseline(pushPayload(), d);
+
+    expect(outcome).toEqual({ status: "skipped", reason: "preview_baseline_exists" });
+    const stored = await findBaseline(store);
+    expect(stored?.measuredAt?.surface).toBe("pull_request_preview");
+    expect(stored?.measuredAt?.origin).toBe("https://web-git-pr41.example.app");
+  });
+
+  it("still records over a set measured at the default branch, and over one with no environment", async () => {
+    // The control that keeps this from being a rule that stops pushes recording
+    // anything. Only a PREVIEW-measured row outranks a fresh capture; a row this
+    // same path wrote, or one written before environments were recorded, is
+    // re-measured like any other commit.
+    for (const previous of [
+      buildMeasurementBaseline(measured(), {
+        commitSha: COMMIT,
+        measuredAt: { surface: "default_branch", origin: "https://app.example.com" },
+      }),
+      buildMeasurementBaseline(measured(), { commitSha: COMMIT }),
+    ]) {
+      const d = deps();
+      await d.measurementBaselines.record({
+        installationId: "7",
+        owner: "acme",
+        name: "web",
+        commitSha: COMMIT,
+        snapshot: previous,
+      });
+
+      const outcome = await recordDefaultBranchBaseline(pushPayload(), d);
+
+      expect(outcome.status).toBe("recorded");
+      expect((await findBaseline(d.measurementBaselines))?.recordedAtMs).toBe(4_000);
+    }
+  });
+
+  it("records where it measured, so the next comparison can tell it apart from a preview", async () => {
+    const d = deps({ loadConfig: async () => configWith({ defaultBranchUrl: "https://app.example.com/home" }) });
+    await recordDefaultBranchBaseline(pushPayload(), d);
+
+    // The SURFACE is what a comparison matches on; the origin is audit, and the
+    // path is dropped from it because an origin is an address and not a page.
+    expect((await findBaseline(d.measurementBaselines))?.measuredAt).toEqual({
+      surface: "default_branch",
+      origin: "https://app.example.com",
+    });
   });
 });

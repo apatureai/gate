@@ -50,6 +50,13 @@ const UNCLASSIFIED_REASON: Record<UnclassifiedReason, string> = {
   engine_skew:
     "a different engine version recorded the baseline and a violation on that page is " +
     "unaccounted for, so a reworded old violation and a new one cannot be told apart",
+  // A baseline measured at `preview.default_branch_url` against a run measured
+  // at this pull request's preview. Says which two things were compared rather
+  // than accusing the environment, because Gate does not know which side the
+  // difference came from either.
+  cross_environment:
+    "the baseline was measured at the default branch's own deployment and this run at this " +
+    "pull request's preview, so a violation in one and not the other cannot be attributed",
 };
 
 const SHORT_SHA = 7;
@@ -59,6 +66,17 @@ function shortSha(sha: string | undefined): string {
   // backticks of its own.
   if (!sha) return "the base commit";
   return sanitizeCodeSpan(sha.slice(0, SHORT_SHA), 40);
+}
+
+/**
+ * An origin as a code span, or a phrase for the recorder that stated none.
+ *
+ * The origin is repository-supplied text that reaches this process as
+ * configuration or as a provider's deployment URL, so it goes through the same
+ * sanitizer every other borrowed string on this surface does.
+ */
+function originPhrase(origin: string | undefined): string {
+  return origin ? sanitizeCodeSpan(origin, 200) : "address not recorded";
 }
 
 /** Up to `max` distinct routes from a set of rows, as safe code spans. */
@@ -189,6 +207,26 @@ export function baselineSection(
         "that matches nothing is reported as not classified instead of new. It is not being called " +
         "pre-existing, and it is not gating. The next run on the base branch re-records the " +
         "baseline under this engine and restores the normal rule.",
+    );
+  }
+
+  // Said whenever the two sides were rendered by different deployments, not only
+  // when a row was withheld, for the reason the engine-skew note above is
+  // unconditional: the counts a reader is about to act on were produced under a
+  // weaker rule, and a run that withheld attribution must not print the same
+  // page as one that had nothing to withhold.
+  if (comparison.crossEnvironment) {
+    lines.push(
+      "ℹ️ The baseline was measured at the default branch's own deployment " +
+        `(${originPhrase(comparison.crossEnvironment.baseline.origin)}) and this run at this pull ` +
+        `request's preview (${originPhrase(comparison.crossEnvironment.current.origin)}). Those two ` +
+        "can differ for reasons no pull request caused: seed data, feature flags, a signed-out " +
+        "state, a consent banner, a different CDN. So a violation here that matches nothing on the " +
+        "base is reported as not classified rather than new, a severity band that moved is not " +
+        "called worse, and no recorded violation is counted as resolved. Violations that DID match " +
+        "the base are still reported as already there. Nothing on this run is gating. If your " +
+        "default branch deploys to something that renders like your previews, set " +
+        "`preview.default_branch_renders_like_preview: true` to compare them normally.",
     );
   }
 
@@ -341,6 +379,15 @@ export function baselineSection(
           "violation fails one only when the engine marked it block-eligible and it is either new " +
           "in this pull request or one this pull request moved into a worse severity band, with a " +
           "band known on both sides." +
+          // Without this the sentence above lists conditions no violation on
+          // this run could have met, and a reader concludes the pull request is
+          // clean. The setting is not doing nothing because there was nothing to
+          // find; it is doing nothing because Gate refused to attribute what it
+          // found, and those read very differently.
+          (comparison.crossEnvironment
+            ? " On this run nothing could meet those conditions: the two sides were rendered by " +
+              "different deployments, so `block` is switched off here whatever this pull request did."
+            : "") +
           overflowNote,
     );
   }

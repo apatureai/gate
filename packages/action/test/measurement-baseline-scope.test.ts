@@ -148,3 +148,67 @@ describe("the Action path never gates on a violation it cannot attribute", () =>
     expect(d._published[0]?.conclusion).not.toBe("failure");
   });
 });
+
+describe("the Action path states where it rendered, and reads what the base says", () => {
+  /**
+   * A self-hosted operator with a store gets the App path's behaviour, and that
+   * has to include the App path's caution: a baseline measured at the default
+   * branch's deployment against a pull request measured at its preview is
+   * production compared with a preview, and a difference between those two is
+   * not this pull request's doing.
+   */
+  const cleanBase = (measuredAt?: { surface: "pull_request_preview" | "default_branch"; origin?: string }) =>
+    buildMeasurementBaseline(
+      { ...measured, measurements: { checksRun: ["contrast", "overflow", "touch_target"], violations: [] } },
+      { commitSha: BASE_SHA, ...(measuredAt ? { measuredAt } : {}) },
+    );
+
+  it("records the preview it was pointed at with the set it stores", async () => {
+    const store = createInMemoryMeasurementBaselineStore();
+    await run(deps(measured, store));
+
+    const stored = await store.find({
+      installationId: "acme/web",
+      owner: "acme",
+      name: "web",
+      commitSha: HEAD_SHA,
+    });
+    expect(stored?.measuredAt).toEqual({
+      surface: "pull_request_preview",
+      origin: "https://preview.example.com",
+    });
+  });
+
+  it("still fails on an introduced violation when the base was a preview too", async () => {
+    const store = createInMemoryMeasurementBaselineStore();
+    await store.record({
+      installationId: "acme/web",
+      owner: "acme",
+      name: "web",
+      commitSha: BASE_SHA,
+      snapshot: cleanBase({ surface: "pull_request_preview", origin: "https://main.example.com" }),
+    });
+
+    const d = deps(measured, store);
+    await run(d);
+
+    expect(d._published[0]?.conclusion).toBe("failure");
+  });
+
+  it("does not fail when the base was measured at the default branch's deployment", async () => {
+    const store = createInMemoryMeasurementBaselineStore();
+    await store.record({
+      installationId: "acme/web",
+      owner: "acme",
+      name: "web",
+      commitSha: BASE_SHA,
+      snapshot: cleanBase({ surface: "default_branch", origin: "https://app.example.com" }),
+    });
+
+    const d = deps(measured, store);
+    await run(d);
+
+    expect(d._published[0]?.conclusion).not.toBe("failure");
+    expect(d._published[0]?.summary).toContain("rendered by different deployments");
+  });
+});

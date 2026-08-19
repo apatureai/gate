@@ -8,6 +8,7 @@ import {
   type GitHubCommentsApi,
   type JudgmentState,
   lookupMeasurementBaseline,
+  measurementEnvironment,
   type MeasurementBaselineStore,
   suppressesGrade,
   suppressesGradeForCoverage,
@@ -239,6 +240,15 @@ export async function runAction(
     return { status: "unverified_preview", conclusion: "neutral", notReviewed: verified.notReviewed };
   }
 
+  // WHERE this run is rendered, stated for the same reason the App path states
+  // it: a comparison has to be able to tell whether the set it is about to be
+  // compared against was rendered by another kind of deployment. Taken from the
+  // VERIFIED url, which is the address a browser is actually pointed at, and a
+  // constant surface, because an Action review always renders this pull
+  // request's preview whether that came from a provider bot, a template, or the
+  // repository's own `preview-command`.
+  const measuredAt = measurementEnvironment("pull_request_preview", verified.url);
+
   const sanitizedConfig: NormalizedDesignReviewConfig = {
     ...config,
     preview: {
@@ -343,6 +353,8 @@ export async function runAction(
       measurements: config.rules.measurements,
       measurementSuppress: config.rules.measurementSuppress,
       measurementBaseline,
+      measuredAt,
+      environmentsDeclaredEquivalent: config.preview.defaultBranchRendersLikePreview,
       runUrl: deps.runUrl,
     });
 
@@ -372,6 +384,7 @@ export async function runAction(
           commitSha: ctx.pullRequest.headSha,
           snapshot: buildMeasurementBaseline(outcome.result, {
             commitSha: ctx.pullRequest.headSha,
+            measuredAt,
           }),
         });
       } catch (err) {

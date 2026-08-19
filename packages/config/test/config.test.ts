@@ -20,6 +20,11 @@ describe("defaults", () => {
         environment: "Preview",
         urlTemplate: null,
         defaultBranchUrl: null,
+        // FALSE by default: the honest answer to "does your default branch's
+        // deployment render like your previews" is no until a team says
+        // otherwise, and the consequence of that default is a baseline that is
+        // reported and never gated rather than one that fails builds.
+        defaultBranchRendersLikePreview: false,
         waitSeconds: 0,
         readySelector: null,
         readyPath: null,
@@ -44,6 +49,30 @@ describe("defaults", () => {
       },
       tokens: { source: null, values: {} },
     });
+  });
+});
+
+describe("preview.default_branch_renders_like_preview", () => {
+  /**
+   * The one thing a repository can say that Gate cannot work out for itself: a
+   * URL is opaque, so a staging deployment built exactly like a preview and a
+   * production deployment are the same string from here. Saying it turns gating
+   * back on for baselines measured at the default branch.
+   */
+  it("reads the claim off the file", () => {
+    expect(
+      loadDesignReviewConfig("preview:\n  default_branch_renders_like_preview: true").preview
+        .defaultBranchRendersLikePreview,
+    ).toBe(true);
+  });
+
+  it("is false when the file says nothing, because the honest default is no", () => {
+    expect(loadDesignReviewConfig("preview:\n  default_branch_url: https://app.example.com").preview
+      .defaultBranchRendersLikePreview).toBe(false);
+  });
+
+  it("refuses a value that is not a boolean rather than reading it as true", () => {
+    expect(() => loadDesignReviewConfig("preview:\n  default_branch_renders_like_preview: sometimes")).toThrow();
   });
 });
 

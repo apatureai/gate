@@ -646,16 +646,121 @@ describe("a merge that fires both mechanisms has one predictable winner", () => 
   /**
    * A merge whose tree matched fires the carry-forward AND the default-branch
    * push on the same commit. The store upserts on (repository, commit), so the
-   * winner used to be whichever webhook arrived second, and the two do not
-   * measure the same thing: the copy comes from the pull request's preview
-   * deployment, the push from the default branch's own URL. A team could not
-   * predict which set their next pull request was scoped against.
+   * winner would otherwise be whichever webhook arrived second, and the two do
+   * not measure the same thing: the copy comes from the pull request's preview
+   * deployment, the push from the default branch's own URL.
    *
-   * The rule is that a directly observed set outranks a copy, in either order.
+   * THE RULE REVERSED ON AUGUST 19, 2026. It used to be that a directly observed
+   * set outranks a copy. Both are observed, though: tree equality is what allowed
+   * the copy, and equal trees are identical content, so the carried set is a real
+   * capture of exactly this commit's content. What separates them is where they
+   * were RENDERED, and a baseline exists to be compared against the next pull
+   * request, which is measured at that pull request's own preview. So the
+   * preview-measured set wins, whichever webhook lands first.
    */
-  it("declines to overwrite a set the push already observed", async () => {
+  const previewSet = (commitSha: string): MeasurementBaselineSnapshot =>
+    buildMeasurementBaseline(measured, {
+      commitSha,
+      recordedAtMs: 1_000,
+      measuredAt: { surface: "pull_request_preview", origin: "https://web-git-pr42.example.app" },
+    });
+
+  const pushedSet = (): MeasurementBaselineSnapshot =>
+    buildMeasurementBaseline(measured, {
+      commitSha: MERGE_SHA,
+      recordedAtMs: 2_000,
+      measuredAt: { surface: "default_branch", origin: "https://app.example.com" },
+    });
+
+  async function storeWithPreviewHeadSet(): Promise<ReturnType<typeof createInMemoryMeasurementBaselineStore>> {
+    const store = createInMemoryMeasurementBaselineStore();
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: HEAD_SHA,
+      snapshot: previewSet(HEAD_SHA),
+    });
+    return store;
+  }
+
+  it("replaces a set the push measured at the default branch", async () => {
+    const store = await storeWithPreviewHeadSet();
+    // The push landed first and captured production.
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: MERGE_SHA,
+      snapshot: pushedSet(),
+    });
+
+    const outcome = await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: store,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+      now: () => 5_000,
+    });
+
+    expect(outcome.status).toBe("carried");
+    const stored = await findMerge(store);
+    expect(stored?.carriedFrom).toBe(HEAD_SHA);
+    expect(stored?.measuredAt?.surface).toBe("pull_request_preview");
+  });
+
+  it("ends at the same stored row whichever webhook finished first", async () => {
+    // Order-independence is what the old rule was really protecting, and it is
+    // kept: the carry overwrites a pushed set, and the push path declines to
+    // overwrite a carried one.
+    const pushFirst = await storeWithPreviewHeadSet();
+    await pushFirst.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: MERGE_SHA,
+      snapshot: pushedSet(),
+    });
+    await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: pushFirst,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+      now: () => 5_000,
+    });
+
+    const carryFirst = await storeWithPreviewHeadSet();
+    await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: carryFirst,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+      now: () => 5_000,
+    });
+
+    expect(await findMerge(pushFirst)).toEqual(await findMerge(carryFirst));
+  });
+
+  it("declines when the stored set is already preview-measured", async () => {
+    // Nothing to improve on, so nothing is rewritten. Two carries of the same
+    // head must not churn the row, and a set an earlier merge already carried is
+    // the same evidence this one holds.
+    const store = await storeWithPreviewHeadSet();
+    await store.record({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: MERGE_SHA,
+      snapshot: previewSet(MERGE_SHA),
+    });
+
+    const outcome = await carryBaselineOnMerge(mergedPayload(), {
+      measurementBaselines: store,
+      commits: trees({ [HEAD_SHA]: TREE_SHA, [MERGE_SHA]: TREE_SHA }),
+    });
+
+    expect(outcome).toEqual({ status: "already_recorded", mergeSha: MERGE_SHA });
+    expect((await findMerge(store))?.recordedAtMs).toBe(1_000);
+  });
+
+  it("declines when neither set can say where it was rendered", async () => {
+    // Both sides unknown: nothing shows the copy is the better baseline, so the
+    // stored row stands. Unknown never displaces, in either direction.
     const store = await storeWithHeadSet();
-    // The push landed first and measured the merge commit directly.
     await store.record({
       installationId: "1",
       owner: "acme",
@@ -674,8 +779,8 @@ describe("a merge that fires both mechanisms has one predictable winner", () => 
   });
 
   it("still carries when nothing has been observed for that commit", async () => {
-    // The control: the rule is about not overwriting, not about declining to
-    // work. Most merges carry, because the push arrives later.
+    // The control: the rule is about which set wins, not about declining to
+    // work. Most merges carry, because nothing else has written that commit.
     const store = await storeWithHeadSet();
 
     const outcome = await carryBaselineOnMerge(mergedPayload(), {

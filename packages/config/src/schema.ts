@@ -53,6 +53,23 @@ const previewSchema = z
     // Supports `{sha}` and `{short_sha}`; a repository whose production URL is
     // stable needs neither.
     default_branch_url: z.string().nullable().default(null),
+    // The repository asserting that whatever `default_branch_url` names renders
+    // like its pull request previews do.
+    //
+    // Default FALSE, because the honest default for "is your production build
+    // the same rendering as your preview" is no: seed data, feature flags, a
+    // signed-out state and a consent banner all differ there, and every one of
+    // them produces a violation on one side and not the other. Without this key
+    // a baseline measured at the default branch is compared but never
+    // attributed, so a violation only production shows is reported and never
+    // gated. With it, the two are compared as though one deployment rendered
+    // both, which is what a team pointing `default_branch_url` at a
+    // preview-equivalent deployment has actually done.
+    //
+    // It is the repository's claim, not Gate's inference: the URL is opaque, so
+    // nothing Gate can read distinguishes a staging deployment built like a
+    // preview from production.
+    default_branch_renders_like_preview: z.boolean().default(false),
     wait_seconds: z.number().int().min(0).default(0),
     ready_selector: z.string().nullable().default(null),
     // Preview readiness (#80/#151): poll this path instead of the base URL,

@@ -215,3 +215,106 @@ describe("createSqlMeasurementBaselineStore", () => {
     expect((await store.find({ ...key, commitSha: "mergesha" }))?.carriedFrom).toBeUndefined();
   });
 });
+
+describe("where a stored set was rendered survives the round trip", () => {
+  /**
+   * The column exists so a comparison can tell whether its two sides are
+   * comparable at all: a set measured at `preview.default_branch_url` against a
+   * pull request measured at its own preview is production against a preview,
+   * and a difference between those is not the pull request's doing. A row that
+   * cannot say where it was rendered leaves the comparison no way to ask.
+   */
+  it("keeps the surface and the origin", async () => {
+    const store = createSqlMeasurementBaselineStore(query);
+    await store.record({
+      ...key,
+      snapshot: buildMeasurementBaseline(resultWith([violation()]), {
+        commitSha: "basesha",
+        measuredAt: { surface: "default_branch", origin: "https://app.example.com" },
+      }),
+    });
+
+    expect((await store.find(key))?.measuredAt).toEqual({
+      surface: "default_branch",
+      origin: "https://app.example.com",
+    });
+  });
+
+  it("keeps the surface when there was no address to record", async () => {
+    const store = createSqlMeasurementBaselineStore(query);
+    await store.record({
+      ...key,
+      snapshot: buildMeasurementBaseline(resultWith([violation()]), {
+        commitSha: "basesha",
+        measuredAt: { surface: "pull_request_preview" },
+      }),
+    });
+
+    expect((await store.find(key))?.measuredAt).toEqual({ surface: "pull_request_preview" });
+  });
+
+  it("comes back ABSENT for a row written before the column existed", async () => {
+    // Which is unknown, and unknown is compared normally. Reading a NULL as a
+    // difference would have switched attribution off for every baseline in the
+    // field on the day the column shipped.
+    const store = createSqlMeasurementBaselineStore(query);
+    await store.record({
+      ...key,
+      snapshot: buildMeasurementBaseline(resultWith([violation()]), { commitSha: "basesha" }),
+    });
+    await db.exec("UPDATE measurement_baselines SET measured_at_surface = NULL, measured_at_origin = NULL");
+
+    expect((await store.find(key))?.measuredAt).toBeUndefined();
+  });
+
+  it("drops a surface this build does not recognise, rather than trusting the string", async () => {
+    // Same rule every other reader here follows: a row a future or a foreign
+    // build wrote is data this process did not produce, and a value it cannot
+    // interpret must not become evidence that two deployments differ.
+    const store = createSqlMeasurementBaselineStore(query);
+    await store.record({
+      ...key,
+      snapshot: buildMeasurementBaseline(resultWith([violation()]), {
+        commitSha: "basesha",
+        measuredAt: { surface: "default_branch", origin: "https://app.example.com" },
+      }),
+    });
+    await db.exec("UPDATE measurement_baselines SET measured_at_surface = 'staging_replica'");
+
+    expect((await store.find(key))?.measuredAt).toBeUndefined();
+  });
+
+  it("drops an origin with no surface, because an origin alone answers nothing", async () => {
+    const store = createSqlMeasurementBaselineStore(query);
+    await store.record({
+      ...key,
+      snapshot: buildMeasurementBaseline(resultWith([violation()]), { commitSha: "basesha" }),
+    });
+    await db.exec("UPDATE measurement_baselines SET measured_at_origin = 'https://app.example.com'");
+
+    expect((await store.find(key))?.measuredAt).toBeUndefined();
+  });
+
+  it("carries the source's environment onto a carried set, not the merge's own", async () => {
+    // The property that makes a carried set the better baseline: it describes a
+    // rendering that happened at a preview, and copying it across two identical
+    // trees did not move it anywhere.
+    const store = createSqlMeasurementBaselineStore(query);
+    const head = buildMeasurementBaseline(resultWith([violation()]), {
+      commitSha: "basesha",
+      measuredAt: { surface: "pull_request_preview", origin: "https://web-git-pr41.example.app" },
+    });
+    await store.record({
+      ...key,
+      commitSha: "mergesha",
+      snapshot: carryMeasurementBaselineForward(head, { commitSha: "mergesha" }),
+    });
+
+    const read = await store.find({ ...key, commitSha: "mergesha" });
+    expect(read?.carriedFrom).toBe("basesha");
+    expect(read?.measuredAt).toEqual({
+      surface: "pull_request_preview",
+      origin: "https://web-git-pr41.example.app",
+    });
+  });
+})

@@ -7,6 +7,7 @@ import {
   compareMeasurementsToBaseline,
   type MeasurementBaselineLookup,
   type MeasurementBaselineStatus,
+  type MeasurementEnvironment,
 } from "./measurement-baseline.js";
 import { isGreenOverMeasured, visibleMeasurements } from "./measurements.js";
 import { sanitizeCodeSpan } from "./sanitize.js";
@@ -136,6 +137,21 @@ export interface DegradationContext {
    * exactly as they did before baselines existed.
    */
   measurementBaseline?: MeasurementBaselineLookup;
+  /**
+   * Where THIS run was rendered, so the comparison can tell whether the stored
+   * set was rendered somewhere else.
+   *
+   * Absent means the caller did not state it, which is unknown and never a
+   * difference: a path that cannot say where it captured must not silently
+   * switch attribution off for every repository it serves.
+   */
+  measuredAt?: MeasurementEnvironment;
+  /**
+   * `preview.default_branch_renders_like_preview`. The repository's own
+   * assertion that a set measured at its default branch's deployment may be
+   * compared against a run measured at a preview.
+   */
+  environmentsDeclaredEquivalent?: boolean;
   runUrl?: string;
   /** Capture-instability signal from engine result metadata. */
   captureUnstable?: boolean;
@@ -226,6 +242,10 @@ export function decideDelivery(outcome: PollOutcome, ctx: DegradationContext): D
       : compareMeasurementsToBaseline(result, {
           lookup: ctx.measurementBaseline,
           suppress: ctx.measurementSuppress ?? [],
+          ...(ctx.measuredAt !== undefined ? { measuredAt: ctx.measuredAt } : {}),
+          ...(ctx.environmentsDeclaredEquivalent !== undefined
+            ? { environmentsDeclaredEquivalent: ctx.environmentsDeclaredEquivalent }
+            : {}),
         });
 
   const comment = renderStickyComment(result, {

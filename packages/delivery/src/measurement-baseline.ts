@@ -170,6 +170,40 @@ import { suppressMeasurements } from "./measurements.js";
  * `MEASUREMENT_IDENTITY_VERSION` does not move. A bump would invalidate every
  * baseline stored in the field to add a column nothing matches on.
  *
+ * THE TWO SIDES HAVE TO HAVE BEEN RENDERED BY THE SAME KIND OF DEPLOYMENT
+ * (added August 19, 2026). Every rule above compares two measurement sets as
+ * though the only thing that could differ between them is the pull request. That
+ * held while both sides were rendered at a pull request's preview, and it stopped
+ * holding the day a baseline could also be measured at
+ * `preview.default_branch_url`, which for most teams is production. Production
+ * and a preview differ in ways no pull request caused: seed data, feature flags,
+ * a signed-out state, a consent banner, a different CDN. A violation those
+ * produce is present on one side and absent on the other, matches nothing, and
+ * is called INTRODUCED, which under `block` fails a build that broke nothing.
+ *
+ * So a stored set records WHERE it was rendered (`measuredAt`), a run states the
+ * same fact about itself, and when the two are different SURFACES the comparison
+ * still runs but stops attributing: what would have been introduced is reported
+ * as `cross_environment`, no band change is called worsened, and no stored
+ * violation is claimed as resolved. Reported and not gated, exactly as
+ * `viewport_not_measured` already works, and for the same reason: Gate did not
+ * look at the thing that would settle it, so Gate does not guess.
+ *
+ * THE SURFACE IS THE GRANULARITY, AND THE ORIGIN IS NOT. Preview URLs differ
+ * from each other by construction, one per pull request, so a rule of the form
+ * "the two origins must match" would refuse every comparison Gate has ever made
+ * and switch gating off everywhere. What separates the hazard from the ordinary
+ * case is not the address, it is whether one side was a pull request's preview
+ * and the other was the default branch's own deployment. Two previews are the
+ * ordinary case however different their hostnames, and they are the path that
+ * every review, and every set carried onto a merge commit, produces.
+ *
+ * UNKNOWN ON EITHER SIDE IS NOT A DIFFERENCE, the same rule engine skew already
+ * follows. A set stored before this field existed, or by a path that does not
+ * state one, cannot be shown to have been rendered somewhere else, and reading a
+ * missing field as a difference would switch attribution off for every row in the
+ * field on the day this shipped.
+ *
  * THE ROUTE IS NEVER FUZZY, AND A RENAMED PAGE IS THEREFORE UNCLASSIFIED. `/`
  * becoming `/home` is a markup refactor's cousin, and it is deliberately NOT
  * absorbed: the route is the last coordinate that keeps two pages apart, and a
@@ -180,6 +214,121 @@ import { suppressMeasurements } from "./measurements.js";
  * and a page nobody looked at was not fixed. Both halves are the same rule, that
  * Gate does not guess across pages, and both are tested.
  */
+
+/**
+ * The KIND of deployment a measurement set was rendered by.
+ *
+ * Two values, because two things measure: a review renders a pull request's own
+ * preview, and a push renders whatever `preview.default_branch_url` names, which
+ * for most teams is production. A set carried onto a merge commit keeps the
+ * surface of the rendering it describes, which is a preview, because tree
+ * equality is what allowed the copy and the copy did not re-render anything.
+ *
+ * Deliberately coarse. The question a comparison needs answered is not "which
+ * address" but "was the other side a pull request's preview like this one is",
+ * and every finer split would be a rule that fires on hostnames that differ by
+ * construction.
+ */
+export type MeasurementSurface = "pull_request_preview" | "default_branch";
+
+/** Where a measurement set was rendered, as far as the recorder could state it. */
+export interface MeasurementEnvironment {
+  surface: MeasurementSurface;
+  /**
+   * The origin the capture was pointed at (`https://host:port`), when the URL
+   * could be parsed.
+   *
+   * Never a matching condition, and never allowed to become one: two previews
+   * have different origins on every pull request. It is kept for audit, and for
+   * exactly one narrow positive signal, in `crossEnvironmentComparison`: two
+   * sides at the SAME origin are the same deployment whatever surface recorded
+   * them, so they are comparable.
+   */
+  origin?: string;
+}
+
+/**
+ * The origin of a capture URL, or undefined when there is not one to state.
+ *
+ * Named for the capture and not for the measurement, because `MeasurementOrigin`
+ * next door is a different question entirely (where a violation came from
+ * relative to the base) and two things called an origin in one module is how a
+ * caller reaches for the wrong one.
+ *
+ * Undefined rather than the raw string on a URL that will not parse: an
+ * unparseable value is not an origin, and storing one would put a string into
+ * an equality test that is only ever allowed to say "these two are the same
+ * deployment".
+ */
+export function captureOrigin(url: string | null | undefined): string | undefined {
+  if (typeof url !== "string" || url === "") return undefined;
+  try {
+    const origin = new URL(url).origin;
+    // `new URL("file:///x").origin` is the string "null". It is not an address
+    // two sides can be shown to share, so it is dropped like a parse failure.
+    return origin && origin !== "null" ? origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The environment a capture at `url` ran in.
+ *
+ * One builder for all three recorders (the App review, the Action review, the
+ * default-branch push) so the surface and the origin are derived by one rule
+ * rather than by three that agree until they do not. The origin key is left OFF
+ * rather than set to `undefined` when the URL will not parse, so a stored row
+ * says "no address recorded" rather than carrying an empty one.
+ */
+export function measurementEnvironment(
+  surface: MeasurementSurface,
+  url: string | null | undefined,
+): MeasurementEnvironment {
+  const origin = captureOrigin(url);
+  return { surface, ...(origin !== undefined ? { origin } : {}) };
+}
+
+/** Two sides of a comparison that were rendered by different deployments. */
+export interface CrossEnvironmentComparison {
+  baseline: MeasurementEnvironment;
+  current: MeasurementEnvironment;
+}
+
+/**
+ * Whether these two sides were rendered by different deployments, in the only
+ * sense that can produce a violation neither side's code is answerable for.
+ *
+ * Every one of the four ways out is a case where Gate cannot SHOW a difference,
+ * or has been told there is none:
+ *
+ *   - unknown on either side. A row stored before this field existed, or a path
+ *     that states no environment. Same rule as engine skew: a missing field is
+ *     not evidence, and treating it as evidence would have switched attribution
+ *     off for every baseline in the field the day this shipped.
+ *   - the same surface. Two pull request previews, which is what every review
+ *     and every carried set produces, and what Gate compared exclusively before
+ *     `preview.default_branch_url` existed. This is the ordinary case and it
+ *     must keep gating.
+ *   - the same origin. Whatever recorded them, the two captures were pointed at
+ *     one address, so they are one deployment.
+ *   - the repository declared them equivalent
+ *     (`preview.default_branch_renders_like_preview`). The team is the only
+ *     party that can know its staging deployment renders like its previews, and
+ *     the README already told them to point `default_branch_url` at one; without
+ *     a way to say so, doing it would buy them nothing.
+ */
+export function crossEnvironmentComparison(
+  baseline: MeasurementEnvironment | undefined,
+  current: MeasurementEnvironment | undefined,
+  declaredEquivalent = false,
+): CrossEnvironmentComparison | undefined {
+  if (!baseline || !current) return undefined;
+  if (baseline.surface === current.surface) return undefined;
+  if (declaredEquivalent) return undefined;
+  if (baseline.origin !== undefined && baseline.origin === current.origin) return undefined;
+  return { baseline, current };
+}
 
 /** One violation as it was recorded on a base commit. */
 export interface MeasurementBaselineEntry {
@@ -281,6 +430,72 @@ export interface MeasurementBaselineSnapshot {
    * allowed the copy is what makes them the same measurement.
    */
   carriedFrom?: string;
+  /**
+   * WHERE this set was rendered: a pull request's preview, or the deployment
+   * `preview.default_branch_url` names.
+   *
+   * Optional, and absent means the recorder did not state it: a row stored
+   * before this field existed, or a path that has no URL to speak of. Absent is
+   * read as unknown by `crossEnvironmentComparison` and never as a difference.
+   *
+   * A CARRIED SET KEEPS THE SOURCE'S ENVIRONMENT, and must. `carriedFrom` says
+   * which commit was rendered; this says where that rendering happened, and
+   * copying a set across identical trees does not move it to a new deployment.
+   * Overwriting it with the merge's own surface would be the record claiming a
+   * capture that never ran.
+   */
+  measuredAt?: MeasurementEnvironment;
+}
+
+/**
+ * Whether a candidate set should REPLACE the one already stored for a commit,
+ * when a merge fires both mechanisms on the same commit and both produce one.
+ *
+ * A tree-identical merge produces two sets for the one commit: the pull
+ * request's set copied onto the merge commit, and a fresh capture of the default
+ * branch's own deployment. The store upserts on (repository, commit), so without
+ * a rule the winner is whichever webhook finished second.
+ *
+ * THE PREVIEW-MEASURED SET WINS, WHICH REVERSES WHAT THIS CODE SAID YESTERDAY.
+ * The rule was "a directly observed measurement outranks a copy", which is the
+ * right instinct about EVIDENCE and the wrong question. Both sets are observed:
+ * the copy is a real capture of a byte-identical tree, and tree equality is what
+ * made copying it a statement of fact rather than an assertion. Nothing about
+ * the carried set is deduced except which commit to file it under.
+ *
+ * What the two do not share is where they were rendered, and a baseline is not
+ * an archive. Its entire job is to be the left-hand side of a comparison whose
+ * right-hand side is the next pull request, measured at that pull request's own
+ * preview. The preview-measured set is like against like; the default-branch set
+ * compares production against a preview and turns every environment difference
+ * into a violation the next pull request appears to have introduced. So the
+ * ranking is by comparability, not by directness.
+ *
+ * ORDER-INDEPENDENT IN BOTH DIRECTIONS, which is the property the old comment
+ * was really protecting. The carry replaces a default-branch set that landed
+ * first, and the push declines to overwrite a preview-measured set that landed
+ * first, so the stored row is the same either way. The only asymmetry consulted
+ * is the surface, so this never flip-flops.
+ *
+ * An unknown environment on the stored row (a set written before the field
+ * existed) is not preview-measured as far as anything can show, so a
+ * preview-measured candidate replaces it. That is the safe direction: on a merge
+ * commit an unknown row came from a push or from an older carry of the same
+ * head, and the incoming carry is either better or identical.
+ */
+export function baselineSupersedes(
+  incoming: MeasurementBaselineSnapshot,
+  existing: MeasurementBaselineSnapshot,
+): boolean {
+  return (
+    incoming.measuredAt?.surface === "pull_request_preview" &&
+    existing.measuredAt?.surface !== "pull_request_preview"
+  );
+}
+
+/** Whether a stored set was rendered by a pull request's preview deployment. */
+export function isPreviewMeasured(snapshot: MeasurementBaselineSnapshot): boolean {
+  return snapshot.measuredAt?.surface === "pull_request_preview";
 }
 
 /**
@@ -368,6 +583,11 @@ export interface BuildBaselineOptions {
   /** The commit this result was produced for. */
   commitSha: string;
   recordedAtMs?: number;
+  /**
+   * Where this run was rendered. Omitted by a caller that cannot state it, and
+   * an omission is read as unknown rather than as a preview.
+   */
+  measuredAt?: MeasurementEnvironment;
 }
 
 /**
@@ -422,6 +642,10 @@ export function buildMeasurementBaseline(
     })),
     engineVersion: result.metadata.engineVersion ?? null,
     ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
+    // Left off entirely rather than written as `undefined`, so a snapshot
+    // round-tripped through jsonb says "this recorder did not state where it
+    // rendered" rather than carrying a key with nothing under it.
+    ...(options.measuredAt !== undefined ? { measuredAt: options.measuredAt } : {}),
   };
 }
 
@@ -452,6 +676,12 @@ export interface CarryBaselineOptions {
  * `carriedFrom` is taken from the source snapshot's own `commitSha`, so carrying
  * a carried set names the commit that was MEASURED rather than the intermediate
  * one it passed through.
+ *
+ * `measuredAt` rides across with everything else, and that is what makes the
+ * carry worth preferring: the set still describes a rendering at a pull
+ * request's preview, which is where the next pull request will be measured too.
+ * Restating it as the merge commit's own surface would name a capture nobody
+ * ran.
  */
 export function carryMeasurementBaselineForward(
   snapshot: MeasurementBaselineSnapshot,
@@ -554,7 +784,14 @@ export type UnclassifiedReason =
    * that also moved and a genuinely new one are indistinguishable there, so
    * neither reading is asserted.
    */
-  | "engine_skew";
+  | "engine_skew"
+  /**
+   * The baseline was rendered by the default branch's own deployment and this
+   * run by a pull request's preview. A violation present here and absent there
+   * is either this pull request's doing or the difference between the two
+   * deployments, and nothing stored can tell those apart.
+   */
+  | "cross_environment";
 
 export interface ClassifiedMeasurement {
   measurement: Measurement;
@@ -625,6 +862,17 @@ export interface MeasurementComparison {
    * nothing to gate on.
    */
   engineSkew?: { baseline: string; current: string };
+  /**
+   * Set when the two sides were rendered by different KINDS of deployment: the
+   * stored set at the default branch's own URL, this run at a pull request's
+   * preview.
+   *
+   * Reported for the same reason `engineSkew` is: a run that withheld
+   * attribution has to be distinguishable from one that had nothing to
+   * attribute, and a reader deciding whether to trust a green check is entitled
+   * to know which rulebook produced it.
+   */
+  crossEnvironment?: CrossEnvironmentComparison;
   /** How many violations the stored set holds. Zero under `compared` is a clean base. */
   baselineSize: number;
   /** Every visible violation with its origin, in the engine's order. */
@@ -654,6 +902,18 @@ export interface CompareMeasurementsOptions {
   lookup: MeasurementBaselineLookup;
   /** `rules.measurement_suppress`, applied exactly as the renderer applies it. */
   suppress?: readonly string[];
+  /**
+   * Where THIS run was rendered, so it can be placed against where the stored
+   * set was. Absent means the caller did not state it, which is unknown and
+   * never a difference.
+   */
+  measuredAt?: MeasurementEnvironment;
+  /**
+   * `preview.default_branch_renders_like_preview`: the repository asserting that
+   * its default branch's deployment renders like its previews, so a set measured
+   * at one may be compared against a run measured at the other.
+   */
+  environmentsDeclaredEquivalent?: boolean;
 }
 
 const UNCOMPARABLE: Record<"absent" | "unavailable" | "skew", UnclassifiedReason> = {
@@ -729,6 +989,19 @@ export function compareMeasurementsToBaseline(
       { baselineVersion: snapshot.version },
     );
   }
+
+  // Whether the two sides were rendered by different kinds of deployment. Read
+  // in exactly three places below, and each one is a place this comparison would
+  // otherwise make a claim it cannot support: what is called introduced, what is
+  // called worsened, and what is counted as resolved. Everything else stands: a
+  // violation MATCHED on both sides is evidence it predates this pull request
+  // whichever deployment rendered it, and saying so is the half of the answer
+  // that stays true across environments.
+  const crossEnvironment = crossEnvironmentComparison(
+    snapshot.measuredAt,
+    options.measuredAt,
+    options.environmentsDeclaredEquivalent ?? false,
+  );
 
   const elementKeys = new Set(snapshot.entries.map((entry) => entry.elementKey));
   const baseRoutes = new Set(snapshot.routesMeasured);
@@ -873,7 +1146,14 @@ export function compareMeasurementsToBaseline(
     if (stored === undefined || current === undefined) return row;
     row.baselineSeverity = stored;
     row.currentSeverity = current;
-    if (current > stored) row.worsened = true;
+    // Both bands are still recorded across a cross-environment comparison,
+    // because they are facts and a reader may want them. What is withheld is the
+    // ATTRIBUTION: a band is the worst measurement across a rendering, and a
+    // rendering with different seed data or a different signed-in state produces
+    // a different worst measurement on markup nobody touched. Under `block` a
+    // worsened violation fails the check, so a band difference Gate cannot
+    // attribute must not be called one.
+    if (current > stored && !crossEnvironment) row.worsened = true;
     return row;
   };
 
@@ -1095,9 +1375,17 @@ export function compareMeasurementsToBaseline(
       baseViewports !== undefined &&
       measurement.viewports.length > 0 &&
       measurement.viewports.every((viewport) => !baseViewports.includes(viewport));
+    // A THIRD COORDINATE GATE DID NOT LOOK AT, joining the route and the
+    // viewport. A violation here that matches nothing stored is new, OR it is
+    // what the default branch's deployment renders and a preview does not, and
+    // no stored fact separates those. `viewport_not_measured` is checked first
+    // where both apply, because it names the narrower reason and it is the one a
+    // reader can act on by widening the base run's viewports.
     rows[index] = unseen
       ? { measurement, origin: "unclassified" as const, reason: "viewport_not_measured" as const }
-      : { measurement, origin: "introduced" as const };
+      : crossEnvironment
+        ? { measurement, origin: "unclassified" as const, reason: "cross_environment" as const }
+        : { measurement, origin: "introduced" as const };
   }
 
   const classified = rows.filter(
@@ -1117,21 +1405,30 @@ export function compareMeasurementsToBaseline(
   // counter is the one surface that speaks in the flattering direction, so an
   // unmeasured coordinate has to silence it wherever it appears.
   const nowViewports = new Set(measuredViewports(result));
-  const resolved = snapshot.entries.filter(
-    (entry, index) =>
-      nowRoutes.has(entry.route) &&
-      nowChecks.has(entry.kind) &&
-      !claimedEntries.has(index) &&
-      !answeredLeniently.has(entry.elementKey) &&
-      (entry.viewports === undefined ||
-        entry.viewports.length === 0 ||
-        entry.viewports.some((viewport) => nowViewports.has(viewport))),
-  ).length;
+  // And the deployment, for the same reason again. A violation the default
+  // branch's production build shows and a preview does not is absent from this
+  // run, unclaimed, and on a route and check this run measured, so it satisfied
+  // every condition for "gone" while nothing was fixed. This counter is the one
+  // surface that speaks in the flattering direction, so a coordinate Gate cannot
+  // compare has to silence it here too.
+  const resolved = crossEnvironment
+    ? 0
+    : snapshot.entries.filter(
+        (entry, index) =>
+          nowRoutes.has(entry.route) &&
+          nowChecks.has(entry.kind) &&
+          !claimedEntries.has(index) &&
+          !answeredLeniently.has(entry.elementKey) &&
+          (entry.viewports === undefined ||
+            entry.viewports.length === 0 ||
+            entry.viewports.some((viewport) => nowViewports.has(viewport))),
+      ).length;
 
   return {
     status: "compared",
     baseSha: snapshot.commitSha,
     ...(engineSkew ? { engineSkew } : {}),
+    ...(crossEnvironment ? { crossEnvironment } : {}),
     baselineSize: snapshot.entries.length,
     classified,
     introduced: classified.filter((row) => row.origin === "introduced").map((row) => row.measurement),

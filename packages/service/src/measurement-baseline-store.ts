@@ -4,6 +4,7 @@ import type {
   MeasurementBaselineRecord,
   MeasurementBaselineSnapshot,
   MeasurementBaselineStore,
+  MeasurementSurface,
 } from "@gate/delivery";
 import type { MeasurementKind } from "@gate/types";
 import type { SqlQuery } from "./review-window.js";
@@ -32,8 +33,8 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         `INSERT INTO measurement_baselines
            (installation_id, repo_owner, repo_name, commit_sha,
             fingerprint_version, engine_version, checks_run, routes_measured, viewports_measured,
-            entries, recorded_at, carried_from)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12)
+            entries, recorded_at, carried_from, measured_at_surface, measured_at_origin)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14)
          ON CONFLICT (repo_owner, repo_name, commit_sha) DO UPDATE SET
            fingerprint_version = EXCLUDED.fingerprint_version,
            engine_version = EXCLUDED.engine_version,
@@ -42,7 +43,9 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
            viewports_measured = EXCLUDED.viewports_measured,
            entries = EXCLUDED.entries,
            recorded_at = EXCLUDED.recorded_at,
-           carried_from = EXCLUDED.carried_from`,
+           carried_from = EXCLUDED.carried_from,
+           measured_at_surface = EXCLUDED.measured_at_surface,
+           measured_at_origin = EXCLUDED.measured_at_origin`,
         [
           record.installationId,
           record.owner,
@@ -63,6 +66,12 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
           // row that named itself as its own source would make every observed
           // set indistinguishable from a carried one in an audit.
           snapshot.carriedFrom ?? null,
+          // Null rather than a guessed surface when the recorder did not state
+          // one. A row that claimed `pull_request_preview` because that is the
+          // common case would be asserting where a capture ran, and the whole
+          // point of the column is to answer that question with evidence.
+          snapshot.measuredAt?.surface ?? null,
+          snapshot.measuredAt?.origin ?? null,
         ],
       );
     },
@@ -78,9 +87,12 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         entries: unknown;
         recorded_at: Date | string | null;
         carried_from: string | null;
+        measured_at_surface: string | null;
+        measured_at_origin: string | null;
       }>(
         `SELECT commit_sha, fingerprint_version, engine_version, checks_run, routes_measured,
-                viewports_measured, entries, recorded_at, carried_from
+                viewports_measured, entries, recorded_at, carried_from,
+                measured_at_surface, measured_at_origin
            FROM measurement_baselines
           WHERE repo_owner = $1 AND repo_name = $2 AND commit_sha = $3`,
         [key.owner, key.name, key.commitSha],
@@ -88,6 +100,7 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
       const row = rows[0];
       if (!row) return null;
       const recordedAtMs = row.recorded_at ? new Date(row.recorded_at).getTime() : undefined;
+      const surface = asSurface(row.measured_at_surface);
       return {
         version: row.fingerprint_version,
         commitSha: row.commit_sha,
@@ -109,6 +122,23 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         ...(typeof row.carried_from === "string" && row.carried_from !== ""
           ? { carriedFrom: row.carried_from }
           : {}),
+        // Absent unless the SURFACE is one this build recognises. A row written
+        // before the column existed, and a row carrying a surface a future build
+        // wrote, both come back as unknown, and unknown is compared normally
+        // rather than refused: the alternative reads a value this process cannot
+        // interpret as evidence that two deployments differ. The origin rides
+        // along only when there is a surface to attach it to, because an origin
+        // on its own answers no question this comparison asks.
+        ...(surface
+          ? {
+              measuredAt: {
+                surface,
+                ...(typeof row.measured_at_origin === "string" && row.measured_at_origin !== ""
+                  ? { origin: row.measured_at_origin }
+                  : {}),
+              },
+            }
+          : {}),
       };
     },
   };
@@ -126,6 +156,15 @@ function asStrings(value: unknown): string[] {
 }
 
 const KINDS: readonly MeasurementKind[] = ["contrast", "overflow", "touch_target"];
+
+const SURFACES: readonly MeasurementSurface[] = ["pull_request_preview", "default_branch"];
+
+/** The stored surface, or undefined for NULL and for anything this build does not know. */
+function asSurface(value: unknown): MeasurementSurface | undefined {
+  return typeof value === "string" && (SURFACES as readonly string[]).includes(value)
+    ? (value as MeasurementSurface)
+    : undefined;
+}
 
 function asKinds(value: unknown): MeasurementKind[] {
   return asStrings(value).filter((item): item is MeasurementKind =>

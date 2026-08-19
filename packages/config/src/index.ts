@@ -71,6 +71,7 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
       environment: raw.preview.environment,
       urlTemplate: raw.preview.url_template,
       defaultBranchUrl: raw.preview.default_branch_url,
+      defaultBranchRendersLikePreview: raw.preview.default_branch_renders_like_preview,
       waitSeconds: raw.preview.wait_seconds,
       readySelector: raw.preview.ready_selector,
       readyPath: raw.preview.ready_path,

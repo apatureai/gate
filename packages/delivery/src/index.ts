@@ -59,11 +59,16 @@ export {
 } from "./measurement-identity.js";
 export type { MeasurementIdentity } from "./measurement-identity.js";
 export {
+  baselineSupersedes,
   buildMeasurementBaseline,
+  captureOrigin,
   carryMeasurementBaselineForward,
   compareMeasurementsToBaseline,
   createInMemoryMeasurementBaselineStore,
+  crossEnvironmentComparison,
+  isPreviewMeasured,
   lookupMeasurementBaseline,
+  measurementEnvironment,
   measuredKinds,
   measuredRoutes,
 } from "./measurement-baseline.js";
@@ -72,6 +77,7 @@ export type {
   CarryBaselineOptions,
   ClassifiedMeasurement,
   CompareMeasurementsOptions,
+  CrossEnvironmentComparison,
   MeasurementBaselineEntry,
   MeasurementBaselineKey,
   MeasurementBaselineLookup,
@@ -80,7 +86,9 @@ export type {
   MeasurementBaselineStatus,
   MeasurementBaselineStore,
   MeasurementComparison,
+  MeasurementEnvironment,
   MeasurementOrigin,
+  MeasurementSurface,
   MeasuredRun,
   UnclassifiedReason,
 } from "./measurement-baseline.js";
