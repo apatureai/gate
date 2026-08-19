@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { pgExecutor, pgTenantRunner, type QueryFn, type TenantTxRunner } from "@gate/db";
+import type { MeasurementBaselineStore } from "@gate/delivery";
 import { createJudgmentEngineClient, createAccountEngineTransport, type JudgmentEngineClient } from "@gate/engine";
 import { createRedisConnection, type RedisConfigClient } from "@gate/redis";
 import { EnvSecretStore, type SecretStore } from "@gate/secrets";
@@ -22,6 +23,7 @@ import {
   type ComponentLibraryClient,
   type RepoConfigClient,
 } from "./repo-config.js";
+import { createSqlMeasurementBaselineStore } from "./measurement-baseline-store.js";
 import { createSqlFullReviewWindow, type FullReviewWindowStore, type SqlQuery } from "./review-window.js";
 import { createSqlRunStore, type CompletedRunRecord, type RunStore } from "./run-store.js";
 import { createSqlScreenshotRegistry, createTemplateSignedUrlProvider } from "./screenshots.js";
@@ -110,6 +112,27 @@ function createTenantRunStore(tenant: TenantTxRunner): RunStore {
   };
 }
 
+/**
+ * The measurement-baseline store, run inside the installation-scoped (RLS)
+ * transaction like every other tenant table: `measurement_baselines`
+ * default-denies without the tenant GUC, so an unscoped query would read
+ * nothing and every pull request would report `no baseline`.
+ */
+function createTenantMeasurementBaselineStore(tenant: TenantTxRunner): MeasurementBaselineStore {
+  return {
+    async record(record) {
+      await tenant.withTenant(record.installationId, (q: QueryFn) =>
+        createSqlMeasurementBaselineStore(q).record(record),
+      );
+    },
+    async find(key) {
+      return tenant.withTenant(key.installationId, (q: QueryFn) =>
+        createSqlMeasurementBaselineStore(q).find(key),
+      );
+    },
+  };
+}
+
 function createTenantFeedbackSink(tenant: TenantTxRunner): FeedbackSink {
   return createFeedbackSink({
     async persist(event) {
@@ -163,6 +186,15 @@ export async function buildProductionDepsFromEnv(
     worker: factories.reviewWorker?.(redisUrl) ?? createBullReviewWorker(redisUrl),
     windowStore: createTenantFullReviewWindow(sql.tenant),
     runStore: createTenantRunStore(sql.tenant),
+    measurementBaselines: createTenantMeasurementBaselineStore(sql.tenant),
+    commits: {
+      // `contents: read`, which the App already holds; no scope is widened for
+      // the merge carry-forward and nothing writes to the repository.
+      getCommitTreeSha: async (owner, name, sha, installationId) => {
+        const token = await auth.getInstallationToken(installationId);
+        return githubPullsClient(token).getCommitTreeSha(owner, name, sha);
+      },
+    },
     screenshotRegistry,
     screenshotRoute: {
       signer: createTemplateSignedUrlProvider(screenshotObjectUrlTemplate),

@@ -60,6 +60,7 @@ export {
 export type { MeasurementIdentity } from "./measurement-identity.js";
 export {
   buildMeasurementBaseline,
+  carryMeasurementBaselineForward,
   compareMeasurementsToBaseline,
   createInMemoryMeasurementBaselineStore,
   lookupMeasurementBaseline,
@@ -68,6 +69,7 @@ export {
 } from "./measurement-baseline.js";
 export type {
   BuildBaselineOptions,
+  CarryBaselineOptions,
   ClassifiedMeasurement,
   CompareMeasurementsOptions,
   MeasurementBaselineEntry,

@@ -78,4 +78,38 @@ describe("createGitHubPullsClient", () => {
     expect(await client.resolvePullRequest("acme", "web", "zzz")).toBeNull();
     expect(await client.fetchPullRequest("acme", "web", 999)).toBeNull(); // 404
   });
+
+  it("getCommitTreeSha reads the git-database commit object under contents:read", async () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ sha: "abc", tree: { sha: "treesha" } }), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const client = createGitHubPullsClient("tok", fetchImpl);
+    expect(await client.getCommitTreeSha("acme", "web", "abc")).toBe("treesha");
+    // The git-database endpoint, not /repos/../commits/{sha}: this question does
+    // not need the full file diff the latter also serves. Both need only
+    // contents:read, so the merge carry-forward widens no permission.
+    expect(urls[0]).toBe("https://api.github.com/repos/acme/web/git/commits/abc");
+  });
+
+  it("getCommitTreeSha returns null rather than guessing when the commit cannot be read", async () => {
+    // The only caller compares two trees for equality, so a missing answer must
+    // never be able to read as a match.
+    const missing = createGitHubPullsClient("tok", jsonFetch({}));
+    expect(await missing.getCommitTreeSha("acme", "web", "gone")).toBeNull();
+
+    const shapeless = createGitHubPullsClient(
+      "tok",
+      jsonFetch({ "/git/commits/abc": { body: { sha: "abc", tree: { sha: 7 } } } }),
+    );
+    expect(await shapeless.getCommitTreeSha("acme", "web", "abc")).toBeNull();
+
+    const empty = createGitHubPullsClient(
+      "tok",
+      jsonFetch({ "/git/commits/abc": { body: { sha: "abc", tree: { sha: "" } } } }),
+    );
+    expect(await empty.getCommitTreeSha("acme", "web", "abc")).toBeNull();
+  });
 });

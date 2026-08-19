@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { pgliteExecutor, runMigrations } from "@gate/db";
 import {
   buildMeasurementBaseline,
+  carryMeasurementBaselineForward,
   compareMeasurementsToBaseline,
   lookupMeasurementBaseline,
   MEASUREMENT_IDENTITY_VERSION,
@@ -154,5 +155,63 @@ describe("createSqlMeasurementBaselineStore", () => {
 
     await store.record({ ...key, snapshot: buildMeasurementBaseline(resultWith([]), { commitSha: "basesha" }) });
     expect((await lookupMeasurementBaseline(store, key)).status).toBe("found");
+  });
+
+  it("keeps a carried set distinguishable from an observed one across the round trip", async () => {
+    // A row copied onto a merge commit whose tree was identical to the tree that
+    // was measured. It has to come back saying which commit was RENDERED, or an
+    // audit cannot tell a fact Gate observed from one it deduced.
+    const store = createSqlMeasurementBaselineStore(query);
+    const observed = buildMeasurementBaseline(resultWith([violation()]), { commitSha: "headsha" });
+    await store.record({ ...key, commitSha: "headsha", snapshot: observed });
+    await store.record({
+      ...key,
+      commitSha: "mergesha",
+      snapshot: carryMeasurementBaselineForward(observed, {
+        commitSha: "mergesha",
+        recordedAtMs: 1_700_000_001_000,
+      }),
+    });
+
+    const carried = await store.find({ ...key, commitSha: "mergesha" });
+    expect(carried?.carriedFrom).toBe("headsha");
+    expect(carried?.commitSha).toBe("mergesha");
+    // Nothing re-derived: identity version, engine version and every entry are
+    // the ones the measurements were computed under.
+    expect(carried?.version).toBe(observed.version);
+    expect(carried?.engineVersion).toBe(observed.engineVersion);
+    expect(carried?.entries).toEqual(observed.entries);
+    expect(carried?.checksRun).toEqual(observed.checksRun);
+    expect(carried?.recordedAtMs).toBe(1_700_000_001_000);
+
+    // An observed row says nothing about being carried, and neither does a row
+    // written before the column existed.
+    expect((await store.find({ ...key, commitSha: "headsha" }))?.carriedFrom).toBeUndefined();
+  });
+
+  it("reads a row written before carried_from existed as observed, not as carried", async () => {
+    await db.query(
+      `INSERT INTO measurement_baselines
+         (installation_id, repo_owner, repo_name, commit_sha, fingerprint_version, entries)
+       VALUES (1, 'acme', 'web', 'basesha', $1, '[]'::jsonb)`,
+      [MEASUREMENT_IDENTITY_VERSION],
+    );
+    expect((await createSqlMeasurementBaselineStore(query).find(key))?.carriedFrom).toBeUndefined();
+  });
+
+  it("re-recording a commit that was carried can restore it to observed", async () => {
+    // If a review ever DOES measure the merge commit itself, the observed set
+    // replaces the deduced one, and the row must stop claiming it was carried.
+    const store = createSqlMeasurementBaselineStore(query);
+    const observed = buildMeasurementBaseline(resultWith([violation()]), { commitSha: "mergesha" });
+    await store.record({
+      ...key,
+      commitSha: "mergesha",
+      snapshot: carryMeasurementBaselineForward(observed, { commitSha: "mergesha" }),
+    });
+    expect((await store.find({ ...key, commitSha: "mergesha" }))?.carriedFrom).toBe("mergesha");
+
+    await store.record({ ...key, commitSha: "mergesha", snapshot: observed });
+    expect((await store.find({ ...key, commitSha: "mergesha" }))?.carriedFrom).toBeUndefined();
   });
 });

@@ -109,7 +109,14 @@ export type {
 export { hydrateReviewContext } from "./hydrate.js";
 export type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
 export { createGitHubPullsClient } from "./github-pulls.js";
-export type { GitHubPullsClient } from "./github-pulls.js";
+export type { GitHubPullsClient, CommitTreeReader } from "./github-pulls.js";
+export { carryBaselineOnMerge } from "./baseline-carry-forward.js";
+export type {
+  BaselineCarryForwardDeps,
+  BaselineCarryOutcome,
+  CarrySkipReason,
+  MergeCommitTreeReader,
+} from "./baseline-carry-forward.js";
 export { createGitHubComponentLibraryClient, createGitHubRepoConfigClient } from "./repo-config.js";
 export type { ComponentLibraryClient, RepoConfigClient } from "./repo-config.js";
 export { createAppReviewClient } from "./app-github.js";

@@ -10,13 +10,31 @@ import { GITHUB_API_ROOT } from "./github-api.js";
  * contents:write.
  */
 
-export interface GitHubPullsClient extends PullRequestFetcher {
+export interface GitHubPullsClient extends PullRequestFetcher, CommitTreeReader {
   /** Find the open PR whose head is `sha` in this repo (for deployment_status). */
   resolvePullRequest(
     owner: string,
     name: string,
     sha: string,
   ): Promise<{ number: number; headSha: string; baseSha: string } | null>;
+}
+
+/**
+ * The tree a commit points at.
+ *
+ * This is what lets the merge carry-forward be a statement of fact instead of an
+ * assumption: two commits with the same tree sha have byte-identical content, so
+ * a measurement set observed on one describes the other exactly.
+ *
+ * `GET /repos/{owner}/{repo}/git/commits/{sha}` needs `contents: read`, which
+ * the App already has (`app-permissions.ts`), so nothing here widens the
+ * permission set. The git-database endpoint is used rather than
+ * `/repos/../commits/{sha}` because the latter also serves the full file diff,
+ * which this question does not need and a large merge would make expensive.
+ */
+export interface CommitTreeReader {
+  /** The commit's tree sha, or null when the commit cannot be read. */
+  getCommitTreeSha(owner: string, name: string, sha: string): Promise<string | null>;
 }
 
 interface RawPull {
@@ -66,6 +84,18 @@ export function createGitHubPullsClient(token: string, fetchImpl: typeof fetch =
       const pr = pulls.find((p) => p.state === "open" && p.head.sha === sha) ?? pulls.find((p) => p.head.sha === sha);
       if (!pr) return null;
       return { number: pr.number, headSha: pr.head.sha, baseSha: pr.base.sha };
+    },
+
+    async getCommitTreeSha(owner, name, sha) {
+      const res = await send(`${GITHUB_API_ROOT}/repos/${owner}/${name}/git/commits/${sha}`);
+      // A commit Gate cannot read yields NULL, never a throw and never a guess.
+      // The only caller compares two trees for equality, and "I could not look"
+      // has to be unequal-by-default there: a missing answer that read as a
+      // match would copy a measurement set across content nobody compared.
+      if (!res.ok) return null;
+      const commit = (await res.json()) as { tree?: { sha?: unknown } } | null;
+      const tree = commit?.tree?.sha;
+      return typeof tree === "string" && tree !== "" ? tree : null;
     },
   };
 }

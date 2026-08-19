@@ -25,6 +25,10 @@ storage, never here.
   was already on the base be shown to have got materially worse. It lives inside
   the existing `entries` jsonb, so it needed no migration and no identity bump,
   and an entry stored without one reads as unknown and gates on nothing.
+  `carried_from` is NULL for a set observed at `commit_sha` itself, and names the
+  reviewed head for a set copied onto a merge commit whose tree sha was identical
+  to the tree that was measured. Unequal trees are never copied, so the column can
+  never name a commit whose content differs from the row's.
 - `feedback_events`: product-facing feedback.
 - `billing_customers`: Stripe/plan state.
 - `webhook_log`: `delivery_id` PK for at-least-once webhook dedupe (§15.4).

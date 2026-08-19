@@ -1,5 +1,10 @@
 import { ConfigValidationError, DEFAULT_CONFIG } from "@gate/config";
-import { setupFailureCheckRun, type CheckRun, type GitHubCommentsApi } from "@gate/delivery";
+import {
+  setupFailureCheckRun,
+  type CheckRun,
+  type GitHubCommentsApi,
+  type MeasurementBaselineStore,
+} from "@gate/delivery";
 import type { JudgmentEngineClient } from "@gate/engine";
 import type { NormalizedDesignReviewConfig } from "@gate/types";
 import type { FastifyInstance } from "fastify";
@@ -65,6 +70,20 @@ export interface ProductionAppServerDeps {
   screenshotVisibility?: ScreenshotVisibility;
   /** Route deps for GET /i/:artifactId.png; requires screenshotRegistry. */
   screenshotRoute?: Omit<ScreenshotRouteOptions, "registry">;
+  /**
+   * Durable per-commit measurement sets: read for a pull request's base, written
+   * for its head, and carried onto a merge commit whose tree is identical to the
+   * head that was reviewed. Without it every measurement is unclassified and
+   * `rules.measurements: block` fails nothing, which every run says out loud.
+   */
+  measurementBaselines?: MeasurementBaselineStore;
+  /**
+   * Commit-tree lookup for the merge carry-forward. Reads
+   * `git/commits/{sha}` under the App's existing `contents: read`; absent means
+   * merges carry nothing forward, because a copy Gate cannot justify by tree
+   * equality is one it must not make.
+   */
+  commits?: DeploymentHandlerDeps["commits"];
   /** Resolve the open PR for a deployment SHA (installation-authed lookup, #55). */
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
@@ -175,6 +194,7 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
         publishCheckRun: clients.publishCheckRun,
         runStore: deps.runStore,
         screenshotRegistry: deps.screenshotRegistry,
+        measurementBaselines: deps.measurementBaselines,
         screenshotVisibility: deps.screenshotVisibility,
         feedback: deps.feedback,
         signal: ctx.signal,
@@ -189,6 +209,9 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     supersession: deps.supersession,
     worker: deps.worker,
     resolvePullRequest: deps.resolvePullRequest,
+    measurementBaselines: deps.measurementBaselines,
+    commits: deps.commits,
+    now: deps.now,
     environment: deps.environment,
     isDuplicate: deps.isDuplicate,
     webhookDedupe: deps.webhookDedupe,

@@ -319,7 +319,7 @@ Once that command works, the same two variables are what the workflow needs; see
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1120 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1149 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -339,18 +339,18 @@ What runs today, from a clean clone, with no credentials:
 | Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; run [`verdict`](https://github.com/apatureai/verdict) or write your own, see roadmap item 1 |
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
 | Baseline before/after screenshot comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the capture pairs; nothing on the review path calls it. Unrelated to the measurement baseline below, which is wired |
-| Measurement baselines (scoping `block` to what a PR introduced) | **Works, needs a baseline on record** | Stored per repository and commit in `measurement_baselines` on the App path. A set is recorded for each reviewed commit, and a pull request is scoped only when its BASE commit is one of them, which today means stacked pull requests. Nothing records the default branch after a merge yet, so on most repositories `block` will report and fail nothing until that lands. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
+| Measurement baselines (scoping `block` to what a PR introduced) | **Works, needs a baseline on record** | Stored per repository and commit in `measurement_baselines` on the App path. A set is recorded for each reviewed commit, and on merge it is carried onto the merge commit when that commit's tree sha is identical to the reviewed head's, which is what gives the next pull request a base. A merge that rewrote the tree (a squash onto a moved base, a merge of two branches) carries nothing, so its base stays unmeasured and `block` reports and fails nothing there. Nothing reviews the default branch directly. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
 
-Verified on 2026-08-16, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
+Verified on 2026-08-18, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
 ```
 pnpm install --frozen-lockfile   lockfile up to date, exit 0
 pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
-pnpm test                        Test Files  121 passed (121)
-                                       Tests  1120 passed (1120)
-                                    Duration  82.81s
+pnpm test                        Test Files  122 passed (122)
+                                       Tests  1149 passed (1149)
+                                    Duration  75.12s
 pnpm audit                       No known vulnerabilities found
 ```
 
@@ -408,7 +408,7 @@ One deliberate exception, so it does not read as drift: what Gate publishes into
 One contract, three ways to reach it, all behind `critique(images, context) → Findings`.
 
 1. **GitHub Action** (`@gate/action`, [`action.yml`](action.yml)) runs inside your own runner. Takes an explicit `preview-url`, discovers one, or runs a `preview-command` under the supervisor. Needs no hosted install; requires only `checks: write` and `pull-requests: write` in the calling workflow.
-2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` and `deployment_status`, and owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`.
+2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` (a push supersedes the in-flight review; a merge carries the measurement baseline onto the merge commit when the trees match) and `deployment_status`, and owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`.
 3. **Dashboard** (`@gate/dashboard` + `apps/dashboard`) covers OAuth, sessions, run history, a finding browser, feedback stats, config UI, Stripe billing. The logic lives in a tested, UI-agnostic core package; the Next.js app-router shell only renders it.
 
 ### Using the Action in a workflow
@@ -703,25 +703,53 @@ since a page this run never captured was not fixed. A route matched loosely woul
 page inherit an old page's clean bill of health without a word, and that is the one error nobody ever
 sees.
 
-**Where the baselines come from, and the gap you need to know about.** A completed review records the
-set for its own head commit, and a pull request is scoped only when its BASE commit is one Gate has
-already reviewed.
+**Where the baselines come from, and what still does not have one.** A completed review records the
+set for its own head commit, and a pull request is scoped only when its BASE commit is one Gate has a
+set for.
 
-On the hosted **App path** that recording is automatic, but it only ever happens for a pull request's
-head. Gate subscribes to `pull_request` and `deployment_status`, and nothing reviews the default
+On the hosted **App path** that recording is automatic, and it only ever happens for a pull request's
+head: Gate subscribes to `pull_request` and `deployment_status`, and nothing reviews the default
 branch. Every merge strategy GitHub offers puts a commit on the base branch that was never any pull
-request's head, so the next pull request's base is a commit Gate has never seen: the lookup comes back
-`no baseline`, nothing is classified as introduced, and **`rules.measurements: block` fails nothing.**
-It bites in the safe direction and every run says which of the two happened, but a team that reads a
-permanently green check as "no regressions" is reading it wrong. Today the case where it does scope is
-a stacked pull request, whose base branch tip really is another pull request's head. Carrying a
-measurement set forward onto the merge commit is the fix and is not built yet.
+request's head, so for a long time the next pull request's base was a commit Gate had never seen, the
+lookup came back `no baseline`, and `rules.measurements: block` failed nothing outside a stack of
+pull requests.
 
-The **Action
-path** runs inside a GitHub-hosted runner with no database, so it binds no store: `rules.measurements:
-block` on the stock Action reports its measurements and fails nothing, and says which of those two
-things happened on every run. A self-hosted operator with a database can pass a store into `runAction`
-and get the App path's behaviour.
+**A merge now carries the set forward.** When a pull request merges, Gate already holds the
+measurement set for the head it just reviewed, and the merge commit usually contains the identical
+tree. On `pull_request` `closed` with `merged: true`, Gate reads the tree sha of the reviewed head and
+the tree sha of the merge commit from GitHub's commit API and copies the stored set onto the merge
+commit **only when the two are equal.** Equal trees are byte-identical content, so the stored
+measurements describe that commit exactly and the copy is a statement of fact rather than an estimate.
+The copy is marked as carried, names the commit that was actually rendered, and keeps the engine
+version and measurement-identity version it was computed under; nothing is re-derived, so a set
+recorded under an older identity version stays refusable for skew instead of being laundered into a
+comparable one. The whole thing runs after the review is delivered, is best-effort, and cannot fail a
+check: a store or an API that is down costs the *next* pull request its scoping and costs this one
+nothing. It needs no permission beyond the `contents: read` Gate already has, and writes nothing to
+your repository.
+
+**When the trees differ, Gate records nothing and says so in the log.** A squash onto a base that
+moved while the pull request was open, and a merge commit that combines two branches, both produce
+content that was never rendered, never captured and never measured. Copying a set onto one of those
+would publish a measurement result nothing produced and then gate the next pull request against it,
+which is the one defect this whole subsystem exists to avoid. So those merges leave the base
+unmeasured, the next pull request reads `no baseline` on both surfaces, and `block` fails nothing on
+it. The same holds when the pull request's head was never successfully reviewed, when GitHub's commit
+API cannot be read, and when the pull request is closed without merging.
+
+**So `block` fires on a repository that merges cleanly, and still does not on one that does not.** A
+merge whose tree matches what was reviewed gives the next pull request a real base; a merge that
+rewrites the tree gives it nothing, and the run says which. That failure is still the safe direction
+and it is still named on every surface, but a team that reads a permanently green check as "no
+regressions" is reading it wrong. Nothing reviews the default branch directly, which remains the only
+thing that would close the gap for every merge strategy.
+
+The **Action path** runs inside a GitHub-hosted runner with no database, so it binds no store:
+`rules.measurements: block` on the stock Action reports its measurements and fails nothing, and says
+which of those two things happened on every run. The carry-forward changes nothing there, since there
+is no store to carry anything into. A self-hosted operator with a database can pass a store into
+`runAction` and get the App path's recording and comparison; the merge carry-forward is webhook-driven
+and belongs to the App path alone.
 
 **Identity is deliberately hard to move.** A violation is the same violation across two runs when its
 check, its route, its element and the substance of the engine's sentence match. Structural-position

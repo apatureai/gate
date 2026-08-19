@@ -1,8 +1,12 @@
 import { createHmac } from "node:crypto";
 import { DEFAULT_CONFIG } from "@gate/config";
-import type { CheckRun, GitHubCommentsApi } from "@gate/delivery";
+import {
+  createInMemoryMeasurementBaselineStore,
+  type CheckRun,
+  type GitHubCommentsApi,
+} from "@gate/delivery";
 import { canonicalReviewIdentity, type JudgmentEngineClient, type ReadinessOptions } from "@gate/engine";
-import { loadGoldenReviewResult } from "@gate/types";
+import { loadGoldenReviewResult, loadMeasuredReviewResult } from "@gate/types";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProductionAppServer, type InstallationClients } from "../src/production-server.js";
@@ -118,6 +122,83 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(engine.review).toHaveBeenCalledOnce();
     expect(comments.createComment).toHaveBeenCalledOnce();
     expect(published[0]?.name).toBe("Apature Gate");
+  });
+
+  it("records the reviewed head's measurement set and carries it onto the merge commit", async () => {
+    // The composition root's half of the baseline story. A review that stores
+    // nothing and a merge that carries nothing forward both look like a healthy
+    // deployment from the outside, and both leave `rules.measurements: block`
+    // permanently unable to fire.
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const mergeSha = "aaaabbbbccccddddeeeeffff0000111122223333";
+    const treeSha = "77777777777777777777777777777777777aaaaa";
+    const comments: GitHubCommentsApi = {
+      listComments: vi.fn(async () => []),
+      createComment: vi.fn(async (body) => ({ id: 1, nodeId: "n1", body })),
+      updateComment: vi.fn(async () => ({ updated: true })),
+    };
+    const published: CheckRun[] = [];
+    const measurementBaselines = createInMemoryMeasurementBaselineStore();
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async (_o, _n, s) => ({ number: 42, headSha: s, baseSha: "base" }),
+      measurementBaselines,
+      commits: { getCommitTreeSha: async () => treeSha },
+      installationClients: (): InstallationClients => ({
+        fetchPullRequest: async () => ({ defaultBranch: "main", title: "Redesign", body: null, isFork: false }),
+        comments,
+        publishCheckRun: async (r) => void published.push(r),
+        engine: {
+          review: vi.fn(async (reviewCtx) => ({
+            status: "completed" as const,
+            result: loadMeasuredReviewResult(),
+            jobId: "j",
+            reviewIdentity: canonicalReviewIdentity(reviewCtx),
+          })),
+          cancel: vi.fn(async () => {}),
+        },
+      }),
+      previewReadiness: ready,
+    });
+    app = prod.server;
+
+    const post = async (event: string, body: unknown) => {
+      const payload = JSON.stringify(body);
+      return app!.inject({
+        method: "POST",
+        url: "/webhook",
+        headers: {
+          "x-github-event": event,
+          "content-type": "application/json",
+          "x-hub-signature-256": sign(payload),
+        },
+        payload,
+      });
+    };
+
+    await post("deployment_status", {
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      deployment_status: { state: "success", environment_url: "https://acme.vercel.app" },
+      deployment: { id: 7, sha, environment: "Preview" },
+    });
+    await vi.waitFor(() => expect(published.length).toBeGreaterThan(0));
+
+    const key = { installationId: "1", owner: "acme", name: "web" };
+    expect(await measurementBaselines.find({ ...key, commitSha: sha })).not.toBeNull();
+
+    await post("pull_request", {
+      action: "closed",
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" } },
+      pull_request: { number: 42, merged: true, merge_commit_sha: mergeSha, head: { sha } },
+    });
+
+    const carried = await measurementBaselines.find({ ...key, commitSha: mergeSha });
+    expect(carried?.carriedFrom).toBe(sha);
   });
 
   it("uses the injected per-repo config loader for hosted reviews", async () => {

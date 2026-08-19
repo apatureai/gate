@@ -259,6 +259,23 @@ export interface MeasurementBaselineSnapshot {
   engineVersion?: string | null;
   /** Epoch ms the set was recorded. */
   recordedAtMs?: number;
+  /**
+   * The commit that was actually rendered and measured, when this set was
+   * CARRIED onto `commitSha` rather than observed at it.
+   *
+   * Absent means observed: a review captured this commit's pages and computed
+   * these entries from them. Present means a merge put a commit on a branch
+   * whose tree was byte-identical to a tree Gate had already measured, so the
+   * stored set describes the new commit exactly and was copied onto it. The
+   * distinction is kept because it is the difference between a fact Gate
+   * observed and a fact Gate deduced, and a stored row that cannot say which it
+   * is cannot be audited.
+   *
+   * Never part of the identity and never read by the comparison: a carried set
+   * is compared exactly like an observed one, because the tree equality that
+   * allowed the copy is what makes them the same measurement.
+   */
+  carriedFrom?: string;
 }
 
 /**
@@ -373,6 +390,46 @@ export function buildMeasurementBaseline(
       viewports: [...violation.viewports].sort(),
     })),
     engineVersion: result.metadata.engineVersion ?? null,
+    ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
+  };
+}
+
+export interface CarryBaselineOptions {
+  /** The commit the stored set is being carried onto. */
+  commitSha: string;
+  /** Epoch ms the copy was made. */
+  recordedAtMs?: number;
+}
+
+/**
+ * The same measurement set, restated for a commit whose tree is identical to the
+ * one it was measured on.
+ *
+ * NOTHING is re-derived here, and that is the point. `version`, `engineVersion`,
+ * `checksRun`, `routesMeasured`, `viewportsMeasured` and every entry are carried
+ * across byte for byte, because they are facts about a rendering that already
+ * happened and re-deriving any of them would be this function inventing a
+ * measurement. Only three things move: the commit the set is filed under, the
+ * `carriedFrom` mark that says it was copied rather than observed, and the time
+ * the copy was made.
+ *
+ * The caller owns the ONE precondition that makes this honest: the two commits
+ * must have the same tree. This function cannot check that, so it does not
+ * pretend to; a caller that copies across a tree it did not compare is asserting
+ * a result nothing produced.
+ *
+ * `carriedFrom` is taken from the source snapshot's own `commitSha`, so carrying
+ * a carried set names the commit that was MEASURED rather than the intermediate
+ * one it passed through.
+ */
+export function carryMeasurementBaselineForward(
+  snapshot: MeasurementBaselineSnapshot,
+  options: CarryBaselineOptions,
+): MeasurementBaselineSnapshot {
+  return {
+    ...snapshot,
+    commitSha: options.commitSha,
+    carriedFrom: snapshot.carriedFrom ?? snapshot.commitSha,
     ...(options.recordedAtMs !== undefined ? { recordedAtMs: options.recordedAtMs } : {}),
   };
 }

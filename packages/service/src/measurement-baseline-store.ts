@@ -32,8 +32,8 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         `INSERT INTO measurement_baselines
            (installation_id, repo_owner, repo_name, commit_sha,
             fingerprint_version, engine_version, checks_run, routes_measured, viewports_measured,
-            entries, recorded_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11)
+            entries, recorded_at, carried_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12)
          ON CONFLICT (repo_owner, repo_name, commit_sha) DO UPDATE SET
            fingerprint_version = EXCLUDED.fingerprint_version,
            engine_version = EXCLUDED.engine_version,
@@ -41,7 +41,8 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
            routes_measured = EXCLUDED.routes_measured,
            viewports_measured = EXCLUDED.viewports_measured,
            entries = EXCLUDED.entries,
-           recorded_at = EXCLUDED.recorded_at`,
+           recorded_at = EXCLUDED.recorded_at,
+           carried_from = EXCLUDED.carried_from`,
         [
           record.installationId,
           record.owner,
@@ -57,6 +58,11 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
           snapshot.viewportsMeasured ? JSON.stringify(snapshot.viewportsMeasured) : null,
           JSON.stringify(snapshot.entries),
           new Date(snapshot.recordedAtMs ?? Date.now()).toISOString(),
+          // Null rather than the row's own commit when the set was observed:
+          // "measured here" and "copied from here" are different claims, and a
+          // row that named itself as its own source would make every observed
+          // set indistinguishable from a carried one in an audit.
+          snapshot.carriedFrom ?? null,
         ],
       );
     },
@@ -71,9 +77,10 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         viewports_measured: unknown;
         entries: unknown;
         recorded_at: Date | string | null;
+        carried_from: string | null;
       }>(
         `SELECT commit_sha, fingerprint_version, engine_version, checks_run, routes_measured,
-                viewports_measured, entries, recorded_at
+                viewports_measured, entries, recorded_at, carried_from
            FROM measurement_baselines
           WHERE repo_owner = $1 AND repo_name = $2 AND commit_sha = $3`,
         [key.owner, key.name, key.commitSha],
@@ -95,6 +102,13 @@ export function createSqlMeasurementBaselineStore(query: SqlQuery): MeasurementB
         entries: asEntries(row.entries),
         engineVersion: row.engine_version,
         ...(recordedAtMs !== undefined && Number.isFinite(recordedAtMs) ? { recordedAtMs } : {}),
+        // Absent, not null: an observed row and a row written before the column
+        // existed both come back NULL, and both mean "this set was not carried".
+        // Anything that is not a non-empty string is dropped for the same reason
+        // every other reader here drops what it cannot recognise.
+        ...(typeof row.carried_from === "string" && row.carried_from !== ""
+          ? { carriedFrom: row.carried_from }
+          : {}),
       };
     },
   };

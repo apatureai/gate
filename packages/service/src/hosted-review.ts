@@ -19,6 +19,7 @@ import {
 } from "@gate/engine";
 import { type PublishedReviewFacts, recordPublishedReview } from "@gate/observability";
 import type { GateReviewRequest, NormalizedDesignReviewConfig } from "@gate/types";
+import { carryBaselineOnMerge, type BaselineCarryForwardDeps } from "./baseline-carry-forward.js";
 import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 import { buildFeedbackEvent } from "./feedback-store.js";
 import type { FeedbackSink } from "./feedback-routes.js";
@@ -344,7 +345,7 @@ export async function runHostedReview(
   return { status: "published", conclusion: decision.checkRun.conclusion };
 }
 
-export interface DeploymentHandlerDeps {
+export interface DeploymentHandlerDeps extends BaselineCarryForwardDeps {
   supersession: SupersessionStore;
   worker: ReviewJobWorker;
   /** Resolve the PR for a deployment SHA in a given repo (GitHub lookup; injected). */
@@ -410,8 +411,10 @@ export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
 /**
  * Compose the App-path webhook handlers for buildServer (#1): a `pull_request`
  * push bumps `current_sha` and cancels the in-flight older review (newest wins,
- * #4), and `deployment_status` resolves + enqueues the review (#55). Both read
- * the repo from the payload, so one set of handlers serves every installation.
+ * #4), a merged `pull_request` carries the reviewed head's measurement set onto
+ * the merge commit when their trees are identical, and `deployment_status`
+ * resolves + enqueues the review (#55). All read the repo from the payload, so
+ * one set of handlers serves every installation.
  */
 export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
   onPullRequest(payload: unknown): Promise<void>;
@@ -431,6 +434,11 @@ export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
       // Newest push wins: bump current_sha and cancel any in-flight older review.
       await recordEnqueue(deps.supersession, { owner, name, prNumber }, headSha);
       await deps.worker.cancel(reviewQueueKey(owner, name, prNumber));
+      // A merge is what gives the NEXT pull request a base Gate has measured.
+      // Best-effort in every direction: it decides for itself whether this
+      // payload is a merge, it records nothing unless the merge commit's tree is
+      // provably the tree that was measured, and it never throws.
+      await carryBaselineOnMerge(payload, deps);
     },
     onDeploymentStatus,
   };
