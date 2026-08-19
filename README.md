@@ -319,7 +319,7 @@ Once that command works, the same two variables are what the workflow needs; see
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1207 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1208 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -350,8 +350,8 @@ pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
 pnpm test                        Test Files  124 passed (124)
-                                       Tests  1207 passed (1207)
-                                    Duration  76.26s
+                                       Tests  1208 passed (1208)
+                                    Duration  74.94s
 pnpm audit                       No known vulnerabilities found
 ```
 

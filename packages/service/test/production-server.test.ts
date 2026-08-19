@@ -124,6 +124,83 @@ describe("createProductionAppServer (#62 live App-path composition root)", () =>
     expect(published[0]?.name).toBe("Apature Gate");
   });
 
+  it("a signed push to the default branch records a baseline and publishes nothing", async () => {
+    // The composition root's half of the push story. The handler, the guards and
+    // the client can all be right while `measure` never reaches the webhook
+    // handlers, and a deployment in that state looks exactly like one with
+    // nothing to measure: no error, no Check Run, no row.
+    const sha = "0123456789abcdef0123456789abcdef01234567";
+    const baselines = createInMemoryMeasurementBaselineStore();
+    const installationClients = vi.fn((): InstallationClients => {
+      throw new Error("a push must not build the per-installation review clients");
+    });
+
+    const prod = createProductionAppServer({
+      webhookSecret: SECRET,
+      supersession: createInMemorySupersessionStore(),
+      worker: createInMemoryReviewWorker(),
+      windowStore: createInMemoryFullReviewWindow(),
+      resolvePullRequest: async () => null,
+      installationClients,
+      measurementBaselines: baselines,
+      measure: {
+        measure: async () => ({
+          measurements: { checksRun: ["contrast"], violations: [] },
+          coverage: {
+            routesRequested: ["/"],
+            routesReviewed: ["/"],
+            viewportsRequested: ["mobile"],
+            viewportsReviewed: ["mobile"],
+          },
+          metadata: { engineVersion: "verdict@9", captureVersion: "capture@2" },
+        }),
+      },
+      loadDefaultBranchConfig: async () => ({
+        ...DEFAULT_CONFIG,
+        preview: { ...DEFAULT_CONFIG.preview, defaultBranchUrl: "https://acme.example.com" },
+      }),
+      previewReadiness: ready,
+    });
+    app = prod.server;
+
+    const payload = JSON.stringify({
+      ref: "refs/heads/main",
+      after: sha,
+      deleted: false,
+      installation: { id: 1 },
+      repository: { name: "web", owner: { login: "acme" }, default_branch: "main" },
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhook",
+      headers: {
+        "x-github-event": "push",
+        "content-type": "application/json",
+        "x-hub-signature-256": sign(payload),
+      },
+      payload,
+    });
+    expect(res.statusCode).toBe(202);
+
+    await vi.waitFor(async () =>
+      expect(
+        await baselines.find({ installationId: "1", owner: "acme", name: "web", commitSha: sha }),
+      ).not.toBeNull(),
+    );
+    // A positive statement, not an empty one: the contrast check ran and found
+    // nothing, which is what a later pull request gets to be scoped against.
+    const stored = await baselines.find({
+      installationId: "1",
+      owner: "acme",
+      name: "web",
+      commitSha: sha,
+    });
+    expect(stored?.checksRun).toEqual(["contrast"]);
+    expect(stored?.entries).toEqual([]);
+    // Nothing on the review path was even constructed, so nothing could publish.
+    expect(installationClients).not.toHaveBeenCalled();
+  });
+
   it("records the reviewed head's measurement set and carries it onto the merge commit", async () => {
     // The composition root's half of the baseline story. A review that stores
     // nothing and a merge that carries nothing forward both look like a healthy
