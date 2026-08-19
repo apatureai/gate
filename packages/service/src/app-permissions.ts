@@ -29,8 +29,22 @@ export type GateAppPermissions = typeof GATE_APP_PERMISSIONS;
  * the handler it feeds writes nothing anywhere except Gate's own measurement
  * baseline store. If this event ever appeared to need `contents: write`, the
  * correct response is to stop, not to widen the manifest.
+ *
+ * `installation` and `installation_repositories` are subscriptions on the same
+ * terms, and they are what makes a repository's FIRST pull request scoped rather
+ * than silently ungated. Both describe Gate's own installation, so neither needs
+ * a repository permission of its own; reading the newly-visible repository's
+ * default branch tip and its `.gate.yml` is the Metadata scope every GitHub App
+ * holds mandatorily plus the `contents: read` a review already spends. The
+ * handler they feed publishes nothing and calls no model.
  */
-export const GATE_APP_EVENTS = ["pull_request", "deployment_status", "push"] as const;
+export const GATE_APP_EVENTS = [
+  "pull_request",
+  "deployment_status",
+  "push",
+  "installation",
+  "installation_repositories",
+] as const;
 
 /** Throws if a permission set would grant write access to repository contents. */
 export function assertNoContentsWrite(permissions: Record<string, string>): void {

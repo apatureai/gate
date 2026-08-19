@@ -110,8 +110,11 @@ export { hydrateReviewContext } from "./hydrate.js";
 export type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
 export { createGitHubPullsClient } from "./github-pulls.js";
 export type { GitHubPullsClient, CommitTreeReader } from "./github-pulls.js";
+export { createGitHubRepositoryClient } from "./github-repository.js";
+export type { DefaultBranchHead, RepositoryHeadReader } from "./github-repository.js";
 export {
   recordDefaultBranchBaseline,
+  measureDefaultBranchBaseline,
   parseDefaultBranchPush,
   fillDefaultBranchUrl,
 } from "./default-branch-baseline.js";
@@ -121,6 +124,19 @@ export type {
   DefaultBranchBaselineOutcome,
   PushSkipReason,
 } from "./default-branch-baseline.js";
+export {
+  INSTALLATION_BASELINE_CONCURRENCY,
+  parseInstallationScope,
+  recordInstallationBaselines,
+} from "./installation-baseline.js";
+export type {
+  InstallationBaselineDeps,
+  InstallationBaselineOutcome,
+  InstallationEventName,
+  InstallationRepository,
+  InstallationSkipReason,
+  RepositoryBaselineResult,
+} from "./installation-baseline.js";
 export { carryBaselineOnMerge } from "./baseline-carry-forward.js";
 export type {
   BaselineCarryForwardDeps,

@@ -14,6 +14,21 @@ export interface WebhookHandlers {
    * review, and nothing it produces may render as one.
    */
   onPush?(payload: unknown, delivery: string | undefined): Promise<void> | void;
+  /**
+   * The App was installed somewhere. Only `action: "created"` does anything, and
+   * what it does is record a default-branch measurement baseline for each
+   * repository the installation covers, so the FIRST pull request on a
+   * newly-protected repository is scoped instead of gating nothing. Measurements
+   * only: no model call, no Check Run, no comment. An installation is not a
+   * review.
+   */
+  onInstallation?(payload: unknown, delivery: string | undefined): Promise<void> | void;
+  /**
+   * Repositories were added to, or removed from, an existing installation. Only
+   * `action: "added"` does anything, on the same measurements-only terms as
+   * `onInstallation`. A removal records nothing.
+   */
+  onInstallationRepositories?(payload: unknown, delivery: string | undefined): Promise<void> | void;
 }
 
 export interface BuildServerOptions {
@@ -34,7 +49,8 @@ const rawBodies = new WeakMap<FastifyRequest, string>();
 
 /**
  * Build the Gate App-path HTTP server (TRD §2): webhook receiver for
- * `pull_request`, `deployment_status` and `push`, health + readiness routes, and an OTel
+ * `pull_request`, `deployment_status`, `push`, `installation` and
+ * `installation_repositories`, health + readiness routes, and an OTel
  * span per request. The factory is pure (no listen) so it injects in tests.
  * GitHub HMAC webhook verification is added in #2.
  */
@@ -115,6 +131,14 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       }
       if (event === "push") {
         await handlers.onPush?.(request.body, delivery);
+        return reply.code(202).send({ accepted: true, event });
+      }
+      if (event === "installation") {
+        await handlers.onInstallation?.(request.body, delivery);
+        return reply.code(202).send({ accepted: true, event });
+      }
+      if (event === "installation_repositories") {
+        await handlers.onInstallationRepositories?.(request.body, delivery);
         return reply.code(202).send({ accepted: true, event });
       }
     } catch (err) {

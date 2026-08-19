@@ -18,6 +18,7 @@ import { createFeedbackSink, createSqlFeedbackStore } from "./feedback-store.js"
 import { createSqlConsumedStore } from "./feedback-token.js";
 import type { FeedbackSink } from "./feedback-routes.js";
 import { createGitHubPullsClient, type GitHubPullsClient } from "./github-pulls.js";
+import { createGitHubRepositoryClient, type RepositoryHeadReader } from "./github-repository.js";
 import {
   createProductionAppServer,
   type ProductionAppServer,
@@ -68,6 +69,8 @@ export interface ProductionRuntimeFactories {
   reviewWorker?(redisUrl: string): ProductionAppServerDeps["worker"];
   githubAuth?(opts: { appId: string; privateKey: string }): GitHubAppAuth;
   githubPullsClient?(token: string): GitHubPullsClient;
+  /** Default branch + tip commit reader, for the installation baseline path. */
+  repositoryClient?(token: string): RepositoryHeadReader;
   repoConfigClient?(token: string): RepoConfigClient;
   componentLibraryClient?(token: string): ComponentLibraryClient;
   appReviewClient?(token: string, target: AppReviewTarget): AppReviewClient;
@@ -174,6 +177,7 @@ export async function buildProductionDepsFromEnv(
   const feedbackTokenSecret = requiredEnv(env, "FEEDBACK_TOKEN_SECRET");
   const feedback = createTenantFeedbackSink(sql.tenant);
   const githubPullsClient = factories.githubPullsClient ?? ((token: string) => createGitHubPullsClient(token));
+  const repositoryClient = factories.repositoryClient ?? ((token: string) => createGitHubRepositoryClient(token));
   const repoConfigClient = factories.repoConfigClient ?? ((token: string) => createGitHubRepoConfigClient(token));
   const componentLibraryClient =
     factories.componentLibraryClient ?? ((token: string) => createGitHubComponentLibraryClient(token));
@@ -232,6 +236,15 @@ export async function buildProductionDepsFromEnv(
     loadDefaultBranchConfig: async (target) => {
       const token = await auth.getInstallationToken(Number(target.installationId));
       return repoConfigClient(token).loadConfig(target.owner, target.name, target.commitSha);
+    },
+    // What an installation delivery does NOT carry: which branch is the default
+    // one and what commit it is on. Both are read back with the installation's
+    // own token, under Metadata + `contents: read`, so that a repository is
+    // scoped from its FIRST pull request instead of from its first merge. No
+    // scope is widened for it and nothing here writes to the repository.
+    readDefaultBranchHead: async (repo) => {
+      const token = await auth.getInstallationToken(Number(repo.installationId));
+      return repositoryClient(token).readDefaultBranchHead(repo.owner, repo.name);
     },
     screenshotRegistry,
     screenshotRoute: {

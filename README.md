@@ -410,7 +410,7 @@ One deliberate exception, so it does not read as drift: what Gate publishes into
 One contract, three ways to reach it, all behind `critique(images, context) → Findings`.
 
 1. **GitHub Action** (`@gate/action`, [`action.yml`](action.yml)) runs inside your own runner. Takes an explicit `preview-url`, discovers one, or runs a `preview-command` under the supervisor. Needs no hosted install; requires only `checks: write` and `pull-requests: write` in the calling workflow.
-2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` (a push supersedes the in-flight review; a merge carries the measurement baseline onto the merge commit when the trees match), `deployment_status`, and `push` (a commit landing on the default branch is measured, and only measured, to record its baseline: no model call and nothing published). Owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`. `push` is an event subscription and adds no permission.
+2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` (a push supersedes the in-flight review; a merge carries the measurement baseline onto the merge commit when the trees match), `deployment_status`, `push` (a commit landing on the default branch is measured, and only measured, to record its baseline: no model call and nothing published), and `installation` / `installation_repositories` (a repository the App is *given* has its default branch measured once, on the same measurements-only terms, so its first pull request is scoped). Owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`. All four of those are event subscriptions and add no permission.
 3. **Dashboard** (`@gate/dashboard` + `apps/dashboard`) covers OAuth, sessions, run history, a finding browser, feedback stats, config UI, Stripe billing. The logic lives in a tested, UI-agnostic core package; the Next.js app-router shell only renders it.
 
 ### Using the Action in a workflow
@@ -831,12 +831,49 @@ A ref that records nothing is never captured at all.
   production render differently in ways you cannot remove, keep `rules.measurements: advisory` until
   they do not, or point `default_branch_url` at a preview-equivalent deployment of the default branch
   rather than at production.
-- **Every commit that landed before you installed Gate, and the first pull request after you install
-  it.** Nothing backfills. A repository's default branch acquires baselines from the first push after
-  the App is installed, so a pull request opened before that push has a base Gate never measured, and
-  it reads `no baseline` on both surfaces.
+- **Every commit that landed before you installed Gate.** Nothing backfills history. The default
+  branch's current tip is measured at install time (below), and every later commit on it is measured
+  as it lands, but a pull request whose base is some older commit has a base Gate never measured and
+  reads `no baseline` on both surfaces.
 - **A push whose measure failed.** Nothing retries it. That commit has no set, and a pull request based
   on it is unscoped until a later commit on the branch is measured.
+
+**And the branch is measured once when the App arrives, so the FIRST pull request is scoped too.**
+Watching pushes still leaves one hole, and it is the worst-placed one: a default branch acquires
+baselines from the first push *after* the App is installed. A team that installed Gate, turned on
+`rules.measurements: block` and opened a pull request that afternoon got a check that classified
+nothing and failed nothing, and it looked exactly like a check that passed. So on `installation`
+(action `created`) and `installation_repositories` (action `added`), Gate reads each named
+repository's default branch and its tip commit, and measures that commit through the same path a push
+takes.
+
+- **Same path, so the same guarantees.** It calls the measure-only seam a push calls, so there is no
+  second implementation to keep honest: no model call, no grade, no Check Run, no comment, no run row.
+  An installation is not a review and nothing it produces may render as one. A repository with no
+  `preview.default_branch_url` records nothing and the log says which repository and why, exactly as a
+  push does. A failure costs that repository its scoping and nothing else, is logged, and never
+  reaches a user.
+- **No new permission.** Both are event subscriptions. The installation payload names the
+  repositories; the default branch and its tip are read back with `GET /repos/{owner}/{repo}` (the
+  Metadata scope every GitHub App holds) and `GET /repos/{owner}/{repo}/git/ref/heads/{branch}` (the
+  `contents: read` a review already spends on `.gate.yml`). Gate still requests exactly four scopes
+  and still never `contents: write`.
+- **A removal records nothing.** `installation_repositories` with action `removed` carries a full
+  repository list, and so does `installation` with action `deleted`. Only `created` and `added` scope
+  anything, and each event's list is read from its own field, so a delivery that says the App was
+  taken away can never be read as one that gave it something.
+- **A large installation is bounded, not dropped.** Installing on an organisation with "All
+  repositories" selected delivers one event naming every repository, and each one costs a full browser
+  capture. Gate walks the list **two repositories at a time** and finishes behind the webhook
+  response. Nothing is dropped: a 300-repository installation is still 300 captures, two at a time,
+  completing over the following hours, and repositories measured later are scoped later. The bound is
+  the point: firing them together would be a self-inflicted denial of service against the same capture
+  pool that is answering pull requests somebody is waiting on.
+- **What it still cannot give you.** A repository whose deployment is not up at install time, or that
+  has not said where its default branch is deployed, records nothing and is back to waiting for its
+  first push. The tip is measured *at install time*, so a pull request opened before the install is
+  still based on a commit nobody measured. And Gate scopes exactly the repositories the delivery
+  names: it does not go and enumerate an account, so a delivery that names none scopes none.
 
 In all of those the failure direction is the same one every other missing baseline takes: `no baseline`
 classifies nothing, gates nothing, and says so on both surfaces. A team that reads a permanently green
@@ -1157,14 +1194,20 @@ flowchart TD
   L --> M["Record run + feedback hooks"]
 ```
 
-The `push` path is a different and much shorter one, and it deliberately shares
-none of the publishing half:
+The baseline path is a different and much shorter one, and it deliberately shares
+none of the publishing half. Two events enter it, and they differ only in how
+they answer "which commit?":
 
 ```mermaid
 flowchart TD
   P["push"] --> Q{"ref == refs/heads/&lt;payload default_branch&gt;, not deleted?"}
   Q -- no --> Z["Record nothing. No capture is asked for"]
-  Q -- yes --> R["Read .gate.yml at the pushed commit"]
+  N["installation created /<br/>installation_repositories added"] --> O{"action scopes anything?"}
+  O -- no --> Z
+  O -- yes --> N2["Per repository, 2 at a time:<br/>read its default branch + that branch's tip sha"]
+  N2 -- "unreadable or empty" --> Z
+  N2 --> R
+  Q -- yes --> R["Read .gate.yml at that commit"]
   R --> S{"preview.default_branch_url set and verifiable?"}
   S -- no --> Z
   S -- yes --> T["POST /measurements (HMAC-signed) then poll, 5-min deadline, no retry"]
@@ -1257,7 +1300,7 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **Component-library detection reads one file, at the repository root.** Gate looks at `package.json` at the PR's head and nothing else, so a monorepo whose UI package declares Radix in `packages/web/package.json` is not detected, and neither is a library vendored without a dependency entry. The review still runs, grounded on tokens and brand; it simply carries no library rubric note, and nothing in the result distinguishes that from a repository that genuinely uses none. On the App path the read can also fail for reasons that have nothing to do with your code (a rate limit, a permission change), and it fails quietly on purpose: grounding must never be able to fail a pull request's review.
 - **A measurement baseline can carry a violation to the wrong element, and it errs that way on purpose.** After the selector keys miss, a violation is matched on check, page and the substance of the engine's sentence, and it may claim one stored violation that nothing else accounts for. That is what makes a wrapper div, a tightened combinator or a renamed class stop reading as a new defect. It also means a pull request that fixes one contrast failure and adds another with the same sentence on the same page is reported as one fixed and one already on the base, rather than one fixed and one introduced, so that one does not fail the check. It is still rendered, still counted, and still in the review. The count is the guard: the number of same-defect violations on a page cannot grow without something being called introduced. What Gate will not do is match across pages, so a renamed route is *Not classified* rather than carried over.
 - **A default-branch baseline is only as true as what was deployed when the push arrived.** The push fires the moment the commit lands; a repository that deploys after CI is still serving the previous build at that instant, so a *stable* `default_branch_url` can be captured, measured, and filed under a commit whose UI it does not show. Gate cannot tell the two apart from the outside: the URL answers 200 either way. Point `default_branch_url` at a per-commit address with `{sha}` or `{short_sha}` if you need the set to be certainly about the commit it names.
-- **Nothing backfills a baseline, so the branch starts empty.** Baselines accumulate from the first push after the App is installed. Every commit that landed before that has none, a pull request based on one of them reads `no baseline`, and there is no command that goes and measures history.
+- **Nothing backfills history, so only the branch *tip* is scoped when you install.** Installing the App measures the default branch's current commit, and every commit that lands on it afterwards is measured as it lands. Everything older than that has no baseline, a pull request based on one of those commits reads `no baseline`, and there is no command that goes and measures history. A repository that has not set `preview.default_branch_url`, or whose deployment is not reachable at install time, gets nothing even at the tip and waits for its first push.
 - **The measure endpoint is a contract nobody has implemented yet.** Gate's `push` handling, guards, client and store write are here and tested; `POST /measurements` is the critique service's half and `verdict` does not implement it. Until one does, a push on a live deployment records nothing, and the honest reading is that this closes the gap in Gate and not yet in the system. Roadmap item 3c.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.

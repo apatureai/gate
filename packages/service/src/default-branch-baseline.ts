@@ -213,15 +213,43 @@ export async function recordDefaultBranchBaseline(
     return { status: "branch_deleted", ref: parsed.ref };
   }
 
-  const store = deps.measurementBaselines;
-  const probe = deps.measure;
-  if (!store || !probe) return { status: "skipped", reason: "not_configured" };
+  if (!deps.measurementBaselines || !deps.measure) return { status: "skipped", reason: "not_configured" };
   if (parsed.kind === "incomplete") {
     console.error("[gate] default-branch baseline skipped: push payload is incomplete");
     return { status: "skipped", reason: "incomplete_event" };
   }
 
-  const target = parsed.target;
+  return measureDefaultBranchBaseline(parsed.target, deps);
+}
+
+/**
+ * Measure a commit on a repository's default branch and store its baseline.
+ *
+ * THE PUSH HANDLER IS ONE CALLER OF THIS, NOT ITS OWNER. A push is the event
+ * that names a new default-branch commit, but it is not the only one: installing
+ * the App on a repository names its current default-branch commit too, and a
+ * repository's first pull request needs that commit measured or the gate it just
+ * turned on decides nothing. Both go through here, so everything true of a push
+ * is true of an installation by construction rather than by a second
+ * implementation that has to be kept honest: measurements only, no model call,
+ * no Check Run, no comment, no run row, and a failure that costs the next
+ * scoping and nothing else.
+ *
+ * The caller supplies the target because the two events answer "which commit?"
+ * differently. A push carries the commit in its payload; an installation has to
+ * go and read the branch tip. Everything after that question is identical, which
+ * is why it lives here once.
+ *
+ * IT NEVER THROWS AND IT NEVER RETRIES, for the reason above.
+ */
+export async function measureDefaultBranchBaseline(
+  target: DefaultBranchTarget,
+  deps: DefaultBranchBaselineDeps,
+): Promise<DefaultBranchBaselineOutcome> {
+  const store = deps.measurementBaselines;
+  const probe = deps.measure;
+  if (!store || !probe) return { status: "skipped", reason: "not_configured" };
+
   const repo = `${target.owner}/${target.name}`;
   try {
     const config = (await deps.loadConfig?.(target)) ?? DEFAULT_CONFIG;

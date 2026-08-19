@@ -24,6 +24,10 @@ import {
   recordDefaultBranchBaseline,
   type DefaultBranchBaselineDeps,
 } from "./default-branch-baseline.js";
+import {
+  recordInstallationBaselines,
+  type InstallationBaselineDeps,
+} from "./installation-baseline.js";
 import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 import { buildFeedbackEvent } from "./feedback-store.js";
 import type { FeedbackSink } from "./feedback-routes.js";
@@ -349,17 +353,22 @@ export async function runHostedReview(
   return { status: "published", conclusion: decision.checkRun.conclusion };
 }
 
-export interface DeploymentHandlerDeps extends BaselineCarryForwardDeps, DefaultBranchBaselineDeps {
+export interface DeploymentHandlerDeps
+  extends BaselineCarryForwardDeps,
+    DefaultBranchBaselineDeps,
+    InstallationBaselineDeps {
   supersession: SupersessionStore;
   worker: ReviewJobWorker;
   /**
-   * Runs the default-branch baseline job OFF the webhook request.
+   * Runs a baseline job (a default-branch push, or an installation) OFF the
+   * webhook request.
    *
    * A capture takes minutes. GitHub gives a webhook receiver ten seconds and
    * RETRIES what it thinks failed, so awaiting the measure inside the delivery
    * would convert one push into a retry storm against the same engine the slow
-   * capture is already occupying. The receiver therefore answers immediately and
-   * the baseline finishes behind it. Nothing waits on the result and nothing is
+   * capture is already occupying. An installation is the same argument several
+   * hundred times over. The receiver therefore answers immediately and the
+   * baselines finish behind it. Nothing waits on the result and nothing is
    * published, so a process that restarts mid-run loses a baseline and nothing
    * else. Overridden in tests to await the job instead.
    */
@@ -429,8 +438,11 @@ export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
  * push bumps `current_sha` and cancels the in-flight older review (newest wins,
  * #4), a merged `pull_request` carries the reviewed head's measurement set onto
  * the merge commit when their trees are identical, `deployment_status`
- * resolves + enqueues the review (#55), and a `push` to the DEFAULT BRANCH
- * measures the new commit and stores its baseline without publishing anything.
+ * resolves + enqueues the review (#55), a `push` to the DEFAULT BRANCH
+ * measures the new commit and stores its baseline without publishing anything,
+ * and an `installation` / `installation_repositories` delivery measures the
+ * default branch of every repository it just made visible, so a repository is
+ * scoped from its FIRST pull request rather than from its first merge.
  * All read the repo from the payload, so one set of handlers serves every
  * installation.
  */
@@ -438,8 +450,25 @@ export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
   onPullRequest(payload: unknown): Promise<void>;
   onDeploymentStatus(payload: unknown): Promise<void>;
   onPush(payload: unknown): Promise<void>;
+  onInstallation(payload: unknown): Promise<void>;
+  onInstallationRepositories(payload: unknown): Promise<void>;
 } {
   const onDeploymentStatus = createDeploymentStatusHandler(deps);
+  // Deliberately NOT awaited: see `runBaselineJob`. Every baseline job below
+  // resolves its own failures into an outcome and never rejects, so the `catch`
+  // inside `behindTheResponse` is the belt to that braces and exists so a future
+  // edit that made one throw could not become an unhandled rejection that takes
+  // the process down over a baseline nobody is waiting for.
+  const run = deps.runBaselineJob ?? ((task: () => Promise<void>) => void task());
+  const behindTheResponse = (label: string, job: () => Promise<unknown>): void => {
+    run(async () => {
+      await job().catch((err: unknown) => {
+        console.error(
+          `[gate] ${label} job escaped: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    });
+  };
   return {
     async onPullRequest(payload) {
       const p = payload as WebhookRepoEnvelope & {
@@ -461,19 +490,21 @@ export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
     },
     onDeploymentStatus,
     async onPush(payload) {
-      // Deliberately NOT awaited: see `runBaselineJob`. `recordDefaultBranchBaseline`
-      // resolves its own failures into an outcome and never rejects, so the
-      // `catch` is the belt to that braces and exists so a future edit that made
-      // it throw could not become an unhandled rejection that takes the process
-      // down over a baseline nobody is waiting for.
-      const run = (deps.runBaselineJob ?? ((task) => void task()));
-      run(async () => {
-        await recordDefaultBranchBaseline(payload, deps).catch((err: unknown) => {
-          console.error(
-            `[gate] default-branch baseline job escaped: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
-      });
+      behindTheResponse("default-branch baseline", () => recordDefaultBranchBaseline(payload, deps));
+    },
+    async onInstallation(payload) {
+      // A repository should be protected from its FIRST pull request, not from
+      // its first merge. This is the only event that can do that, and it runs
+      // behind the response for the same reason a push does, only more so: an
+      // installation can name hundreds of repositories, each costing a capture.
+      behindTheResponse("installation baseline", () =>
+        recordInstallationBaselines("installation", payload, deps),
+      );
+    },
+    async onInstallationRepositories(payload) {
+      behindTheResponse("installation baseline", () =>
+        recordInstallationBaselines("installation_repositories", payload, deps),
+      );
     },
   };
 }

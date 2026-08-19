@@ -29,7 +29,21 @@ describe("GATE_APP_EVENTS", () => {
     // Without the subscription the handler exists and is never delivered to, so
     // every merge on a busy repository still leaves the next pull request with
     // `no baseline` and the gate stays silent.
-    expect([...GATE_APP_EVENTS]).toEqual(["pull_request", "deployment_status", "push"]);
+    expect([...GATE_APP_EVENTS]).toEqual([
+      "pull_request",
+      "deployment_status",
+      "push",
+      "installation",
+      "installation_repositories",
+    ]);
+  });
+
+  it("subscribes to both installation events, which is what scopes a FIRST pull request", () => {
+    // Without these two the install handler exists and is never delivered to, so
+    // a repository stays unmeasured until somebody merges, and the very first
+    // pull request after installing gets a check that gates nothing.
+    expect([...GATE_APP_EVENTS]).toContain("installation");
+    expect([...GATE_APP_EVENTS]).toContain("installation_repositories");
   });
 
   it("adds no permission for it", () => {
@@ -47,7 +61,7 @@ describe("GATE_APP_EVENTS", () => {
 });
 
 describe("buildAppManifest", () => {
-  it("declares exactly the minimum scopes, the three events, and documents the rationale", () => {
+  it("declares exactly the minimum scopes, every subscribed event, and documents the rationale", () => {
     const manifest = buildAppManifest({
       name: "Apature Gate",
       url: "https://gate.app",
@@ -56,6 +70,11 @@ describe("buildAppManifest", () => {
     expect(manifest.default_permissions).toEqual(GATE_APP_PERMISSIONS);
     expect(manifest.default_events).toEqual([...GATE_APP_EVENTS]);
     expect(manifest.default_events).toContain("push");
+    expect(manifest.default_events).toContain("installation");
+    expect(manifest.default_events).toContain("installation_repositories");
+    // Five events, four scopes: neither installation event is a permission, and
+    // neither costs one.
+    expect(Object.keys(manifest.default_permissions)).toHaveLength(4);
     expect("contents" in manifest.default_permissions).toBe(true);
     expect(manifest.default_permissions.contents).toBe("read");
     expect(manifest.description.toLowerCase()).toContain("neutrality guarantee");

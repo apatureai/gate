@@ -98,6 +98,21 @@ export interface ProductionAppServerDeps {
    * whose `preview.default_branch_url` is null, so nothing is measured.
    */
   loadDefaultBranchConfig?: DeploymentHandlerDeps["loadConfig"];
+  /**
+   * The default branch and its tip commit for a repository an installation just
+   * made visible. An installation payload names repositories and nothing about
+   * their branches, so without this bound the install path has no commit to
+   * measure and records nothing: a newly installed repository would go back to
+   * being unscoped until its first merge. Reads Metadata + `contents: read`,
+   * both of which the App already holds.
+   */
+  readDefaultBranchHead?: DeploymentHandlerDeps["readDefaultBranchHead"];
+  /**
+   * How many repositories one installation measures at once. Defaults to
+   * `INSTALLATION_BASELINE_CONCURRENCY`; raising it spends the same capture pool
+   * that is serving pull request reviews somebody is actually waiting on.
+   */
+  installationConcurrency?: number;
   /** Resolve the open PR for a deployment SHA (installation-authed lookup, #55). */
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
@@ -227,6 +242,10 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     commits: deps.commits,
     measure: deps.measure,
     loadConfig: deps.loadDefaultBranchConfig,
+    readDefaultBranchHead: deps.readDefaultBranchHead,
+    ...(deps.installationConcurrency === undefined
+      ? {}
+      : { installationConcurrency: deps.installationConcurrency }),
     now: deps.now,
     environment: deps.environment,
     isDuplicate: deps.isDuplicate,
