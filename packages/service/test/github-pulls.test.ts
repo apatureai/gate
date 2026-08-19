@@ -113,3 +113,74 @@ describe("createGitHubPullsClient", () => {
     expect(await empty.getCommitTreeSha("acme", "web", "abc")).toBeNull();
   });
 });
+
+describe("a payload that will not say whether it is a fork", () => {
+  /**
+   * GitHub nulls `head.repo` once a fork is deleted, and the name comparison
+   * that stands in for the missing flag then has nothing on one side. That used
+   * to answer `false`, which is the permissive direction on the one decision
+   * that governs whether untrusted code meets privileged inputs. The Action path
+   * closed this; the App path had not.
+   */
+  it("treats a missing head repository as a fork", async () => {
+    const client = createGitHubPullsClient(
+      "tok",
+      jsonFetch({
+        "/pulls/9": {
+          body: {
+            number: 9,
+            title: "From a fork that no longer exists",
+            body: "desc",
+            state: "open",
+            head: { sha: "abc", repo: null },
+            base: { sha: "base", repo: { default_branch: "main", full_name: "acme/web" } },
+          },
+        },
+      }),
+    );
+
+    expect((await client.fetchPullRequest("acme", "web", 9))?.isFork).toBe(true);
+  });
+
+  it("treats a missing base repository as a fork too", async () => {
+    const client = createGitHubPullsClient(
+      "tok",
+      jsonFetch({
+        "/pulls/10": {
+          body: {
+            number: 10,
+            title: "Half a payload",
+            body: "desc",
+            state: "open",
+            head: { sha: "abc", repo: { full_name: "someone/web" } },
+            base: { sha: "base", repo: null },
+          },
+        },
+      }),
+    );
+
+    expect((await client.fetchPullRequest("acme", "web", 10))?.isFork).toBe(true);
+  });
+
+  it("still reads a same-repository pull request as not a fork", async () => {
+    // The control. Closing the unknown case must not call every pull request a
+    // fork, which would turn the safety rule into a blanket refusal.
+    const client = createGitHubPullsClient(
+      "tok",
+      jsonFetch({
+        "/pulls/11": {
+          body: {
+            number: 11,
+            title: "Ordinary",
+            body: "desc",
+            state: "open",
+            head: { sha: "abc", repo: { full_name: "acme/web" } },
+            base: { sha: "base", repo: { default_branch: "main", full_name: "acme/web" } },
+          },
+        },
+      }),
+    );
+
+    expect((await client.fetchPullRequest("acme", "web", 11))?.isFork).toBe(false);
+  });
+});

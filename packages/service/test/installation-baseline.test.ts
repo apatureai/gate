@@ -734,6 +734,40 @@ describe("the installation handler publishes nothing and calls no model", () => 
     expect(await findBaseline(h.store)).not.toBeNull();
   });
 
+  /**
+   * The `installation` wire in `hosted-review.ts` was pinned; its
+   * `installation_repositories` sibling one line below was not. Replacing that
+   * call with a no-op left the whole suite green, so adding a repository to an
+   * existing organisation install could silently stop recording baselines and
+   * nothing would notice until somebody wondered why `block` never fired there.
+   *
+   * Why it slipped is worth keeping. The test that drove
+   * `onInstallationRepositories` asserted on `findBaseline(h.store)`, which
+   * defaults to the repository the INSTALLATION payload names, so the assertion
+   * was already satisfied before the call under test ever ran. A repository
+   * added later has a different name, and naming it is what makes an assertion
+   * about this wire rather than about its neighbour.
+   */
+  it("records a baseline for a repository added after the install", async () => {
+    const h = handlers();
+
+    await h.built.onInstallationRepositories(addedPayload());
+    await Promise.all(h.jobs);
+
+    expect(await findBaseline(h.store, "docs")).not.toBeNull();
+  });
+
+  it("records nothing for that repository when only the install event fires", async () => {
+    // The control that keeps the assertion above honest: `docs` is not scoped by
+    // the installation payload, so a pass really does mean this path ran.
+    const h = handlers();
+
+    await h.built.onInstallation(installationPayload());
+    await Promise.all(h.jobs);
+
+    expect(await findBaseline(h.store, "docs")).toBeNull();
+  });
+
   it("answers the webhook before the captures finish", async () => {
     // GitHub gives a receiver ten seconds and retries what it thinks failed. An
     // organisation-wide install is hours of captures.

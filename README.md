@@ -886,7 +886,8 @@ A ref that records nothing is never captured at all.
 Watching pushes still leaves one hole, and it is the worst-placed one: a default branch acquires
 baselines from the first push *after* the App is installed. A team that installed Gate, turned on
 `rules.measurements: block` and opened a pull request that afternoon got a check that classified
-nothing and failed nothing, and it looked exactly like a check that passed. So on `installation`
+nothing, and it looked exactly like a check that passed. (Classifying is not the same as failing: see
+what this cannot give you, below.) So on `installation`
 (action `created`) and `installation_repositories` (action `added`), Gate reads each named
 repository's default branch and its tip commit, and measures that commit through the same path a push
 takes.
@@ -913,11 +914,21 @@ takes.
   completing over the following hours, and repositories measured later are scoped later. The bound is
   the point: firing them together would be a self-inflicted denial of service against the same capture
   pool that is answering pull requests somebody is waiting on.
-- **What it still cannot give you.** A repository whose deployment is not up at install time, or that
-  has not said where its default branch is deployed, records nothing and is back to waiting for its
-  first push. The tip is measured *at install time*, so a pull request opened before the install is
-  still based on a commit nobody measured. And Gate scopes exactly the repositories the delivery
-  names: it does not go and enumerate an account, so a delivery that names none scopes none.
+- **What it still cannot give you, and read this one before you rely on it.** It cannot give you a
+  **failing check**. The set it records is measured at `preview.default_branch_url` and is therefore
+  `default_branch`-surfaced, and a pull request is measured at its own preview, so unless the
+  repository declares `preview.default_branch_renders_like_preview: true` the two are not comparable
+  and every violation comes back as `cross_environment`: reported, never gated. What install-time
+  measuring buys on its own is an honest scoped section on the first pull request instead of a blank
+  one. It buys a failing check only for a repository that has declared the two deployments equivalent.
+  Beyond that: a repository whose deployment is not up at install time, or that has not said where its
+  default branch is deployed, records nothing and is back to waiting for its first push; the tip is
+  measured *at install time*, so a pull request opened before the install is still based on a commit
+  nobody measured; and Gate scopes exactly the repositories the delivery names rather than enumerating
+  an account, so a delivery that names none scopes none.
+- **And it needs the same measure-only endpoint a push needs.** The install sweep calls the same
+  `POST /measurements` probe, so until a critique service implements it, an installation records
+  nothing for the same reason a push does. See the status table and roadmap item 3c.
 
 In all of those the failure direction is the same one every other missing baseline takes: `no baseline`
 classifies nothing, gates nothing, and says so on both surfaces. A team that reads a permanently green

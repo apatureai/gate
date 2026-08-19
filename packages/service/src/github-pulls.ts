@@ -55,11 +55,23 @@ export function createGitHubPullsClient(token: string, fetchImpl: typeof fetch =
   };
   const send = (url: string): Promise<Response> => withRateLimitRetry(() => fetchImpl(url, { headers }));
 
+  /**
+   * Whether this pull request comes from a fork, closed in the safe direction.
+   *
+   * A fork decides whether Gate will run untrusted code against privileged
+   * inputs, so "the payload did not say" has to answer the same way "yes" does.
+   * GitHub nulls `head.repo` when the fork has been deleted, and the fallback
+   * below compares two names, so a missing head name used to leave the boolean
+   * `false`: the permissive answer, on exactly the payload that is hardest to
+   * reason about. The Action path was closed already; this is the same rule on
+   * the App path.
+   */
   const isFork = (pr: RawPull): boolean => {
     if (typeof pr.head.repo?.fork === "boolean") return pr.head.repo.fork;
     const head = pr.head.repo?.full_name;
     const base = pr.base.repo?.full_name;
-    return !!head && !!base && head !== base;
+    if (!head || !base) return true;
+    return head !== base;
   };
 
   return {
