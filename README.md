@@ -444,7 +444,7 @@ jobs:
           preview-url: ${{ steps.deploy.outputs.preview-url }}
           # or: preview-command: "pnpm build && pnpm preview"
           config-path: .gate.yml
-          gate-mode: none   # none | nits | blockers
+          # gate-mode: blockers  # none | nits | blockers. Omit it and .gate.yml decides.
         env:
           # Where your critique service listens, and the secret it verifies
           # signatures with (the same value as its own ENGINE_HMAC_SECRET).
@@ -455,6 +455,8 @@ jobs:
 ```
 
 `apatureai/gate@v1` is a moving major tag, per the Actions convention: it is re-pointed at each `v1.x` release rather than pinned to one. Pin a commit SHA instead if you want the reference to be immutable.
+
+**`gate-mode` is an override, and an omitted one overrides nothing.** Leave it out and the workflow says nothing about gating, so `rules.gate` in `.gate.yml` is what decides; write it and it wins over the file, on every pull request, whatever the file says. Until 2026-08-19 the input carried `default: "none"`, and an Action input's default is handed to the step exactly like a value you typed, so the omitted form was not silent: every run overrode the file with `none`. A repository that had opted into `rules.gate: blockers` got an advisory check that could not fail and never said it had been overridden, which is the worst version of this to have shipped, because the check was green and the setting was in the file where you left it. If you copied the previous example verbatim, delete the `gate-mode: none` line. A value that is not one of the three modes is now refused outright with a neutral "Action setup failed" Check Run naming the input, rather than cast through to a comparison it can never satisfy: `gate-mode: blocker` used to parse, publish, and simply never equal `blockers`.
 
 **Before you add this to CI, run [`pnpm demo:live`](#running-your-own-critique-service-and-pointing-gate-at-it) against the same endpoint and secret.** It exercises the identical client, signing and parsing on your machine in about a minute, and tells you in one line whether a model actually judged the page. A workflow is a slow place to discover a wrong shared secret.
 
@@ -553,7 +555,7 @@ On the Action path, capture runs inside **your** runner, which means attacker-au
 - **Provenance.** A preview URL is forwarded only from a verified origin: `deployment_status`, explicit input, `url_template`, an allowlisted provider-bot comment, or local serve. Free-text URLs are rejected as `unverified_preview_source` (`verifyPreviewHandoff`). A default-branch push resolves its URL from `preview.default_branch_url`, which is an operator-supplied literal in the repository's own config and is verified through the same guard as `explicit` before any capture is asked for.
 - **Fork gating.** `storageState`/auth and preview-bypass secrets are disabled on fork pull requests *before* any capture or handoff. Local serve is disabled on forks unless the repository opts in with `preview: { fork_preview: true }`.
 - **Least privilege.** The Action requests no `contents: write` (`GATE_GITHUB_PERMISSIONS`); it posts comments and Check Runs only.
-- **Containment of the local server.** Environment allowlist, `ulimit` caps, loopback-only, redirect refusal, guaranteed teardown. The quickstart demonstrates every one of them live.
+- **Containment of the local server.** Environment allowlist, `ulimit` caps, loopback-only, redirect refusal, guaranteed teardown. The quickstart demonstrates every one of them live. "Loopback-only" means the whole of `127.0.0.0/8`, `localhost` and `::1`, matched as addresses. It used to mean, in one of the two places that check it, any hostname *beginning* `127.` — which `127.evil.example.com` does, while resolving wherever its owner points it. Both places now hold the same line.
 
 **Engine-owned (whatever critique service you wire in):** sandbox egress policy, internal-IP egress deny, SSRF protection, DNS-rebind rechecks, screenshot encryption and retention, prompt-injection controls. Gate does not duplicate these; on the Action path they are simply unavailable, which is why the residual risk is gated and documented rather than eliminated.
 
@@ -583,6 +585,7 @@ Nothing about a broken reviewer is allowed to fail someone's pull request: every
 | Service returned a result nothing judged | Neutral "Not judged" Check Run; the grade, the narrative and any findings are withheld, and the comment leads with the service's own disclosure |
 | Service returned a result with no judgment stamp at all | Neutral "Judgment not stated" Check Run; same withholding, and the summary names `provenance.model_backed` as the field that would restore the grade |
 | Service rejected the request (wrong shared secret, unknown installation, wrong endpoint) | Neutral "Review not submitted" Check Run carrying the service's own `HTTP <status> <code>`, what to check for that code, and no promise of a retry |
+| Workflow set `gate-mode` to something that is not a gate mode | Neutral "Action setup failed" Check Run naming `gate-mode`, the value, and the three accepted modes; the review is not attempted, because the alternative is a typo that silently reads as "do not gate" |
 | No preview URL found | Neutral Check Run with setup guidance |
 | Unverified preview source | "not reviewed (unverified preview source)"; never forwarded |
 | Preview returns an auth wall | Not reviewed; link to bypass/auth setup |
@@ -646,6 +649,8 @@ tokens:
 ```
 
 Severity and suppression filter what the comment *lists*; they never change the grade or the Check Run conclusion, which reflect the holistic verdict.
+
+`rules.gate` is the only key here a workflow can overrule: the Action's `gate-mode` input replaces it when the workflow sets one, and leaves it alone when the workflow does not. See [Using the Action in a workflow](#using-the-action-in-a-workflow) for the version of that input that got this wrong. `nits` is currently accepted and inert — it is treated exactly as `none`, since the only conclusion the gate mode changes is whether a `blocked` grade fails the check. It is in the schema because a future meaning is intended for it; today, writing it gets you `none` behaviour, and this sentence is the only thing that will tell you so.
 
 ### The measured half
 

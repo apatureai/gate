@@ -62,6 +62,8 @@ export type {
 } from "./supervisor-demo.js";
 export { setupFailureCheckRun, publishSetupFailureCheckRun } from "./setup-failure.js";
 export type { SetupFailurePublisher } from "./setup-failure.js";
+export { GateModeInputError, resolveActionConfig } from "./action-config.js";
+export type { ActionConfigInputs } from "./action-config.js";
 
 /**
  * Minimal GitHub token permissions the Action path requires.

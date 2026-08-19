@@ -23,10 +23,15 @@ inputs:
     description: "Path to .gate.yml."
     required: false
     default: ".gate.yml"
+  # No default, on purpose. An input's default is delivered to the container
+  # exactly like a value the caller typed, so `default: "none"` made this input
+  # always set, and it overrode `rules.gate` from .gate.yml on every run: a
+  # repository that had opted into `rules.gate: blockers` in the file got an
+  # advisory check that could never fail and never said it had been overridden.
+  # Unset means "use the file"; see packages/action/src/action-config.ts.
   gate-mode:
-    description: "Override rules.gate: none | nits | blockers."
+    description: "Override rules.gate from .gate.yml: none | nits | blockers. Leave unset to use the file's value."
     required: false
-    default: "none"
   github-token:
     description: "Token used to post the sticky comment and Check Run."
     required: false

@@ -1,10 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import {
-  CONFIG_FILENAME,
-  detectComponentLibraryIds,
-  loadDesignReviewConfig,
-  resolveConfigPath,
-} from "@gate/config";
+import { CONFIG_FILENAME, detectComponentLibraryIds, resolveConfigPath } from "@gate/config";
 import { engineEndpointInvalidCheckRun, engineNotConfiguredCheckRun } from "@gate/delivery";
 import { createHttpEngineTransport, createJudgmentEngineClient } from "@gate/engine";
 import {
@@ -12,7 +7,7 @@ import {
   missingEngineSettings,
   resolveEngineClientEnv,
 } from "@gate/secrets";
-import type { GateMode } from "@gate/types";
+import { resolveActionConfig } from "./action-config.js";
 import { formatActionError } from "./action-error.js";
 import { createGitHubApi } from "./github.js";
 import { buildAllowlistedEnv, startLocalServer as runLocalServer, type LocalServerHandle } from "./local-serve.js";
@@ -83,9 +78,13 @@ async function main(): Promise<void> {
       configText = null; // optional file
     }
   }
+  // The file and the `gate-mode` input resolve together (see action-config.ts):
+  // an unset input keeps the file's own `rules.gate`, and an input that is not
+  // a gate mode is refused here rather than cast through to a comparison it can
+  // never satisfy.
   let config;
   try {
-    config = loadDesignReviewConfig(configText);
+    config = resolveActionConfig(configText, { gateMode: gateModeInput });
   } catch (err) {
     console.error("Apature Gate config/setup error:", err);
     await publishSetupFailureCheckRun(err, {
@@ -95,7 +94,6 @@ async function main(): Promise<void> {
     });
     return;
   }
-  if (gateModeInput) config.rules.gate = gateModeInput as GateMode;
 
   const isFork =
     !!pr.head.repo?.full_name && !!pr.base.repo?.full_name &&

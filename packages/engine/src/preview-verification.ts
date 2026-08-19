@@ -63,13 +63,27 @@ function parseHttpUrl(value: string): URL | null {
   }
 }
 
+/**
+ * The whole 127/8 loopback block, and localhost, and IPv6 `::1`.
+ *
+ * The 127/8 arm is a full dotted-quad match rather than a `127.` prefix test,
+ * which is what it used to be. A prefix test reads as an address check and is
+ * not one: `127.evil.example.com` is a perfectly ordinary hostname that starts
+ * with `127.`, resolves to whatever its owner points it at, and passed this
+ * guard. That turned "local preview must be loopback" into a sentence that was
+ * true of the string and false of the host, on the one code path whose job is
+ * to decide what an engine is allowed to fetch. The same address is written
+ * strictly one directory over, in the supervisor's own redirect guard; these
+ * two now agree.
+ */
+const IPV4_LOOPBACK = /^127(\.\d{1,3}){3}$/;
+
 function isLoopback(hostname: string): boolean {
   return (
     hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
     hostname === "::1" ||
     hostname === "[::1]" ||
-    hostname.startsWith("127.")
+    IPV4_LOOPBACK.test(hostname)
   );
 }
 

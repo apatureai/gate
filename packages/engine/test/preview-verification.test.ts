@@ -61,6 +61,28 @@ describe("verifyPreviewHandoff", () => {
     ).toBe(false);
   });
 
+  it("accepts the rest of 127/8, which is all loopback", () => {
+    for (const host of ["127.0.0.1", "127.0.0.53", "127.1.2.3", "localhost", "[::1]"]) {
+      expect(
+        verifyPreviewHandoff({ url: `http://${host}:3000`, source: "local", provider: "local", isFork: false, ...baseSecrets }).ok,
+        `${host} should be loopback`,
+      ).toBe(true);
+    }
+  });
+
+  it("refuses a hostname that merely starts like a loopback address", () => {
+    // A registrable name, not an address: its owner points it wherever they
+    // like. The guard this replaced tested `startsWith("127.")`, which reads as
+    // an address check and is not one, on the one code path whose job is to
+    // decide what the engine is allowed to go and fetch.
+    for (const host of ["127.evil.example.com", "127.0.0.1.evil.example.com", "localhost.evil.example.com"]) {
+      expect(
+        verifyPreviewHandoff({ url: `http://${host}:3000`, source: "local", provider: "local", isFork: false, ...baseSecrets }),
+        `${host} should not be treated as loopback`,
+      ).toMatchObject({ ok: false, notReviewed: "unverified_preview_source" });
+    }
+  });
+
   it("accepts an explicit operator-supplied URL", () => {
     const out = verifyPreviewHandoff({
       url: "https://staging.acme.com",
