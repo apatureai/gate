@@ -1,7 +1,14 @@
 import { pathToFileURL } from "node:url";
 import { pgExecutor, pgTenantRunner, type QueryFn, type TenantTxRunner } from "@gate/db";
 import type { MeasurementBaselineStore } from "@gate/delivery";
-import { createJudgmentEngineClient, createAccountEngineTransport, type JudgmentEngineClient } from "@gate/engine";
+import {
+  createJudgmentEngineClient,
+  createAccountEngineTransport,
+  createHttpMeasurementTransport,
+  createMeasurementProbe,
+  type JudgmentEngineClient,
+  type MeasurementProbe,
+} from "@gate/engine";
 import { createRedisConnection, type RedisConfigClient } from "@gate/redis";
 import { EnvSecretStore, type SecretStore } from "@gate/secrets";
 import { Pool } from "pg";
@@ -65,6 +72,8 @@ export interface ProductionRuntimeFactories {
   componentLibraryClient?(token: string): ComponentLibraryClient;
   appReviewClient?(token: string, target: AppReviewTarget): AppReviewClient;
   engineClient?(opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }): JudgmentEngineClient;
+  /** Capture-and-measure client for default-branch pushes. Never a review client. */
+  measureProbe?(opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }): MeasurementProbe;
 }
 
 function requiredEnv(env: NodeJS.ProcessEnv, name: string): string {
@@ -170,6 +179,16 @@ export async function buildProductionDepsFromEnv(
     factories.componentLibraryClient ?? ((token: string) => createGitHubComponentLibraryClient(token));
   const appReviewClient =
     factories.appReviewClient ?? ((token: string, target: AppReviewTarget) => createAppReviewClient(token, target));
+  const measureProbe =
+    factories.measureProbe ??
+    ((opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }) =>
+      createMeasurementProbe(
+        createHttpMeasurementTransport({
+          baseUrl: opts.hostedEndpoint,
+          apiKey: opts.apiKey,
+          hmacSecret: opts.hmacSecret,
+        }),
+      ));
   const engineClient =
     factories.engineClient ??
     ((opts: { hostedEndpoint: string; apiKey: string; hmacSecret: string }) => {
@@ -194,6 +213,25 @@ export async function buildProductionDepsFromEnv(
         const token = await auth.getInstallationToken(installationId);
         return githubPullsClient(token).getCommitTreeSha(owner, name, sha);
       },
+    },
+    // Capture-and-measure for a default-branch push. It is built from the SAME
+    // endpoint and the same HMAC secret as the review client and points at a
+    // different path, so a critique service that has not implemented measure-only
+    // answers 404: the push records nothing and spends nothing. It is
+    // deliberately never the review client, because that one always costs a model
+    // call and a baseline never needs one.
+    measure: measureProbe({
+      hostedEndpoint,
+      apiKey: engineApiKey,
+      hmacSecret: engineHmacSecret,
+    }),
+    // The pushed commit's own `.gate.yml`: the routes and viewports a baseline is
+    // measured over have to be the ones the next pull request will be measured
+    // over, and reading them at any other commit would compare two different
+    // questions.
+    loadDefaultBranchConfig: async (target) => {
+      const token = await auth.getInstallationToken(Number(target.installationId));
+      return repoConfigClient(token).loadConfig(target.owner, target.name, target.commitSha);
     },
     screenshotRegistry,
     screenshotRoute: {

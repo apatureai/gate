@@ -41,6 +41,17 @@ export type NormalizedPreviewConfig = {
   environment: string;
   /** Explicit URL template, or null to rely on discovery. */
   urlTemplate: string | null;
+  /**
+   * The deployment of the repository's DEFAULT BRANCH, or null.
+   *
+   * This is the address a push to the default branch is measured at, and it is
+   * deliberately not `urlTemplate`: that one names a per-pull-request preview
+   * and carries a `{pr}` placeholder that a branch has no value for. `{sha}` and
+   * `{short_sha}` are substituted from the pushed commit; a stable production
+   * URL needs neither. Null means a push records no baseline, which is where
+   * every repository starts.
+   */
+  defaultBranchUrl: string | null;
   /** Seconds to wait after the preview is reachable before capture. */
   waitSeconds: number;
   /** CSS selector signaling the page is ready, or null. */

@@ -319,7 +319,7 @@ Once that command works, the same two variables are what the workflow needs; see
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1149 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1207 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -339,7 +339,8 @@ What runs today, from a clean clone, with no credentials:
 | Screenshot capture and model critique | **Not implemented here** | Lives behind the HTTP contract in `packages/types`; run [`verdict`](https://github.com/apatureai/verdict) or write your own, see roadmap item 1 |
 | Screenshot object store | **Not implemented** | The finding browser signs URLs through `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE`; no adapter ships |
 | Baseline before/after screenshot comparison | **Built, unwired** | `packages/delivery/src/baseline.ts` builds the capture pairs; nothing on the review path calls it. Unrelated to the measurement baseline below, which is wired |
-| Measurement baselines (scoping `block` to what a PR introduced) | **Works, needs a baseline on record** | Stored per repository and commit in `measurement_baselines` on the App path. A set is recorded for each reviewed commit, and on merge it is carried onto the merge commit when that commit's tree sha is identical to the reviewed head's, which is what gives the next pull request a base. A merge that rewrote the tree (a squash onto a moved base, a merge of two branches) carries nothing, so its base stays unmeasured and `block` reports and fails nothing there. Nothing reviews the default branch directly. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
+| Measurement baselines (scoping `block` to what a PR introduced) | **Works, needs a baseline on record** | Stored per repository and commit in `measurement_baselines` on the App path. A set is recorded for each reviewed commit, carried onto a merge commit whose tree sha is identical to the reviewed head's, and recorded for every commit a `push` lands on the default branch. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
+| Measure-only capture for a default-branch push | **Needs a service that implements it** | Gate's half is here: the `push` subscription, the guards, the client (`POST /measurements`), and the store write. The capture behind it is the critique service's half, exactly like the review, and [`verdict`](https://github.com/apatureai/verdict) does **not** implement the endpoint yet. Against a service that does not, a push gets a 404, records nothing, spends nothing, and logs why |
 
 Verified on 2026-08-18, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
@@ -348,9 +349,9 @@ pnpm install --frozen-lockfile   lockfile up to date, exit 0
 pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
-pnpm test                        Test Files  122 passed (122)
-                                       Tests  1149 passed (1149)
-                                    Duration  75.12s
+pnpm test                        Test Files  124 passed (124)
+                                       Tests  1207 passed (1207)
+                                    Duration  76.26s
 pnpm audit                       No known vulnerabilities found
 ```
 
@@ -373,6 +374,7 @@ Concrete, pickup-able work. Each one names the seam it plugs into.
 2. **A fixture-backed transport people can import.** The review demo replays a recorded response, but that replay lives inside the demo CLI rather than being exported. A `createFixtureEngineTransport` on `@gate/engine`'s public surface would let anyone run the whole Action path against their own repository with no endpoint at all. Small, high leverage, good first issue.
 3. **Wire up baseline before/after SCREENSHOT comparison.** `packages/delivery/src/baseline.ts` already builds `ComparisonPair`s and `BeforeAfterArtifact`s behind a `BaselineStore` interface, and it is tested, but no caller exists on the review path. Deciding where the base capture comes from is the interesting half. (The measurement baseline is a different thing and is wired: see [Scoped to what the pull request introduced](#scoped-to-what-the-pull-request-introduced).)
 3b. **Give the Action path somewhere to keep a measurement baseline.** `runAction` accepts a `measurementBaselines` store and the App path binds a Postgres one, but a GitHub-hosted runner has no database, so the stock Action can never scope `rules.measurements: block` and correctly refuses to gate. A store backed by the Actions cache or by a committed lockfile-style artifact, implementing the same two-method `MeasurementBaselineStore` interface, would close that.
+3c. **Implement the measure-only endpoint in a critique service.** A default-branch push records a measurement baseline by asking for measurements and nothing else: `POST /measurements` with a `GateMeasurementRequest`, answered with a `GateMeasurementResult` (measured facts, coverage, capture and engine versions, and no grade or findings). Gate's client, guards and store write are done and tested (`packages/engine/src/measure.ts`, `packages/service/src/default-branch-baseline.ts`); no service implements the endpoint yet, including `verdict`, so every push currently gets a 404 and records nothing. For a service that already captures and measures for a review, this is the same capture with the model call removed, and it is what makes `rules.measurements: block` fire on a busy repository.
 4. **Ship an object-store adapter for screenshots.** `GATE_SCREENSHOT_OBJECT_URL_TEMPLATE` expects a `{objectKey}` template today, and `packages/dashboard` already mints short-lived capability tokens. An S3 or R2 signed-GET signer implementing the same interface would close the loop.
 5. **Keep the dependency tree clean.** Both trees audit clean as of 2026-08-10, and staying there is the ongoing job. The eleven advisories that were open the day before are cleared in [SECURITY.md](SECURITY.md#dependency-advisories), which also records the one pinned override holding a fix in place. Dependabot opens the bumps; what is missing is a CI job that fails on a new advisory rather than leaving it to whoever next runs `pnpm audit` by hand. That job is the pickup-able piece, and it wants the same drift policy as item 10.
 6. **Aggregate cgroup-v2 caps for the supervisor.** The `ulimit` caps are per-process. `pids.max` and `memory.max` on a cgroup would make containment aggregate rather than per-process, which is the difference between a mitigation and a sandbox. Needs host setup, so it wants a design discussion first.
@@ -408,7 +410,7 @@ One deliberate exception, so it does not read as drift: what Gate publishes into
 One contract, three ways to reach it, all behind `critique(images, context) → Findings`.
 
 1. **GitHub Action** (`@gate/action`, [`action.yml`](action.yml)) runs inside your own runner. Takes an explicit `preview-url`, discovers one, or runs a `preview-command` under the supervisor. Needs no hosted install; requires only `checks: write` and `pull-requests: write` in the calling workflow.
-2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` (a push supersedes the in-flight review; a merge carries the measurement baseline onto the merge commit when the trees match) and `deployment_status`, and owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`.
+2. **GitHub App** (`@gate/service`): a Fastify webhook receiver in front of a BullMQ queue and an orchestrator. Reacts to `pull_request` (a push supersedes the in-flight review; a merge carries the measurement baseline onto the merge commit when the trees match), `deployment_status`, and `push` (a commit landing on the default branch is measured, and only measured, to record its baseline: no model call and nothing published). Owns the durable state: run history, feedback, billing, tenant isolation. Requests exactly `checks: write`, `pull_requests: write`, `contents: read`, `deployments: read`, and never `contents: write`. `push` is an event subscription and adds no permission.
 3. **Dashboard** (`@gate/dashboard` + `apps/dashboard`) covers OAuth, sessions, run history, a finding browser, feedback stats, config UI, Stripe billing. The logic lives in a tested, UI-agnostic core package; the Next.js app-router shell only renders it.
 
 ### Using the Action in a workflow
@@ -548,7 +550,7 @@ On the Action path, capture runs inside **your** runner, which means attacker-au
 
 **Gate-owned (this repository):**
 
-- **Provenance.** A preview URL is forwarded only from a verified origin: `deployment_status`, explicit input, `url_template`, an allowlisted provider-bot comment, or local serve. Free-text URLs are rejected as `unverified_preview_source` (`verifyPreviewHandoff`).
+- **Provenance.** A preview URL is forwarded only from a verified origin: `deployment_status`, explicit input, `url_template`, an allowlisted provider-bot comment, or local serve. Free-text URLs are rejected as `unverified_preview_source` (`verifyPreviewHandoff`). A default-branch push resolves its URL from `preview.default_branch_url`, which is an operator-supplied literal in the repository's own config and is verified through the same guard as `explicit` before any capture is asked for.
 - **Fork gating.** `storageState`/auth and preview-bypass secrets are disabled on fork pull requests *before* any capture or handoff. Local serve is disabled on forks unless the repository opts in with `preview: { fork_preview: true }`.
 - **Least privilege.** The Action requests no `contents: write` (`GATE_GITHUB_PERMISSIONS`); it posts comments and Check Runs only.
 - **Containment of the local server.** Environment allowlist, `ulimit` caps, loopback-only, redirect refusal, guaranteed teardown. The quickstart demonstrates every one of them live.
@@ -606,6 +608,10 @@ preview:
   source: vercel          # vercel | netlify | cloudflare | render | explicit | local
   environment: Preview
   url_template: null      # e.g. https://myapp-pr-{pr}.example.dev
+  default_branch_url: null # where the DEFAULT BRANCH is deployed, e.g. https://myapp.example.com or
+                        # https://{short_sha}.myapp.example.com. A push to the default branch is
+                        # measured here to record that commit's baseline. Unset -> pushes record
+                        # nothing. Not url_template: that one's {pr} has no value on a branch.
   wait_seconds: 0
   ready_selector: null    # wait for this selector before capture
   ready_path: null        # poll this path for readiness instead of the base URL
@@ -707,12 +713,10 @@ sees.
 set for its own head commit, and a pull request is scoped only when its BASE commit is one Gate has a
 set for.
 
-On the hosted **App path** that recording is automatic, and it only ever happens for a pull request's
-head: Gate subscribes to `pull_request` and `deployment_status`, and nothing reviews the default
-branch. Every merge strategy GitHub offers puts a commit on the base branch that was never any pull
-request's head, so for a long time the next pull request's base was a commit Gate had never seen, the
-lookup came back `no baseline`, and `rules.measurements: block` failed nothing outside a stack of
-pull requests.
+On the hosted **App path** that recording used to happen only for a pull request's head. Every merge
+strategy GitHub offers puts a commit on the base branch that was never any pull request's head, so for
+a long time the next pull request's base was a commit Gate had never seen, the lookup came back
+`no baseline`, and `rules.measurements: block` failed nothing outside a stack of pull requests.
 
 **A merge now carries the set forward.** When a pull request merges, Gate already holds the
 measurement set for the head it just reviewed, and the merge commit usually contains the identical
@@ -737,19 +741,97 @@ unmeasured, the next pull request reads `no baseline` on both surfaces, and `blo
 it. The same holds when the pull request's head was never successfully reviewed, when GitHub's commit
 API cannot be read, and when the pull request is closed without merging.
 
-**So `block` fires on a repository that merges cleanly, and still does not on one that does not.** A
-merge whose tree matches what was reviewed gives the next pull request a real base; a merge that
-rewrites the tree gives it nothing, and the run says which. That failure is still the safe direction
-and it is still named on every surface, but a team that reads a permanently green check as "no
-regressions" is reading it wrong. Nothing reviews the default branch directly, which remains the only
-thing that would close the gap for every merge strategy.
+**The carry-forward covers a quiet repository and abandons a busy one.** Tree equality holds exactly
+when the base has not moved since the branch point, so any merge that raced another landing carries
+nothing, the next pull request against that branch reads `no baseline`, and the gate goes silent on
+precisely the merges that followed a race. Watching the default branch itself is the only mechanism
+that covers every merge strategy and every race, because whatever produced the commit, it arrives
+there.
+
+**So Gate now watches it. A push to the default branch records a baseline for the new commit.** The
+App subscribes to `push`, and on a push whose ref is `refs/heads/<the repository's own default
+branch>` Gate captures that commit's deployment, measures it, and stores the result as that commit's
+measurement set. That is the whole of it, and what it does *not* do is the reason it is affordable:
+
+- **No model call.** A baseline needs measurements only. The stored set is deterministic capture
+  output (contrast, overflow, touch target) plus the routes and viewports that were measured, and
+  none of it is a judgment. The push path calls a separate measure-only endpoint
+  (`POST /measurements`) through a separate client, and the review client is not among its
+  dependencies, so there is nothing on that path to spend a model call with. A payload that comes
+  back carrying a `grade`, `findings`, `overall` or `provenance` is **refused** rather than stripped:
+  those fields exist only on a judged result, so their presence means a model ran on a request that
+  asked it not to, and a baseline Gate paid for while logging that it had not is worse than no
+  baseline.
+- **Nothing is published.** No Check Run, no comment, no run row, no grade, nowhere. Nothing about a
+  push is a review and nothing it produces may render as one, so the push path is handed no Check Run
+  publisher, no comments client and no run store at all: the delivery side is not merely unused there,
+  it is unreachable from there.
+- **A push that fails costs the next scoping and nothing else.** The measure is submitted once and
+  never retried, because a retry on a busy default branch turns one bad minute into a stampede against
+  an engine that is already failing, and nobody is waiting on the answer. Failures are logged and
+  never surfaced to a user. The webhook is answered before the capture finishes, since GitHub allows a
+  receiver ten seconds and retries what it thinks failed.
+- **No new permission.** `push` is an event subscription, not a permission. The repository, its
+  default branch, the pushed commit and the installation all arrive in the payload, and reading the
+  repository's `.gate.yml` at that commit is the `contents: read` a review already does. Gate still
+  requests exactly four scopes and still never `contents: write`.
+
+**What records nothing, deliberately.** A push to any other branch. A tag push, which arrives on the
+same event and usually names a commit that *is* on the default branch, so a handler that looked only
+at the commit would re-measure it on every release. A branch deletion, which carries a real ref and a
+commit sha of forty zeros. A merge queue's `refs/heads/gh-readonly-queue/...` staging refs, which are
+not the default branch: when the queue lands the batch, that landing is itself a push to the default
+branch and is measured there, so the discarded attempts cost nothing. The default branch is read from
+the payload rather than assumed to be `main`, because a repository on `master` or `trunk` would
+otherwise get the silent gate this whole thing exists to close, while looking from the outside exactly
+like one that worked.
+
+**A force push is treated as an ordinary push, and nothing already stored is invalidated.** A stored
+set is a statement about a COMMIT, not about a branch: "this tree, measured, produced these
+violations". Rewriting the branch does not make that statement false about the commit it names, so the
+sets for orphaned commits stay exactly where they are, stay correct for any pull request still based
+on one of them, and cost a row each. The commit the force push landed is measured on its own terms
+like any other.
+
+**What it costs.** One capture per commit landing on the default branch: a browser, a sandbox and a
+minute of the critique service's time, bounded by a five-minute deadline, with no model inference at
+any point. Gate's own cost is one webhook, one config read, and one row in `measurement_baselines`.
+A ref that records nothing is never captured at all.
+
+**What is still not covered, and this list is the honest one:**
+
+- **The critique service has to implement the measure endpoint, and no published one does yet.** Gate
+  ships the client, not the capture, exactly as it does for reviews. `verdict` implements `POST /jobs`
+  and does not implement `POST /measurements`. Against such a service every push gets a 404, records
+  nothing and spends nothing, and the log says so. Roadmap item 3c. The separate path is why: a flag on the review
+  request would have been silently stripped by that same service, which would then have run a full
+  review and billed a model call for every push.
+- **A repository that has not set `preview.default_branch_url`.** Gate will not guess an address to
+  point a browser at, so a repository that has not said where its default branch is deployed records
+  nothing and the log says which repository and why.
+- **Whatever the deployment cannot reach.** If the URL is not up, is behind an auth wall Gate has no
+  sealed state for, or serves something other than that commit, the measure fails or measures the
+  wrong thing. A *stable* production URL is measured **as it is at the moment the push arrives**,
+  which on a repository that deploys after CI is still the previous commit's build, and the set is
+  then filed under the new commit. If you want the set to be certainly about the commit it names, make
+  `default_branch_url` a per-commit address using `{sha}` or `{short_sha}`.
+- **Every commit that landed before you installed Gate, and the first pull request after you install
+  it.** Nothing backfills. A repository's default branch acquires baselines from the first push after
+  the App is installed, so a pull request opened before that push has a base Gate never measured, and
+  it reads `no baseline` on both surfaces.
+- **A push whose measure failed.** Nothing retries it. That commit has no set, and a pull request based
+  on it is unscoped until a later commit on the branch is measured.
+
+In all of those the failure direction is the same one every other missing baseline takes: `no baseline`
+classifies nothing, gates nothing, and says so on both surfaces. A team that reads a permanently green
+check as "no regressions" is still reading it wrong.
 
 The **Action path** runs inside a GitHub-hosted runner with no database, so it binds no store:
 `rules.measurements: block` on the stock Action reports its measurements and fails nothing, and says
 which of those two things happened on every run. The carry-forward changes nothing there, since there
 is no store to carry anything into. A self-hosted operator with a database can pass a store into
-`runAction` and get the App path's recording and comparison; the merge carry-forward is webhook-driven
-and belongs to the App path alone.
+`runAction` and get the App path's recording and comparison; the merge carry-forward and the
+default-branch push are both webhook-driven and belong to the App path alone.
 
 **Identity is deliberately hard to move.** A violation is the same violation across two runs when its
 check, its route, its element and the substance of the engine's sentence match. Structural-position
@@ -1015,7 +1097,7 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 
 | Variable | Required | Default | Effect |
 |---|---|---|---|
-| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service base URL, scheme included: Gate appends `/jobs` to it. Unset → a neutral "Engine not configured" Check Run naming what to set. Set but not an absolute http/https URL (a bare `verdict-acme.fly.dev`, the form a hosting dashboard shows you) → a neutral "Engine endpoint invalid" Check Run showing the value and a corrected one. Either way the review is not attempted and neither is called an outage. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
+| `GATE_ENGINE_ENDPOINT` | Action + App | none | Critique service base URL, scheme included: Gate appends `/jobs` to it, and on the App path appends `/measurements` for default-branch baseline captures (a service that does not implement that path answers 404, which records no baseline and spends nothing). Unset → a neutral "Engine not configured" Check Run naming what to set. Set but not an absolute http/https URL (a bare `verdict-acme.fly.dev`, the form a hosting dashboard shows you) → a neutral "Engine endpoint invalid" Check Run showing the value and a corrected one. Either way the review is not attempted and neither is called an outage. Deprecated alias: `JUDGMENT_ENGINE_ENDPOINT`. |
 | `GATE_ENGINE_HMAC_SECRET` | Action + App | none | Signs job requests; must equal the service's own `ENGINE_HMAC_SECRET`. Unset → same "Engine not configured" Check Run, because an unsigned job is refused with `401 signature_mismatch`. Deprecated alias: `JUDGMENT_ENGINE_HMAC_SECRET`. |
 | `GATE_ENGINE_API_KEY` | optional | none | Bearer token, when the service wants one on top of the signature. A self-hosted `verdict` authenticates on the HMAC alone, so this stays unset. Deprecated alias: `JUDGMENT_ENGINE_API_KEY`. |
 | `GITHUB_TOKEN` / `INPUT_GITHUB_TOKEN` | Action | none | Posts the sticky comment and Check Run. Unset → nothing is published. |
@@ -1059,13 +1141,30 @@ flowchart TD
   L --> M["Record run + feedback hooks"]
 ```
 
+The `push` path is a different and much shorter one, and it deliberately shares
+none of the publishing half:
+
+```mermaid
+flowchart TD
+  P["push"] --> Q{"ref == refs/heads/&lt;payload default_branch&gt;, not deleted?"}
+  Q -- no --> Z["Record nothing. No capture is asked for"]
+  Q -- yes --> R["Read .gate.yml at the pushed commit"]
+  R --> S{"preview.default_branch_url set and verifiable?"}
+  S -- no --> Z
+  S -- yes --> T["POST /measurements (HMAC-signed) then poll, 5-min deadline, no retry"]
+  T --> U{"Measured facts only, no grade or findings?"}
+  U -- no --> Z2["Refuse the payload and record nothing"]
+  U -- yes --> V["Store the set for that commit in measurement_baselines"]
+  V --> W["Stop. No comment, no Check Run, no run row"]
+```
+
 pnpm workspace, TypeScript project references, Vitest, ESLint. Roughly 10k lines of non-test TypeScript and 9k lines of tests across 12 packages.
 
 | Package | What it is |
 |---|---|
-| `packages/types` | The boundary contract: `GateReviewRequest`/`GateReviewResult`, config types, feedback events, the golden fixture loader, `deriveArtifactId`. Carries no model-specific fields by design. |
+| `packages/types` | The boundary contract: `GateReviewRequest`/`GateReviewResult`, the measure-only `GateMeasurementRequest`/`GateMeasurementResult`, config types, feedback events, the golden fixture loader, `deriveArtifactId`. Carries no model-specific fields by design. |
 | `packages/config` | `.gate.yml`: Zod schema, validation, defaults, normalization. Also component-library detection from a repository's `package.json`, which is grounding the engine's hosted path cannot work out for itself. |
-| `packages/engine` | Client for the async job API: submit/poll/cancel, HMAC signing, preview-handoff verification, `x-schema-version` parsing, rate limiting, per-account endpoint routing. |
+| `packages/engine` | Clients for the async job API: submit/poll/cancel, HMAC signing, preview-handoff verification, `x-schema-version` parsing, rate limiting, per-account endpoint routing. Also the measure-only client (`POST /measurements`) a default-branch push records its baseline through, which refuses any answer carrying a judgment. |
 | `packages/delivery` | Sticky comment upsert, Check Run conclusion mapping, finding validation and degradation decisions, SVG+sharp screenshot annotation, baseline before/after pairs. |
 | `packages/service` | App path: Fastify server, GitHub App auth and webhook verification, permission assertions, deployment-preview discovery, BullMQ queue, supersession, orchestrator, fail-fast env check. |
 | `packages/action` | Action path: entrypoint, GitHub API client, preview discovery, dev-server output parsing into build facts, the resource-capped local-serve supervisor, and both demos. |
@@ -1141,6 +1240,9 @@ Stated up front, because finding them after you have wired Gate in is worse.
 - **The Action path constrains hostile pull request code; it does not sandbox it.** The `ulimit` caps, environment allowlist, loopback-redirect refusal and fork gating are real mitigations. The aggregate cgroup-v2 caps that would make them airtight are roadmap item 6. Read the threat model before running the Action path on a repository that accepts fork pull requests.
 - **Component-library detection reads one file, at the repository root.** Gate looks at `package.json` at the PR's head and nothing else, so a monorepo whose UI package declares Radix in `packages/web/package.json` is not detected, and neither is a library vendored without a dependency entry. The review still runs, grounded on tokens and brand; it simply carries no library rubric note, and nothing in the result distinguishes that from a repository that genuinely uses none. On the App path the read can also fail for reasons that have nothing to do with your code (a rate limit, a permission change), and it fails quietly on purpose: grounding must never be able to fail a pull request's review.
 - **A measurement baseline can carry a violation to the wrong element, and it errs that way on purpose.** After the selector keys miss, a violation is matched on check, page and the substance of the engine's sentence, and it may claim one stored violation that nothing else accounts for. That is what makes a wrapper div, a tightened combinator or a renamed class stop reading as a new defect. It also means a pull request that fixes one contrast failure and adds another with the same sentence on the same page is reported as one fixed and one already on the base, rather than one fixed and one introduced, so that one does not fail the check. It is still rendered, still counted, and still in the review. The count is the guard: the number of same-defect violations on a page cannot grow without something being called introduced. What Gate will not do is match across pages, so a renamed route is *Not classified* rather than carried over.
+- **A default-branch baseline is only as true as what was deployed when the push arrived.** The push fires the moment the commit lands; a repository that deploys after CI is still serving the previous build at that instant, so a *stable* `default_branch_url` can be captured, measured, and filed under a commit whose UI it does not show. Gate cannot tell the two apart from the outside: the URL answers 200 either way. Point `default_branch_url` at a per-commit address with `{sha}` or `{short_sha}` if you need the set to be certainly about the commit it names.
+- **Nothing backfills a baseline, so the branch starts empty.** Baselines accumulate from the first push after the App is installed. Every commit that landed before that has none, a pull request based on one of them reads `no baseline`, and there is no command that goes and measures history.
+- **The measure endpoint is a contract nobody has implemented yet.** Gate's `push` handling, guards, client and store write are here and tested; `POST /measurements` is the critique service's half and `verdict` does not implement it. Until one does, a push on a live deployment records nothing, and the honest reading is that this closes the gap in Gate and not yet in the system. Roadmap item 3c.
 - **The resource cap is Linux-only, and one half of it depends on the shell.** `ulimit -v` does not apply on macOS; `ulimit -u` does not exist in dash, so Gate runs the capped command under `/bin/bash` when present and falls back to the memory cap alone when it is not.
 - **Windows is not supported.** The supervisor relies on POSIX process groups. Roadmap item 7.
 - **Nothing fails CI on a new dependency advisory.** Both trees audit clean today and the history is in [SECURITY.md](SECURITY.md#dependency-advisories), but no job enforces that, so the guarantee is only as fresh as the last manual `pnpm audit`. Roadmap item 5.

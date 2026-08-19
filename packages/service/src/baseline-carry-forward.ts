@@ -9,12 +9,19 @@ import {
  *
  * WHY THIS EXISTS. Gate scopes measured violations against the set stored for a
  * pull request's BASE commit, and sets were only ever recorded for a pull
- * request's HEAD: the App subscribes to `pull_request` and `deployment_status`,
- * and nothing reviews the default branch. Every merge strategy GitHub offers
- * puts a commit on the base branch that was never any pull request's head, so
- * the next pull request's base was a commit Gate had never measured, the lookup
- * returned `no baseline`, and `rules.measurements: block` failed nothing. It
- * worked on stacked pull requests and nowhere else.
+ * request's HEAD. Every merge strategy GitHub offers puts a commit on the base
+ * branch that was never any pull request's head, so the next pull request's base
+ * was a commit Gate had never measured, the lookup returned `no baseline`, and
+ * `rules.measurements: block` failed nothing. It worked on stacked pull requests
+ * and nowhere else.
+ *
+ * WHAT COVERS THE REST. Tree equality holds exactly while the base has not moved
+ * since the branch point, so this covers a quiet repository and abandons a busy
+ * one: a merge that raced another landing carries nothing. `push` on the default
+ * branch (`default-branch-baseline.ts`) is what covers every merge strategy and
+ * every race, by measuring the commit wherever it came from. This stays because
+ * it is nearly free where it applies: the set already exists and the copy is two
+ * commit reads, against a capture the other path has to pay for.
  *
  * THE DISCIPLINE, WHICH IS THE WHOLE DESIGN. A set is copied ONLY when the merge
  * commit's tree sha is identical to the tree sha of the head that was reviewed.

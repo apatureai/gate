@@ -110,6 +110,17 @@ export { hydrateReviewContext } from "./hydrate.js";
 export type { PullRequestDetails, PullRequestFetcher } from "./hydrate.js";
 export { createGitHubPullsClient } from "./github-pulls.js";
 export type { GitHubPullsClient, CommitTreeReader } from "./github-pulls.js";
+export {
+  recordDefaultBranchBaseline,
+  parseDefaultBranchPush,
+  fillDefaultBranchUrl,
+} from "./default-branch-baseline.js";
+export type {
+  DefaultBranchTarget,
+  DefaultBranchBaselineDeps,
+  DefaultBranchBaselineOutcome,
+  PushSkipReason,
+} from "./default-branch-baseline.js";
 export { carryBaselineOnMerge } from "./baseline-carry-forward.js";
 export type {
   BaselineCarryForwardDeps,

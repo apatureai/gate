@@ -1,4 +1,9 @@
-import type { GateReviewResult, Measurement, MeasurementKind } from "@gate/types";
+import type {
+  GateMeasurementResult,
+  GateReviewResult,
+  Measurement,
+  MeasurementKind,
+} from "@gate/types";
 import {
   MEASUREMENT_IDENTITY_VERSION,
   measurementDefectKey,
@@ -279,13 +284,39 @@ export interface MeasurementBaselineSnapshot {
 }
 
 /**
+ * Everything a stored measurement set is built from, and nothing else.
+ *
+ * Stated structurally rather than as `GateReviewResult` because a baseline has
+ * two producers now: a completed REVIEW of a pull request head, and a
+ * measure-only run on a commit that landed on the default branch. The second one
+ * has no grade, no findings and no model, by construction. Widening the input to
+ * exactly the three fields these functions read is what lets both produce a set
+ * through the same code, so a baseline recorded by a push and one recorded by a
+ * review are built by identical rules rather than by two implementations that
+ * agree until they do not.
+ *
+ * `GateReviewResult` and `GateMeasurementResult` are both assignable to it.
+ */
+export type MeasuredRun = {
+  measurements?: GateReviewResult["measurements"];
+  coverage?: GateReviewResult["coverage"];
+  metadata: { engineVersion: string };
+};
+
+/** Compile-time proof that both producers satisfy the shape above. */
+const _reviewIsMeasuredRun: (x: GateReviewResult) => MeasuredRun = (x) => x;
+const _measureIsMeasuredRun: (x: GateMeasurementResult) => MeasuredRun = (x) => x;
+void _reviewIsMeasuredRun;
+void _measureIsMeasuredRun;
+
+/**
  * Checks a result proves were run.
  *
  * The union of what the engine SAID it ran and what its violations SHOW it ran:
  * a `contrast` violation is proof the contrast check executed, whatever
  * `checksRun` says. Only a lower bound is ever taken, never an upper one.
  */
-export function measuredKinds(result: GateReviewResult): MeasurementKind[] {
+export function measuredKinds(result: MeasuredRun): MeasurementKind[] {
   const report = result.measurements;
   if (report === undefined) return [];
   const kinds = new Set<MeasurementKind>(report.checksRun);
@@ -305,7 +336,7 @@ export function measuredKinds(result: GateReviewResult): MeasurementKind[] {
  * full its coverage: "the model judged this page" is not "the deterministic
  * checks looked at it".
  */
-export function measuredRoutes(result: GateReviewResult): string[] {
+export function measuredRoutes(result: MeasuredRun): string[] {
   const report = result.measurements;
   if (report === undefined) return [];
   const routes = new Set<string>();
@@ -322,7 +353,7 @@ export function measuredRoutes(result: GateReviewResult): string[] {
  * measured, and a viewport in `coverage.viewportsReviewed` is proof the capture
  * ran there.
  */
-export function measuredViewports(result: GateReviewResult): string[] {
+export function measuredViewports(result: MeasuredRun): string[] {
   const report = result.measurements;
   if (report === undefined) return [];
   const viewports = new Set<string>();
@@ -348,7 +379,7 @@ export interface BuildBaselineOptions {
  * a mute was lifted.
  */
 export function buildMeasurementBaseline(
-  result: GateReviewResult,
+  result: MeasuredRun,
   options: BuildBaselineOptions,
 ): MeasurementBaselineSnapshot {
   const violations = result.measurements?.violations ?? [];

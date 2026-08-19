@@ -70,6 +70,7 @@ function normalize(raw: RawDesignReviewConfig): NormalizedDesignReviewConfig {
       source: raw.preview.source,
       environment: raw.preview.environment,
       urlTemplate: raw.preview.url_template,
+      defaultBranchUrl: raw.preview.default_branch_url,
       waitSeconds: raw.preview.wait_seconds,
       readySelector: raw.preview.ready_selector,
       readyPath: raw.preview.ready_path,

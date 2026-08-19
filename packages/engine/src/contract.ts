@@ -1,4 +1,4 @@
-import type { GateReviewResult } from "@gate/types";
+import type { GateMeasurementResult, GateReviewResult } from "@gate/types";
 import { z } from "zod";
 
 /**
@@ -195,6 +195,34 @@ export const GateReviewResultSchema = z.object({
 type SchemaOutput = z.infer<typeof GateReviewResultSchema>;
 const _typeCheck: (x: SchemaOutput) => GateReviewResult = (x) => x;
 void _typeCheck;
+
+/**
+ * The MEASURE-ONLY response (`packages/types/src/measure.ts`).
+ *
+ * It reuses `measurementsSchema` and `coverageSchema` verbatim, which is the
+ * point: a violation measured on a default-branch push and the same violation
+ * measured during a pull request's review have to parse through the same rules,
+ * or the baseline and the run compared against it would be built from two
+ * different readings of the same wire shape.
+ *
+ * `measurements` is REQUIRED here where the review schema has it optional. On a
+ * review, absence honestly means "this producer does not report measurements".
+ * On a measure-only call it means the service answered a question nobody asked,
+ * and filing that under a commit would record an empty baseline that reads, to
+ * every later comparison, as "this commit was measured and was clean".
+ */
+export const GateMeasurementResultSchema = z.object({
+  measurements: measurementsSchema,
+  coverage: coverageSchema.optional(),
+  metadata: z.object({
+    engineVersion: z.string(),
+    captureVersion: z.string(),
+  }),
+});
+
+type MeasurementSchemaOutput = z.infer<typeof GateMeasurementResultSchema>;
+const _measurementTypeCheck: (x: MeasurementSchemaOutput) => GateMeasurementResult = (x) => x;
+void _measurementTypeCheck;
 
 export type ParseEngineResult =
   | { ok: true; result: GateReviewResult }

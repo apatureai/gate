@@ -19,6 +19,7 @@ describe("defaults", () => {
         source: "vercel",
         environment: "Preview",
         urlTemplate: null,
+        defaultBranchUrl: null,
         waitSeconds: 0,
         readySelector: null,
         readyPath: null,

@@ -84,6 +84,20 @@ export interface ProductionAppServerDeps {
    * equality is one it must not make.
    */
   commits?: DeploymentHandlerDeps["commits"];
+  /**
+   * Capture-and-measure with no model call, used by the `push` handler to record
+   * a baseline for every commit that lands on the default branch. Absent means
+   * pushes record nothing; there is deliberately no fallback to the review
+   * client, because a fallback would bill a model call per push.
+   */
+  measure?: DeploymentHandlerDeps["measure"];
+  /**
+   * The repository's `.gate.yml` at a default-branch commit, for the push
+   * handler. Separate from `loadConfig`, which is keyed by a queued review job:
+   * a push has no pull request and no job. Absent falls back to `DEFAULT_CONFIG`,
+   * whose `preview.default_branch_url` is null, so nothing is measured.
+   */
+  loadDefaultBranchConfig?: DeploymentHandlerDeps["loadConfig"];
   /** Resolve the open PR for a deployment SHA (installation-authed lookup, #55). */
   resolvePullRequest: DeploymentHandlerDeps["resolvePullRequest"];
   /** Build the per-installation GitHub + engine clients for a job. */
@@ -211,6 +225,8 @@ export function createProductionAppServer(deps: ProductionAppServerDeps): Produc
     resolvePullRequest: deps.resolvePullRequest,
     measurementBaselines: deps.measurementBaselines,
     commits: deps.commits,
+    measure: deps.measure,
+    loadConfig: deps.loadDefaultBranchConfig,
     now: deps.now,
     environment: deps.environment,
     isDuplicate: deps.isDuplicate,

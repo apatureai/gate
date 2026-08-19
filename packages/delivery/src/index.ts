@@ -81,6 +81,7 @@ export type {
   MeasurementBaselineStore,
   MeasurementComparison,
   MeasurementOrigin,
+  MeasuredRun,
   UnclassifiedReason,
 } from "./measurement-baseline.js";
 export { BASELINE_SECTION_HEADING, baselineSection } from "./measurement-baseline-render.js";

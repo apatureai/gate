@@ -29,6 +29,7 @@ export type {
   PreviewBuildFactKind,
 } from "./review.js";
 export { hasDisplayableConfidence } from "./review.js";
+export type { GateMeasurementRequest, GateMeasurementResult } from "./measure.js";
 export type {
   FeedbackEventType,
   FeedbackActor,

@@ -7,6 +7,13 @@ import { createWebhookVerifier } from "./webhooks.js";
 export interface WebhookHandlers {
   onPullRequest?(payload: unknown, delivery: string | undefined): Promise<void> | void;
   onDeploymentStatus?(payload: unknown, delivery: string | undefined): Promise<void> | void;
+  /**
+   * A push. Only a push to the repository's DEFAULT branch does anything, and
+   * what it does is record a measurement baseline for the new commit: no model
+   * call, no critique, no Check Run and no comment. Nothing about a push is a
+   * review, and nothing it produces may render as one.
+   */
+  onPush?(payload: unknown, delivery: string | undefined): Promise<void> | void;
 }
 
 export interface BuildServerOptions {
@@ -27,7 +34,7 @@ const rawBodies = new WeakMap<FastifyRequest, string>();
 
 /**
  * Build the Gate App-path HTTP server (TRD §2): webhook receiver for
- * `pull_request` and `deployment_status`, health + readiness routes, and an OTel
+ * `pull_request`, `deployment_status` and `push`, health + readiness routes, and an OTel
  * span per request. The factory is pure (no listen) so it injects in tests.
  * GitHub HMAC webhook verification is added in #2.
  */
@@ -104,6 +111,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       }
       if (event === "deployment_status") {
         await handlers.onDeploymentStatus?.(request.body, delivery);
+        return reply.code(202).send({ accepted: true, event });
+      }
+      if (event === "push") {
+        await handlers.onPush?.(request.body, delivery);
         return reply.code(202).send({ accepted: true, event });
       }
     } catch (err) {

@@ -20,6 +20,10 @@ import {
 import { type PublishedReviewFacts, recordPublishedReview } from "@gate/observability";
 import type { GateReviewRequest, NormalizedDesignReviewConfig } from "@gate/types";
 import { carryBaselineOnMerge, type BaselineCarryForwardDeps } from "./baseline-carry-forward.js";
+import {
+  recordDefaultBranchBaseline,
+  type DefaultBranchBaselineDeps,
+} from "./default-branch-baseline.js";
 import { decideReviewDepth, recordFullReviewIfDeep, traceDepthDecision } from "./depth-policy.js";
 import { buildFeedbackEvent } from "./feedback-store.js";
 import type { FeedbackSink } from "./feedback-routes.js";
@@ -345,9 +349,21 @@ export async function runHostedReview(
   return { status: "published", conclusion: decision.checkRun.conclusion };
 }
 
-export interface DeploymentHandlerDeps extends BaselineCarryForwardDeps {
+export interface DeploymentHandlerDeps extends BaselineCarryForwardDeps, DefaultBranchBaselineDeps {
   supersession: SupersessionStore;
   worker: ReviewJobWorker;
+  /**
+   * Runs the default-branch baseline job OFF the webhook request.
+   *
+   * A capture takes minutes. GitHub gives a webhook receiver ten seconds and
+   * RETRIES what it thinks failed, so awaiting the measure inside the delivery
+   * would convert one push into a retry storm against the same engine the slow
+   * capture is already occupying. The receiver therefore answers immediately and
+   * the baseline finishes behind it. Nothing waits on the result and nothing is
+   * published, so a process that restarts mid-run loses a baseline and nothing
+   * else. Overridden in tests to await the job instead.
+   */
+  runBaselineJob?(task: () => Promise<void>): void;
   /** Resolve the PR for a deployment SHA in a given repo (GitHub lookup; injected). */
   resolvePullRequest(
     owner: string,
@@ -412,13 +428,16 @@ export function createDeploymentStatusHandler(deps: DeploymentHandlerDeps) {
  * Compose the App-path webhook handlers for buildServer (#1): a `pull_request`
  * push bumps `current_sha` and cancels the in-flight older review (newest wins,
  * #4), a merged `pull_request` carries the reviewed head's measurement set onto
- * the merge commit when their trees are identical, and `deployment_status`
- * resolves + enqueues the review (#55). All read the repo from the payload, so
- * one set of handlers serves every installation.
+ * the merge commit when their trees are identical, `deployment_status`
+ * resolves + enqueues the review (#55), and a `push` to the DEFAULT BRANCH
+ * measures the new commit and stores its baseline without publishing anything.
+ * All read the repo from the payload, so one set of handlers serves every
+ * installation.
  */
 export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
   onPullRequest(payload: unknown): Promise<void>;
   onDeploymentStatus(payload: unknown): Promise<void>;
+  onPush(payload: unknown): Promise<void>;
 } {
   const onDeploymentStatus = createDeploymentStatusHandler(deps);
   return {
@@ -441,5 +460,20 @@ export function createAppWebhookHandlers(deps: DeploymentHandlerDeps): {
       await carryBaselineOnMerge(payload, deps);
     },
     onDeploymentStatus,
+    async onPush(payload) {
+      // Deliberately NOT awaited: see `runBaselineJob`. `recordDefaultBranchBaseline`
+      // resolves its own failures into an outcome and never rejects, so the
+      // `catch` is the belt to that braces and exists so a future edit that made
+      // it throw could not become an unhandled rejection that takes the process
+      // down over a baseline nobody is waiting for.
+      const run = (deps.runBaselineJob ?? ((task) => void task()));
+      run(async () => {
+        await recordDefaultBranchBaseline(payload, deps).catch((err: unknown) => {
+          console.error(
+            `[gate] default-branch baseline job escaped: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      });
+    },
   };
 }

@@ -41,8 +41,32 @@ export {
 export type { SignatureHeaders, VerifyResult, VerifyFailureReason } from "./hmac.js";
 export { VERIFIED_SOURCES, verifyPreviewHandoff } from "./preview-verification.js";
 export type { VerifiedSource, PreviewHandoffInput, PreviewHandoffResult } from "./preview-verification.js";
-export { SCHEMA_VERSION, GateReviewResultSchema, majorVersion, parseEngineResult } from "./contract.js";
+export {
+  SCHEMA_VERSION,
+  GateReviewResultSchema,
+  GateMeasurementResultSchema,
+  majorVersion,
+  parseEngineResult,
+} from "./contract.js";
 export type { ParseEngineResult } from "./contract.js";
+export {
+  MEASUREMENT_DEADLINE_MS,
+  GATE_MEASURE_INTENT_NAMESPACE,
+  measurementIntentKey,
+  nextMeasurementPollDelayMs,
+  createMeasurementProbe,
+  createHttpMeasurementTransport,
+  parseMeasurementResult,
+} from "./measure.js";
+export type {
+  MeasurementSubmission,
+  MeasurementJobStatus,
+  MeasurementTransport,
+  MeasurementProbe,
+  MeasurementProbeOptions,
+  HttpMeasurementTransportOptions,
+  ParseMeasurementResult,
+} from "./measure.js";
 export { isRateLimited, rateLimitDelayMs, withRateLimitRetry } from "./rate-limit.js";
 export type { RateLimitRetryOptions } from "./rate-limit.js";
 export { resolveEngineRoute, createAccountEngineTransport } from "./endpoint-routing.js";

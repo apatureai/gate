@@ -20,8 +20,17 @@ export const GATE_APP_PERMISSIONS = {
 
 export type GateAppPermissions = typeof GATE_APP_PERMISSIONS;
 
-/** Webhook events Gate subscribes to. */
-export const GATE_APP_EVENTS = ["pull_request", "deployment_status"] as const;
+/**
+ * Webhook events Gate subscribes to.
+ *
+ * `push` is a SUBSCRIPTION, not a permission, and it is listed here rather than
+ * in `GATE_APP_PERMISSIONS` because it grants Gate nothing it did not already
+ * hold. It is delivered under the `contents: read` the App already requests, and
+ * the handler it feeds writes nothing anywhere except Gate's own measurement
+ * baseline store. If this event ever appeared to need `contents: write`, the
+ * correct response is to stop, not to widen the manifest.
+ */
+export const GATE_APP_EVENTS = ["pull_request", "deployment_status", "push"] as const;
 
 /** Throws if a permission set would grant write access to repository contents. */
 export function assertNoContentsWrite(permissions: Record<string, string>): void {

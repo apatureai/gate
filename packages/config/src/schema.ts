@@ -44,6 +44,15 @@ const previewSchema = z
     source: previewSourceEnum.default("vercel"),
     environment: z.string().default("Preview"),
     url_template: z.string().nullable().default(null),
+    // The deployment of the DEFAULT BRANCH, which is what a push records a
+    // measurement baseline from. Separate from `url_template` on purpose:
+    // `url_template` names a per-pull-request preview and its `{pr}` placeholder
+    // has no value on a branch, so reusing it would either resolve to the
+    // literal string "{pr}" or silently measure whichever pull request's preview
+    // was last deployed there and file the result under a default-branch commit.
+    // Supports `{sha}` and `{short_sha}`; a repository whose production URL is
+    // stable needs neither.
+    default_branch_url: z.string().nullable().default(null),
     wait_seconds: z.number().int().min(0).default(0),
     ready_selector: z.string().nullable().default(null),
     // Preview readiness (#80/#151): poll this path instead of the base URL,
