@@ -1,0 +1,141 @@
+name: Release
+
+# Cut a release from a version bump, so a tag can no longer be forgotten.
+#
+# Gate ships as a Docker-based GitHub Action, not on npm (every workspace
+# package is `private: true`), so a "release" is a `vX.Y.Z` git tag with a
+# matching GitHub release, plus the moving major tag `v1` re-pointed at the
+# newest `v1.x` so `uses: apatureai/gate@v1` resolves to it.
+#
+# Those three steps used to be done by hand, and a 0.1.5 landed on main with no
+# tag, no release, and `v1` left pointing at the previous version — whose
+# `action.yml` still carried the `gate-mode` default the README says was fixed.
+# This workflow does them automatically when the version in `package.json`
+# changes to one that has no matching tag yet. It is idempotent: if the tag
+# already exists it exits without doing anything.
+#
+# `contents: write` here lets the workflow push tags to *this* repository. It is
+# unrelated to the "Gate never requests contents: write" invariant, which is
+# about the permissions Gate asks of a *reviewed* repository (enforced by
+# `assertNoContentsWrite` over the GitHub App manifest, not over CI workflows).
+#
+# The maintainer step is unchanged and minimal: land a pull request that bumps
+# the version and adds the CHANGELOG section. Everything below follows.
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: tag · release · re-point v1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history and tags)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version and decide whether a release is due
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          TAG="v${VERSION}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists; nothing to release."
+            echo "due=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Version ${VERSION} has no tag; a release is due."
+            echo "due=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install pnpm
+        if: steps.version.outputs.due == 'true'
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10.34.3
+
+      - name: Setup Node
+        if: steps.version.outputs.due == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.version.outputs.due == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify version consistency
+        if: steps.version.outputs.due == 'true'
+        run: node scripts/release/check-versions.mjs
+
+      - name: Lint · typecheck · test (never release a red tree)
+        if: steps.version.outputs.due == 'true'
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+
+      - name: Extract release notes from CHANGELOG
+        if: steps.version.outputs.due == 'true'
+        run: |
+          set -euo pipefail
+          node scripts/release/changelog-section.mjs "${{ steps.version.outputs.version }}" > RELEASE_NOTES.md
+          echo "----- release notes -----"
+          cat RELEASE_NOTES.md
+
+      - name: Create and push the version tag
+        if: steps.version.outputs.due == 'true'
+        run: |
+          set -euo pipefail
+          # Annotated tags record a tagger; GitHub-hosted runners set no git
+          # identity and refuse to auto-detect one, so configure it here. Local
+          # config persists to the moving-major step later in this job.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TAG="${{ steps.version.outputs.tag }}"
+          git tag -a "${TAG}" -m "${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Create the GitHub release
+        if: steps.version.outputs.due == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.version.outputs.tag }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --notes-file RELEASE_NOTES.md \
+            --verify-tag
+
+      - name: Re-point the moving major tag
+        if: steps.version.outputs.due == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          # The Action's published major line. Gate is pre-1.0, and by convention
+          # every 0.x release ships under `v1` (the first supported major line) so
+          # `uses: apatureai/gate@v1` resolves — this matches every existing tag
+          # and the README. Once the package reaches 1.0.0+, the line tracks the
+          # real semver major (1.x -> v1, 2.x -> v2), so this needs no edit then.
+          SEMVER_MAJOR="${VERSION%%.*}"
+          if [ "${SEMVER_MAJOR}" -eq 0 ]; then
+            MAJOR="v1"
+          else
+            MAJOR="v${SEMVER_MAJOR}"
+          fi
+          git tag -f -a "${MAJOR}" -m "${MAJOR} -> ${{ steps.version.outputs.tag }}"
+          git push -f origin "refs/tags/${MAJOR}"
+          echo "Re-pointed ${MAJOR} at ${{ steps.version.outputs.tag }}"
