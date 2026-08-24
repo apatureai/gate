@@ -1,6 +1,6 @@
 {
   "name": "@gate/db",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Gate durable product state: Postgres schema + idempotent migration runner.",
   "license": "MIT",
@@ -23,7 +23,7 @@
   ],
   "scripts": {
     "migrate": "node ./dist/cli/migrate.js",
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/db/"
   },
   "dependencies": {
     "@types/pg": "^8.11.10",

@@ -1,6 +1,6 @@
 {
   "name": "@gate/types",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Gate-owned boundary contracts for talking to Verdict. Single source of truth.",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "fixtures"
   ],
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/types/"
   },
   "devDependencies": {
     "fast-check": "^4.9.0"

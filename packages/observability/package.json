@@ -1,6 +1,6 @@
 {
   "name": "@gate/observability",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Gate OpenTelemetry spans + metrics for the review pipeline (stale-publish invariant).",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/observability/"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
