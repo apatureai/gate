@@ -11,6 +11,23 @@ tag **`v1`** is an Actions-convention alias: it is re-pointed at each `v1.x`
 release so `uses: apatureai/gate@v1` resolves to the newest one. Pin a commit SHA
 if you need an immutable reference.
 
+## [Unreleased]
+
+### Added
+
+- **Release automation, so a tag can no longer be forgotten.**
+  [`.github/workflows/release.yml`](.github/workflows/release.yml) cuts the
+  `vX.Y.Z` tag, publishes the GitHub release from the matching `CHANGELOG.md`
+  section, and re-points the moving major tag `v1` whenever a version bump lands
+  on `main` with no matching tag. It is idempotent. This closes the gap that let
+  `0.1.5` sit on `main` untagged while `v1` stayed on `0.1.4`.
+- **A `version ⇄ changelog` CI job** (`pnpm check:versions`,
+  `scripts/release/check-versions.mjs`) that fails a pull request if the root and
+  workspace package versions disagree or the `CHANGELOG.md` section for the
+  current version is missing.
+- A `Releasing` section in [`CONTRIBUTING.md`](CONTRIBUTING.md) documenting the
+  one-pull-request release flow.
+
 ## [0.1.5] — 2026-08-24
 
 ### Fixed

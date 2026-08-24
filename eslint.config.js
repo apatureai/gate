@@ -26,6 +26,17 @@ export default tseslint.config(
     },
   },
   {
+    // Release tooling: plain Node ESM scripts (tag/release/version checks) run
+    // by CI and locally, outside the TypeScript project but still linted.
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+      },
+    },
+  },
+  {
     rules: {
       "@typescript-eslint/consistent-type-imports": "error",
       "@typescript-eslint/no-unused-vars": [

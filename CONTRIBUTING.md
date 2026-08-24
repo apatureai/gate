@@ -165,6 +165,36 @@ docs updated in the same pull request when behaviour changes; no new live networ
 in the suite; and no drift from the invariants above. Small, focused pull
 requests get reviewed faster than large ones.
 
+## Releasing
+
+Gate is distributed as a Docker-based GitHub Action, not on npm (every workspace
+package is `private: true`), so a release is a `vX.Y.Z` git tag with a matching
+GitHub release, and the moving major tag **`v1`** re-pointed at the newest `v1.x`
+so `uses: apatureai/gate@v1` resolves to it.
+
+Cutting a release is a version bump and nothing else. In one pull request:
+
+1. Bump `version` in the root `package.json` **and every** `packages/*/package.json`
+   to the new `vX.Y.Z` (they must all match; `pnpm check:versions` enforces it).
+2. Add a `## [X.Y.Z] — YYYY-MM-DD` section to [`CHANGELOG.md`](CHANGELOG.md) with
+   the notes. The same `pnpm check:versions` fails if the section is missing, and
+   the section body becomes the GitHub release notes verbatim.
+
+When that pull request lands on `main`, [`.github/workflows/release.yml`](.github/workflows/release.yml)
+sees a version with no matching tag and, after re-running lint/typecheck/test,
+creates the `vX.Y.Z` tag, publishes the GitHub release from the CHANGELOG
+section, and re-points `v1`. It is idempotent: if the tag already exists it does
+nothing, so re-running it is safe. Nothing here is done by hand, which is what
+kept a `0.1.5` on `main` with no tag and `v1` stuck on the previous version.
+
+Preview the notes and the consistency check locally before opening the pull
+request:
+
+```bash
+pnpm check:versions
+node scripts/release/changelog-section.mjs 0.1.5   # prints the notes for a version
+```
+
 ## Container images
 
 Two images build from the frozen lockfile: [`Dockerfile`](Dockerfile) for the App
