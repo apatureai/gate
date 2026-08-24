@@ -2,6 +2,8 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/apatureai/gate/ci.yml?branch=main&label=CI)](https://github.com/apatureai/gate/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/apatureai/gate)](LICENSE) [![Node](https://img.shields.io/badge/node-%E2%89%A5%2024-brightgreen)](.node-version)
 
+> Part of the [Apature stack](https://github.com/apatureai) — automated design review for rendered UI. The [org profile](https://github.com/apatureai/.github/blob/main/profile/README.md) maps how the pieces compose.
+
 **Gate runs a pull request's preview build inside a hardened sandbox, hands the verified preview URL to a critique service you supply, and publishes that service's design review back to GitHub as one sticky comment plus a Check Run.**
 
 **Gate does not screenshot the page and does not run the vision model.** Both sit behind an HTTP contract (`packages/types`), and no implementation of that contract ships in this repository. The public [`verdict`](https://github.com/apatureai/verdict) is one, and [one section below](#running-your-own-critique-service-and-pointing-gate-at-it) is the exact commands to run it and point Gate at it; writing your own is [roadmap item 1](#roadmap). With no critique service configured, every review ends in a neutral Check Run naming the variables you have to set, and nothing else is published. Read that as the shape of the project rather than a gap discovered later: Gate is the GitHub-facing half of a two-part system, and this repository is only that half.
