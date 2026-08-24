@@ -1,6 +1,6 @@
 {
   "name": "@gate/config",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Schema, validation, and defaults for .gate.yml. Shared by extractor and dashboard.",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/config/"
   },
   "dependencies": {
     "@gate/types": "workspace:*",

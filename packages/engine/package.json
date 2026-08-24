@@ -1,6 +1,6 @@
 {
   "name": "@gate/engine",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Gate-side Verdict async job client (POST/GET/DELETE /jobs, idempotency, poll/cancel).",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/engine/"
   },
   "dependencies": {
     "@gate/observability": "workspace:*",

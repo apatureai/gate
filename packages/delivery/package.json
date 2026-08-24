@@ -1,6 +1,6 @@
 {
   "name": "@gate/delivery",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Gate delivery layer: sticky PR comment, Check Run mapping, annotated screenshots.",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/delivery/"
   },
   "dependencies": {
     "@gate/engine": "workspace:*",

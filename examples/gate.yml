@@ -1,0 +1,55 @@
+# Apature Gate — design review on every pull request.
+#
+# Drop this file into your repository at `.github/workflows/gate.yml`, then set
+# two repository secrets (Settings → Secrets and variables → Actions):
+#
+#   GATE_ENGINE_ENDPOINT    the base URL of the critique service you host
+#   GATE_ENGINE_HMAC_SECRET the same value as that service's ENGINE_HMAC_SECRET
+#
+# Gate does not ship the critique service itself; it hands a verified preview URL
+# to the service you point it at and publishes the review back to the pull
+# request as one sticky comment plus a Check Run. `apatureai/verdict` is a
+# working reference implementation. Without a reachable service the step
+# publishes a neutral "Engine not configured" Check Run and reviews nothing — it
+# never fails your pull request.
+#
+# Before you rely on this in CI, run `pnpm demo:live` from a Gate clone against
+# the same endpoint and secret: it exercises the identical client, signing and
+# parsing on your machine in about a minute.
+
+name: Design review
+
+on: pull_request # NOT pull_request_target — see Gate's threat model.
+
+permissions:
+  contents: read # NEVER contents: write — Gate judges and reports, it never edits.
+  pull-requests: write # post the sticky comment
+  checks: write # post the Check Run
+
+jobs:
+  design-review:
+    runs-on: ubuntu-latest
+    steps:
+      # Required whenever you use config-path or preview-command: both read files
+      # from the workspace, and without a checkout the workspace is empty and
+      # .gate.yml is silently ignored. It is also what lets Gate read your
+      # package.json and tell the engine which component library to judge against;
+      # without it the review runs, one rubric note lighter.
+      - uses: actions/checkout@v7
+
+      # Your own deploy step, whatever it is. It has to expose the preview URL as
+      # an output for the next step to read. Replace this with your real deploy.
+      - id: deploy
+        run: echo "preview-url=https://your-preview-host" >> "$GITHUB_OUTPUT"
+
+      - uses: apatureai/gate@v1
+        with:
+          preview-url: ${{ steps.deploy.outputs.preview-url }}
+          # or drop preview-url and let Gate run your build under its supervisor:
+          # preview-command: "pnpm build && pnpm preview"
+          config-path: .gate.yml
+          # gate-mode: blockers  # none | nits | blockers. Omit it and .gate.yml's
+          #                      # rules.gate decides; set it and it wins over the file.
+        env:
+          GATE_ENGINE_ENDPOINT: ${{ secrets.GATE_ENGINE_ENDPOINT }}
+          GATE_ENGINE_HMAC_SECRET: ${{ secrets.GATE_ENGINE_HMAC_SECRET }}

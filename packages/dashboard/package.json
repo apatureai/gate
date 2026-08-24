@@ -1,6 +1,6 @@
 {
   "name": "@gate/dashboard",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "private": true,
   "description": "Hosted dashboard core: GitHub OAuth, sessions, installation-scoped access, nav model. Consumed by the Next.js shell.",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run --root ../.. packages/dashboard/"
   },
   "dependencies": {
     "@gate/config": "workspace:*",
