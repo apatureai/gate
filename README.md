@@ -173,7 +173,7 @@ Gate review demo (recorded engine response, no model call, no network)
   check run       neutral — Needs work
 
   wrote
-    ./out/review-comment.md  (1186 bytes — the sticky PR comment, verbatim)
+    ./out/review-comment.md  (1260 bytes — the sticky PR comment, verbatim)
     ./out/check-run.json  (the Check Run payload)
     ./out/annotated-f_001.png  (26154 bytes — finding f_001 boxed on the fixture page)
     ./out/annotated-f_002.png  (26878 bytes — finding f_002 boxed on the fixture page)
@@ -319,7 +319,7 @@ Once that command works, the same two variables are what the workflow needs; see
 - **Anyone writing a GitHub Action that executes untrusted pull request code.** Preview builds, e2e suites, benchmark harnesses, screenshot jobs. Lift `local-serve.ts` and `resource-cap.ts`, or just read them before writing your own `spawn()`.
 - **Platform and DevEx teams** who want design and UI regressions caught in CI without a reviewer having to click through a preview deploy by hand.
 - **People building GitHub Apps.** The App path is a worked example of webhook dedupe on `X-GitHub-Delivery`, a BullMQ queue with supersession, Postgres row-level tenant isolation actually tested against a non-superuser role, least-privilege permission assertions, and sticky-comment upsert with conflict retry.
-- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1208 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
+- **Contributors** who want a well-tested TypeScript monorepo (project references, ESM, 1336 tests, no live network anywhere in the suite) with clearly marked unfinished seams. See the roadmap below.
 
 ## Status
 
@@ -342,16 +342,16 @@ What runs today, from a clean clone, with no credentials:
 | Measurement baselines (scoping `block` to what a PR introduced) | **Works, needs a baseline on record** | Stored per repository and commit in `measurement_baselines` on the App path. A set is recorded for each reviewed commit, carried onto a merge commit whose tree sha is identical to the reviewed head's, and recorded for every commit a `push` lands on the default branch. The Action path has no database and binds no store, so it classifies nothing and gates nothing, and says so on every run |
 | Measure-only capture for a default-branch push | **Needs a service that implements it** | Gate's half is here: the `push` subscription, the guards, the client (`POST /measurements`), and the store write. The capture behind it is the critique service's half, exactly like the review, and [`verdict`](https://github.com/apatureai/verdict) does **not** implement the endpoint yet. Against a service that does not, a push gets a 404, records nothing, spends nothing, and logs why |
 
-Verified on 2026-08-18, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
+Verified on 2026-08-24, macOS 15.6, Node 24.14.0, pnpm 10.34.3:
 
 ```
 pnpm install --frozen-lockfile   lockfile up to date, exit 0
 pnpm build                       tsc -b, clean, exit 0
 pnpm lint                        eslint . --max-warnings=0, exit 0
 pnpm typecheck                   tsc -b, exit 0
-pnpm test                        Test Files  124 passed (124)
-                                       Tests  1208 passed (1208)
-                                    Duration  74.94s
+pnpm test                        Test Files  129 passed (129)
+                                       Tests  1336 passed (1336)
+                                    Duration  32.23s
 pnpm audit                       No known vulnerabilities found
 ```
 
@@ -364,7 +364,7 @@ npm run typecheck                tsc --noEmit, exit 0
 npm audit                        found 0 vulnerabilities
 ```
 
-All three demos were re-run against this revision, and the transcripts above are from those runs. `pnpm demo:live` was run against a `verdict` built from its `f387f15` and served on `127.0.0.1:8791`.
+The no-credential demos (`pnpm demo` and `pnpm demo:review`) were re-run against this revision, and their transcripts above are from those runs. The `pnpm demo:live` transcript is from a `verdict` built from its `f387f15`, served on `127.0.0.1:8791`.
 
 ## Roadmap
 
@@ -432,7 +432,7 @@ jobs:
       # and .gate.yml is silently ignored. It is also what lets Gate read your
       # package.json and tell the engine which component library to judge
       # against; without it the review runs, one rubric note lighter.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Your own deploy step, whatever it is. It has to expose the preview URL
       # as an output for the next step to read.
@@ -453,6 +453,8 @@ jobs:
           GATE_ENGINE_ENDPOINT: ${{ secrets.GATE_ENGINE_ENDPOINT }}
           GATE_ENGINE_HMAC_SECRET: ${{ secrets.GATE_ENGINE_HMAC_SECRET }}
 ```
+
+This same workflow is committed as [`examples/gate.yml`](examples/gate.yml), ready to lift into `.github/workflows/`.
 
 `apatureai/gate@v1` is a moving major tag, per the Actions convention: it is re-pointed at each `v1.x` release rather than pinned to one. Pin a commit SHA instead if you want the reference to be immutable.
 
@@ -1190,12 +1192,15 @@ zero from being read the wrong way: a repository that muted every contrast viola
 checks over a measured one because there is nothing left to be green over, and above roughly 15% of what
 is published for a kind, the fix is to stop emitting that kind rather than to add more configuration.
 
-The same three counters go to OpenTelemetry as `gate.review.green_over_measured`,
-`gate.review.measurements_published` and `gate.review.measurement_suppressed` when
-`OTEL_EXPORTER_OTLP_ENDPOINT` is set and a MeterProvider is registered. With no collector they bind to
-the API's no-op meter, which is why the Action path can record inside a customer's runner without any
-telemetry configured. Attributes stay low-cardinality; repository and PR number appear on the log line
-only, never as a metric label.
+The same three counters are recorded on OpenTelemetry as `gate.review.green_over_measured`,
+`gate.review.measurements_published` and `gate.review.measurement_suppressed`. `packages/observability`
+registers the global `MeterProvider` and takes its metric readers by injection
+(`initTelemetry({ metricReaders })`), so *whether* they leave the process is the embedding runtime's
+choice: wire an OTLP `PeriodicExportingMetricReader` (or any other reader) where you run the App. Gate
+itself reads no `OTEL_*` variable. With no reader registered the counters bind to the API's no-op meter,
+which is why the Action path can record inside a customer's runner without any telemetry configured.
+Attributes stay low-cardinality; repository and PR number appear on the log line only, never as a metric
+label.
 
 Two things Gate sends the engine come from the repository rather than from this file. `verify_stability` above rides along inside the config; alongside it, Gate reads the repository's `package.json` at the PR's head and names the component libraries it finds (`shadcn/ui`, `radix`, `mui`, `chakra`, `mantine`) so the engine can append that library's rubric note to its own prompt. Ids only, never prose: the note is the engine's text, so nothing in a pull request's own manifest is written into a model prompt. Both fields are additive and optional in both directions. A repository that opted into nothing and uses none of those libraries produces exactly the request Gate sent before either existed, an engine that has never heard of them ignores them, and a manifest that is missing, private or malformed costs a review its rubric addenda and nothing else.
 
@@ -1221,7 +1226,6 @@ Every variable the code actually reads, by path. Neither demo needs any of them.
 | `FEEDBACK_TOKEN_SECRET` | App | none | Verifies one-time feedback POST tokens. |
 | `GATE_KMS_PASSPHRASE` | App | none | Local key-provider passphrase for the secret store. |
 | `GATE_ARTIFACT_BASE_URL`, `GATE_RESULT_OBJECT_URL_TEMPLATE`, `DASHBOARD_BASE_URL`, `PORT` | App | see code | Artifact and dashboard URL construction; server port. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | optional | none | OpenTelemetry export target. |
 
 The App path fails fast at boot: `assertProductionEnv` throws one aggregated error naming *every* missing required variable, rather than failing deep inside a request.
 
@@ -1340,6 +1344,10 @@ npm run build
 On Linux use `google-chrome` or `chromium` in place of the macOS path. The render is deterministic: re-shooting an unedited `poster_gate.html` reproduces the committed PNG byte for byte, so `git status` stays clean unless you actually changed the poster. Keep the window size, or the poster is cropped rather than scaled.
 
 More in [`CONTRIBUTING.md`](CONTRIBUTING.md): conventions, the three edits adding a package requires, and the two Postgres details that cost real time.
+
+### Releases
+
+Changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). Gate ships as a Docker-based GitHub Action, not on npm — every workspace package is `private: true` — so a release is a `vX.Y.Z` git tag with a matching GitHub release, and the moving major tag `v1` is re-pointed at the newest `v1.x` so `uses: apatureai/gate@v1` resolves to it.
 
 ## Running a live review
 
