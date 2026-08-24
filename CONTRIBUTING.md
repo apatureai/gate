@@ -90,11 +90,17 @@ breaking them makes the suite non-deterministic and expensive:
 - **No real capture.** Preview capture is stubbed, never launched against a real
   site.
 
+Run the whole suite from the repository root with `pnpm test`. To run a single
+package's suite, `pnpm --filter @gate/<name> test` (or `pnpm test` from inside the
+package directory) works too: the per-package script resolves the shared config
+from the repository root and scopes the run to that package's tests.
+
 Vitest picks up `packages/*/test/**/*.test.ts` and aliases each `@gate/*` package
 straight to its source (see [`vitest.config.ts`](vitest.config.ts)), so tests run
-without a build step. The suites that boot PGlite are the slowest in the repo,
-which is why that config raises `testTimeout`/`hookTimeout` above the vitest
-defaults. Do not lower them.
+without a build step. The single root config is why the per-package script passes
+`--root ../..`; the `include` glob is resolved relative to that root. The suites
+that boot PGlite are the slowest in the repo, which is why that config raises
+`testTimeout`/`hookTimeout` above the vitest defaults. Do not lower them.
 
 ## Codebase conventions
 
