@@ -100,6 +100,11 @@ jobs:
         if: steps.version.outputs.due == 'true'
         run: |
           set -euo pipefail
+          # Annotated tags record a tagger; GitHub-hosted runners set no git
+          # identity and refuse to auto-detect one, so configure it here. Local
+          # config persists to the moving-major step later in this job.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           TAG="${{ steps.version.outputs.tag }}"
           git tag -a "${TAG}" -m "${TAG}"
           git push origin "refs/tags/${TAG}"
