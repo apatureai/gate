@@ -111,9 +111,13 @@ describe("golden-path demo smoke test", () => {
     expect(gh.checkRuns.at(-1)?.conclusion).toBe("success");
   });
 
-  it("the README documents the demo + the scheduled smoke test that never ran", () => {
-    const doc = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
-    expect(doc).toContain("under 90 seconds");
-    expect(doc.toLowerCase()).toContain("scheduled");
+  it("the docs document the demo + the scheduled smoke test that never ran", () => {
+    // Moved out of the README on 2026-08-24: the golden-path demo's "under 90
+    // seconds" claim lives in docs/development.md; the scheduled live-pipeline
+    // smoke test that was never wired is roadmap item 9 in docs/roadmap.md.
+    const development = readFileSync(fileURLToPath(new URL("../../../docs/development.md", import.meta.url)), "utf8");
+    const roadmap = readFileSync(fileURLToPath(new URL("../../../docs/roadmap.md", import.meta.url)), "utf8");
+    expect(development).toContain("under 90 seconds");
+    expect(roadmap.toLowerCase()).toContain("scheduled");
   });
 });
