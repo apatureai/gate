@@ -26,12 +26,13 @@
 //      KEEP_FIXTURE=1 leave the scratch dir for inspection.
 
 import { Buffer } from "node:buffer";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { platform, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -53,6 +54,45 @@ const die = (msg) => {
 function run(cmd, args, opts = {}) {
   log("$", cmd, args.join(" "));
   return spawnSync(cmd, args, { encoding: "utf8", ...opts });
+}
+
+/**
+ * Async twin of `run`, for the container itself.
+ *
+ * The mock GitHub API is an http server in THIS process, so the container can
+ * only be waited on asynchronously: `spawnSync` blocks this event loop, the
+ * mock never accepts the connection, and the run "times out" having served
+ * nothing — a harness deadlock that looks exactly like a network failure.
+ */
+function runAsync(cmd, args, { timeoutMs }) {
+  log("$", cmd, args.join(" "));
+  return new Promise((resolveRun) => {
+    const child = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (c) => (stdout += c));
+    child.stderr.on("data", (c) => (stderr += c));
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeoutMs);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolveRun({ status: null, stdout, stderr, error });
+    });
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolveRun({
+        status,
+        stdout,
+        stderr,
+        error: timedOut ? Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }) : undefined,
+      });
+    });
+  });
 }
 
 // 1. Build the action image for the real runner arch. -----------------------
@@ -151,7 +191,7 @@ const apiHost = onLinux ? "127.0.0.1" : "host.docker.internal";
 const RUN_TIMEOUT_MS = 180_000;
 let result;
 try {
-  result = run(
+  result = await runAsync(
     "docker",
     [
       "run",
@@ -175,7 +215,7 @@ try {
       "GITHUB_DEFAULT_BRANCH=main",
       IMAGE,
     ],
-    { timeout: RUN_TIMEOUT_MS, killSignal: "SIGKILL" },
+    { timeoutMs: RUN_TIMEOUT_MS },
   );
 } finally {
   server.close();
