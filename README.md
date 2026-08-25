@@ -165,8 +165,6 @@ With the `mock` model above, the engine captures and measures the page for real 
 
 `packages/types` is the single source of this contract and evolves additive-only; its golden fixture is the anchor shared with the service implementation.
 
-`packages/types` is the single source of this contract and evolves additive-only; its golden fixture is the anchor shared with the service implementation.
-
 - **Async jobs, not a long-held call.** `POST /jobs` → `202` + job id, then `GET /jobs/:id` with depth-aware backoff to a 10-minute deadline. A proxy's idle timeout would kill a 90-second synchronous request, and the seam also means a restart mid-review loses only a poll loop.
 - **Idempotency.** Requests carry a repository-scoped key (`gate-review-v2:sha256:<digest>` over owner, name, PR number and head SHA), so a retry resumes the existing job instead of paying for a second capture.
 - **Versioned and parsed.** The service returns `x-schema-version`; Gate checks it, then Zod-parses the body. A drifted or malformed response produces a typed error and *no* published review. The schema is intentionally not strict, so an additive field from a newer service is tolerated; that also means an unnamed field is *stripped*, which is why `provenance` is named explicitly below.
@@ -241,7 +239,7 @@ tokens:
   values: {}
 ```
 
-Severity and suppression filter what the comment *lists*; they never change the grade or the Check Run conclusion, which reflect the holistic verdict. `rules.gate` is the only key a workflow can overrule — the Action's `gate-mode` input replaces it when set, and leaves it alone when not (see [Using the Action in a workflow](#using-the-action-in-a-workflow)).
+Severity and suppression filter what the comment *lists*; they never change the grade or the Check Run conclusion, which reflect the holistic verdict. `rules.gate` is the only key a workflow can overrule — the Action's `gate-mode` input replaces it when set, and leaves it alone when not (see [Using the Action in a workflow](#using-the-action-in-a-workflow)). Of the three modes, `nits` is currently accepted but inert: it is treated exactly as `none`, because the only conclusion the gate mode changes is whether a `blocked` grade fails the check. It is in the schema for a future meaning; today, writing it gets you `none` behaviour.
 
 ### The measured half
 
