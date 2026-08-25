@@ -173,8 +173,9 @@ describe("the transcript", () => {
     expect(silent).toContain("coverage        none");
   });
 
-  it("the README's demo:live transcript prints the line this formatter prints", () => {
-    const readme = readFileSync(fileURLToPath(new URL("../../../README.md", import.meta.url)), "utf8");
+  it("the demo:live transcript prints the line this formatter prints", () => {
+    // The demo:live transcript moved to docs/demo-walkthrough.md on 2026-08-24.
+    const readme = readFileSync(fileURLToPath(new URL("../../../docs/demo-walkthrough.md", import.meta.url)), "utf8");
     const rendered = formatLiveReviewResult(
       {
         ...base,

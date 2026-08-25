@@ -55,15 +55,19 @@ describe("repository dependency hygiene", () => {
     expect(workspace).toContain("msgpackr-extract: true");
   });
 
-  it("keeps root README dashboard guidance single-sourced", () => {
-    const readme = readFileSync(root("README.md"), "utf8");
-    const dashboardRows = readme.match(/^\| `dashboard` \| Next\.js \(app-router\) shell/gm) ?? [];
-    const rootGateNotes = readme.match(/`apps\/dashboard` is \*\*not\*\* part of this root gate/g) ?? [];
+  it("keeps dashboard guidance single-sourced", () => {
+    // Moved out of the README on 2026-08-24: the dashboard repository-map row is
+    // in docs/how-it-works.md; the standalone-build guidance is in
+    // docs/development.md. Each must still appear exactly once.
+    const howItWorks = readFileSync(root("docs/how-it-works.md"), "utf8");
+    const development = readFileSync(root("docs/development.md"), "utf8");
+    const dashboardRows = howItWorks.match(/^\| `dashboard` \| Next\.js \(app-router\) shell/gm) ?? [];
+    const rootGateNotes = development.match(/`apps\/dashboard` is \*\*not\*\* part of this root gate/g) ?? [];
 
     expect(dashboardRows).toHaveLength(1);
     expect(rootGateNotes).toHaveLength(1);
-    expect(readme).toContain("built with its own isolated `next build` CI job");
-    expect(readme).toContain("pnpm build\ncd apps/dashboard\nnpm ci\nnpm run build");
+    expect(development).toContain("built with its own isolated `next build` CI job");
+    expect(development).toContain("pnpm build\ncd apps/dashboard\nnpm ci\nnpm run build");
   });
 });
 

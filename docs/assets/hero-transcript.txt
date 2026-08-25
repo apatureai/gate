@@ -1,0 +1,29 @@
+<!-- apature-gate:sticky -->
+
+## Apature Gate: design review
+
+**⚠️ Needs work** · reviewed `0123456`
+
+The new pricing page reads clearly on desktop, but the mobile layout breaks the design system: the primary CTA loses its brand color and the card grid overflows the viewport. Two nits on spacing.
+
+<details>
+<summary>Should fix (2)</summary>
+
+- **Primary CTA uses an off-brand color on mobile** (`/pricing`, mobile). Apply the \`--color-accent\` token \(or the \`btn-primary\` class\) so the CTA matches the brand accent used elsewhere. · [Evidence](https://artifacts.judgment-engine.internal/shot_001.png)
+- **Pricing card grid overflows the mobile viewport** (`/pricing`, mobile). Switch the grid to a single column under the \`sm\` breakpoint. · [Evidence](https://artifacts.judgment-engine.internal/shot_002.png)
+
+</details>
+
+<details>
+<summary>Nits (1)</summary>
+
+- **Inconsistent vertical rhythm between feature rows** (`/pricing`, desktop). Use a single spacing token for consistent vertical rhythm.
+
+</details>
+
+### Not reviewed
+
+- route /checkout \(no preview deployment matched the head SHA\)
+- viewport tablet \(not configured\)
+
+<sub>engine 2026.06.0 · model qwen3-vl · capture playwright-capture@​3 · ui-dna ui-dna@​2026.06.12</sub>
