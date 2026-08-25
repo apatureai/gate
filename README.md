@@ -17,7 +17,8 @@
 
 </div>
 
-<img src="docs/assets/hero.png" alt="A Needs work design review from pnpm demo:review: a sticky comment listing two should-fix findings and one nit, beside the annotated screenshot out/annotated-f_001.png with a red box on the off-palette CTA" width="760">
+<img src="docs/assets/demo.svg" alt="apature-gate terminal replay: the sticky PR-comment markdown source for a Needs work design review, revealed line by line" width="100%">
+<p align="center"><sub><a href="docs/assets/hero.png">static version</a></sub></p>
 
 Gate runs a pull request's preview build inside a hardened sandbox, hands the verified preview URL to a critique service you supply, and publishes that service's design review back to GitHub as one sticky comment plus a Check Run — and it never shows a passing review for a page nothing judged. It judges and reports only: it never edits code, never commits, never opens fix PRs, and never requests `contents: write`. Screenshot capture and the vision model are the other half of the system, behind an HTTP contract (`packages/types`) that no implementation in this repository ships — [`verdict`](https://github.com/apatureai/verdict) is one, and [`pnpm demo:live`](#running-your-own-critique-service-and-pointing-gate-at-it) drives Gate against it end to end.
 

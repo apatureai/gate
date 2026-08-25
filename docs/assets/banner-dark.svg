@@ -1,14 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="260" viewBox="0 0 1200 260" role="img" aria-label="gate: design review on every pull request">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300"
+     role="img" aria-label="gate: design review on every pull request">
   <!-- ground -->
-  <rect width="1200" height="260" fill="#0D1117"/>
-  <!-- wordmark -->
-  <text x="600" y="126" text-anchor="middle"
+  <rect width="1200" height="300" fill="#0D1117"/>
+
+  <!-- texture: fine dot grid, 24px pitch, 6% -->
+  <defs>
+    <pattern id="dots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r="1.1" fill="#E6EDF3"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="300" fill="url(#dots)" opacity="0.06" aria-hidden="true"/>
+
+  <!-- motif: a diff held between brackets at the gate; a shield-check passes it -->
+  <g aria-hidden="true" stroke-linecap="round" stroke-linejoin="round">
+
+    <!-- page / diff glyph inside the enclosure -->
+    <rect x="162" y="92" width="108" height="116" rx="6"
+          fill="#161B22" stroke="#30363D" stroke-width="2"/>
+    <!-- unchanged skeleton lines, faint -->
+    <rect x="176" y="108" width="80" height="6" rx="3" fill="#21262D"/>
+    <rect x="176" y="124" width="80" height="6" rx="3" fill="#21262D"/>
+    <rect x="176" y="156" width="80" height="6" rx="3" fill="#21262D"/>
+    <rect x="176" y="188" width="80" height="6" rx="3" fill="#21262D"/>
+    <!-- changed lines: the diff being held at the gate -->
+    <rect x="176" y="140" width="68" height="6" rx="3" fill="#7FA9D1" opacity="0.6"/>
+    <rect x="176" y="172" width="80" height="6" rx="3" fill="#7FA9D1" opacity="0.6"/>
+
+    <!-- bracketed enclosure -->
+    <path d="M 148 66 H 124 V 234 H 148" fill="none" stroke="#8B949E" stroke-width="3"/>
+    <path d="M 284 66 H 308 V 234 H 284" fill="none" stroke="#8B949E" stroke-width="3"/>
+
+    <!-- shield-check outside, upper right -->
+    <path d="M 322 64 l 26 10 v 22 c 0 16 -11 26 -26 32 c -15 -6 -26 -16 -26 -32 v -22 z"
+          fill="#161B22" stroke="#7FA9D1" stroke-width="2.5"/>
+    <polyline points="310 96 319 105 336 86" fill="none"
+              stroke="#7FA9D1" stroke-width="3"/>
+  </g>
+
+  <!-- type -->
+  <text x="428" y="142"
         font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
-        font-size="68" font-weight="600" letter-spacing="-1" fill="#E6EDF3">gate</text>
-  <!-- accent rule: the single accent element -->
-  <rect x="564" y="152" width="72" height="3" rx="1.5" fill="#7FA8CC"/>
-  <!-- tagline -->
-  <text x="600" y="198" text-anchor="middle"
+        font-size="76" font-weight="600" letter-spacing="-1.5" fill="#E6EDF3">gate</text>
+  <rect x="430" y="164" width="96" height="4" rx="2" fill="#7FA9D1"/>
+  <text x="428" y="210"
         font-family="ui-sans-serif, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
-        font-size="21" font-weight="400" letter-spacing="0.2" fill="#8B949E">design review on every pull request</text>
+        font-size="22" font-weight="400" letter-spacing="0.2" fill="#8B949E">design review on every pull request</text>
 </svg>

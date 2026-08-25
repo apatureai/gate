@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="538" viewBox="0 0 1200 538"
+     role="img" aria-label="gate terminal session: the sticky PR-comment markdown source for a Needs work design review" xml:space="preserve">
+  <style>
+    text { font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+           font-size: 15px; }
+    .chrome { fill: #8B949E; font-size: 13px; }
+    .out    { fill: #C9D1D9; }
+    .dim    { fill: #8B949E; }
+    .acc    { fill: #7FA9D1; }
+    .hd     { fill: #E6EDF3; }
+
+    .line { opacity: 0; }
+    .beat { opacity: 0; }
+
+    /* one keyframes block per logical line; percentages encode reveal time
+       hidden 0->a, ramp a->a+2.2 (opacity + 6px rise), hold ->90, fade ->94, blank ->100 */
+    @keyframes l0 { 0%,3.75% { opacity:0; transform:translateY(6px); }
+                    5.95%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l1 { 0%,10.94% { opacity:0; transform:translateY(6px); }
+                    13.14%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l2 { 0%,14.38% { opacity:0; transform:translateY(6px); }
+                    16.58%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l3 { 0%,17.81% { opacity:0; transform:translateY(6px); }
+                    20.01%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l4 { 0%,21.25% { opacity:0; transform:translateY(6px); }
+                    23.45%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l5 { 0%,24.69% { opacity:0; transform:translateY(6px); }
+                    26.89%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l6 { 0%,28.13% { opacity:0; transform:translateY(6px); }
+                    30.33%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l7 { 0%,35.31% { opacity:0; transform:translateY(6px); }
+                    37.51%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l8 { 0%,38.75% { opacity:0; transform:translateY(6px); }
+                    40.95%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l9 { 0%,42.19% { opacity:0; transform:translateY(6px); }
+                    44.39%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes l10 { 0%,45.63% { opacity:0; transform:translateY(6px); }
+                    47.83%,90% { opacity:1; transform:none; }
+                    94%,100% { opacity:0; } }
+    @keyframes beat { 0%,78% { opacity:0; }
+                    82%,90% { opacity:1; }
+                    94%,100% { opacity:0; } }
+
+    .l0 { animation: l0 16s linear infinite; }
+    .l1 { animation: l1 16s linear infinite; }
+    .l2 { animation: l2 16s linear infinite; }
+    .l3 { animation: l3 16s linear infinite; }
+    .l4 { animation: l4 16s linear infinite; }
+    .l5 { animation: l5 16s linear infinite; }
+    .l6 { animation: l6 16s linear infinite; }
+    .l7 { animation: l7 16s linear infinite; }
+    .l8 { animation: l8 16s linear infinite; }
+    .l9 { animation: l9 16s linear infinite; }
+    .l10 { animation: l10 16s linear infinite; }
+    .beat { animation: beat 16s linear infinite; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .line, .beat { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
+  </style>
+
+  <!-- terminal chrome (always dark; outside stays transparent so both README themes work) -->
+  <g aria-hidden="true">
+    <rect x="40" y="24" width="1120" height="474" rx="12"
+          fill="#0D1117" stroke="#30363D" stroke-width="1.5"/>
+    <circle cx="70" cy="52" r="6" fill="#30363D"/>
+    <circle cx="92" cy="52" r="6" fill="#30363D"/>
+    <circle cx="114" cy="52" r="6" fill="#30363D"/>
+    <line x1="40" y1="76" x2="1160" y2="76" stroke="#21262D" stroke-width="1.5"/>
+  </g>
+  <text x="140" y="57" class="chrome">apature-gate · sticky PR comment (markdown)</text>
+
+  <!-- payoff highlight, behind its line (the graded verdict) -->
+  <g class="beat" aria-hidden="true">
+    <rect x="58" y="139" width="1084" height="26" rx="4" fill="#7FA9D1" opacity="0.14"/>
+    <rect x="58" y="139" width="3" height="26" fill="#7FA9D1"/>
+  </g>
+
+  <!-- transcript: verbatim from docs/assets/hero-transcript.txt, XML-escaped, indentation kept -->
+  <g class="line l0"><text x="72" y="104" class="dim">&lt;!-- apature-gate:sticky --&gt;</text></g>
+  <g class="line l1"><text x="72" y="130" class="hd">## Apature Gate: design review</text></g>
+  <g class="line l2"><text x="72" y="156" class="acc">**⚠️ Needs work** · reviewed `0123456`</text></g>
+  <g class="line l3"><text x="72" y="182" class="out">The new pricing page reads clearly on desktop, but the mobile layout breaks the design system: the primary CTA loses</text></g>
+  <g class="line l3"><text x="90" y="208" class="out">its brand color and the card grid overflows the viewport. Two nits on spacing.</text></g>
+  <g class="line l4"><text x="72" y="234" class="dim">&lt;summary&gt;Should fix (2)&lt;/summary&gt;</text></g>
+  <g class="line l5"><text x="72" y="260" class="out">- **Primary CTA uses an off-brand color on mobile** (`/pricing`, mobile). Apply the \`--color-accent\` token \(or</text></g>
+  <g class="line l5"><text x="90" y="286" class="out">the \`btn-primary\` class\) so the CTA matches the brand accent used elsewhere. ·</text></g>
+  <g class="line l5"><text x="90" y="312" class="out">[Evidence](https://artifacts.judgment-engine.internal/shot_001.png)</text></g>
+  <g class="line l6"><text x="72" y="338" class="out">- **Pricing card grid overflows the mobile viewport** (`/pricing`, mobile). Switch the grid to a single column under</text></g>
+  <g class="line l6"><text x="90" y="364" class="out">the \`sm\` breakpoint. · [Evidence](https://artifacts.judgment-engine.internal/shot_002.png)</text></g>
+  <g class="line l7"><text x="72" y="390" class="hd">### Not reviewed</text></g>
+  <g class="line l8"><text x="72" y="416" class="dim">- route /checkout \(no preview deployment matched the head SHA\)</text></g>
+  <g class="line l9"><text x="72" y="442" class="dim">- viewport tablet \(not configured\)</text></g>
+  <g class="line l10"><text x="72" y="468" class="dim">&lt;sub&gt;engine 2026.06.0 · model qwen3-vl · capture playwright-capture@​3 · ui-dna ui-dna@​2026.06.12&lt;/sub&gt;</text></g>
+</svg>
