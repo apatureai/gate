@@ -10,6 +10,7 @@
 <p>
   <a href="https://github.com/apatureai/gate/releases"><img alt="latest release" src="https://img.shields.io/github/v/release/apatureai/gate?label=action&sort=semver"></a>
   <a href="https://github.com/apatureai/gate/actions/workflows/ci.yml"><img alt="CI status" src="https://img.shields.io/github/actions/workflow/status/apatureai/gate/ci.yml?branch=main&label=CI"></a>
+  <a href="https://github.com/apatureai/gate/actions/workflows/install-path-e2e.yml"><img alt="install-path e2e status" src="https://img.shields.io/github/actions/workflow/status/apatureai/gate/install-path-e2e.yml?branch=main&label=install%20path"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/apatureai/gate"></a>
 </p>
 

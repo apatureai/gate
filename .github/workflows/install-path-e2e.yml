@@ -1,0 +1,39 @@
+# Proves the published Action image runs inside an ADOPTER's repository, not
+# only inside gate's own checkout. This is the guard for the apatureai/gate@v1
+# install crash (relative ENTRYPOINT vs GitHub's `--workdir /github/workspace`).
+# The README's "install path" badge is this workflow's status: the guarantee is
+# machine-attested on every push to main, never asserted by hand.
+name: install-path-e2e
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: install-path-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  install-path-e2e:
+    name: action image runs in a foreign repo layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version-file: .node-version
+
+      # Builds Dockerfile.action for linux/amd64, runs it against a scratch
+      # fixture with a different directory layout mounted at /github/workspace,
+      # and asserts a neutral "Engine not configured" Check Run is published.
+      - name: Install-path e2e
+        run: node scripts/e2e/install-path.mjs
