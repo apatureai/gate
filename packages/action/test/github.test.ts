@@ -38,6 +38,34 @@ describe("createGitHubApi", () => {
     expect(calls.every((c) => !c.url.includes("/contents/"))).toBe(true);
   });
 
+  it("honors GITHUB_API_URL so the Action works on GHES and the install-path mock", async () => {
+    const prev = process.env.GITHUB_API_URL;
+    // Trailing slash included on purpose: the runner value is normalized.
+    process.env.GITHUB_API_URL = "https://ghe.acme.example/api/v3/";
+    try {
+      const { impl, calls } = fakeFetch(() => new Response("{}", { status: 201 }));
+      const gh = createGitHubApi("tok", target, impl);
+      await gh.publishCheckRun({ name: "Apature Gate", conclusion: "neutral", title: "Needs work", summary: "s" });
+      expect(calls.at(-1)?.url).toBe("https://ghe.acme.example/api/v3/repos/acme/web/check-runs");
+    } finally {
+      if (prev === undefined) delete process.env.GITHUB_API_URL;
+      else process.env.GITHUB_API_URL = prev;
+    }
+  });
+
+  it("falls back to public GitHub when GITHUB_API_URL is unset", async () => {
+    const prev = process.env.GITHUB_API_URL;
+    delete process.env.GITHUB_API_URL;
+    try {
+      const { impl, calls } = fakeFetch(() => new Response("{}", { status: 201 }));
+      const gh = createGitHubApi("tok", target, impl);
+      await gh.publishCheckRun({ name: "Apature Gate", conclusion: "neutral", title: "Needs work", summary: "s" });
+      expect(calls.at(-1)?.url).toBe("https://api.github.com/repos/acme/web/check-runs");
+    } finally {
+      if (prev !== undefined) process.env.GITHUB_API_URL = prev;
+    }
+  });
+
   it("maps preview comments to author + body for discovery", async () => {
     const { impl } = fakeFetch(
       () =>

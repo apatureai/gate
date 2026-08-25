@@ -33,4 +33,8 @@ COPY --from=prune /app/packages ./packages
 COPY --from=prune /app/package.json ./package.json
 COPY --from=prune /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 EXPOSE 8080
-CMD ["node", "packages/service/dist/server.js"]
+# Absolute for the same reason as Dockerfile.action's ENTRYPOINT: the launch path
+# must not depend on cwd. Fly runs this image with its own WORKDIR (/app), so a
+# relative path happens to work today, but anchoring it to the fixed in-image
+# location keeps the whole class of "launched from the wrong directory" bugs out.
+CMD ["node", "/app/packages/service/dist/server.js"]

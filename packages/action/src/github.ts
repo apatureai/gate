@@ -8,7 +8,12 @@ import type { ProviderComment } from "./preview.js";
  * `contents: write`. The same delivery components run on the App path with an
  * installation token injected instead.
  */
-const API_ROOT = "https://api.github.com";
+// The runner always sets GITHUB_API_URL (github.com or a GHES host); fall back
+// to public GitHub when the variable is absent. Honoring it makes the Action
+// correct on GitHub Enterprise Server and lets the install-path e2e
+// (scripts/e2e/install-path.mjs) point the container at a mock API to capture
+// the published Check Run.
+const DEFAULT_API_ROOT = "https://api.github.com";
 
 export interface GitHubTarget {
   owner: string;
@@ -49,7 +54,8 @@ export function createGitHubApi(
     "x-github-api-version": "2022-11-28",
     "user-agent": "apature-gate",
   };
-  const base = `${API_ROOT}/repos/${target.owner}/${target.repo}`;
+  const apiRoot = (process.env.GITHUB_API_URL?.trim() || DEFAULT_API_ROOT).replace(/\/+$/, "");
+  const base = `${apiRoot}/repos/${target.owner}/${target.repo}`;
 
   // All calls honor GitHub primary + secondary rate limits (#49).
   const send = (url: string, init?: RequestInit): Promise<Response> =>

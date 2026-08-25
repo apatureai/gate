@@ -29,4 +29,16 @@ COPY --from=prune /app/node_modules ./node_modules
 COPY --from=prune /app/packages ./packages
 COPY --from=prune /app/package.json ./package.json
 COPY --from=prune /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
-ENTRYPOINT ["/usr/bin/tini", "--", "node", "packages/action/dist/main.js"]
+# The entrypoint script path MUST be absolute. GitHub runs a Docker action with
+# `--workdir /github/workspace` (the ADOPTER's checkout), which overrides this
+# image's WORKDIR at runtime. A relative `packages/action/dist/main.js` then
+# resolves against the adopter's tree — which does not contain Gate's code — and
+# every install crashes with "Cannot find module
+# /github/workspace/packages/action/dist/main.js" before it can publish even the
+# neutral "Engine not configured" Check Run. `/app` is where the runtime stage
+# COPYs the compiled app, so anchor the script there and let cwd stay on the
+# checkout (main.ts reads .gate.yml / package.json relative to cwd, on purpose).
+# Node resolves node_modules from the script's own directory up to /app, so
+# imports work regardless of cwd. See scripts/e2e/install-path.mjs, which proves
+# this from a foreign layout in CI (install-path-e2e).
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "/app/packages/action/dist/main.js"]
